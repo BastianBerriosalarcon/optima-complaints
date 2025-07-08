@@ -1,0 +1,22 @@
+2025-07-04 04:02:19,195 - migration_main - ERROR - Migration failed: No module named 'src.migration.activepiece_migrator'
+2025-07-04 04:39:54,118 - src.migration.migration_coordinator - INFO - 🚀 Starting ActivePieces to n8n migration
+2025-07-04 04:39:54,118 - src.migration.migration_coordinator - INFO - 📍 Executing: Prerequisites Validation
+2025-07-04 04:39:54,118 - src.migration.migration_coordinator - INFO - 🔍 DRY RUN: Would execute Prerequisites Validation
+2025-07-04 04:39:54,118 - src.migration.migration_coordinator - INFO - 📍 Executing: Data Backup
+2025-07-04 04:39:54,118 - src.migration.migration_coordinator - INFO - 🔍 DRY RUN: Would execute Data Backup
+2025-07-04 04:39:54,118 - src.migration.migration_coordinator - INFO - 📍 Executing: Workflow Migration
+2025-07-04 04:39:54,119 - src.migration.migration_coordinator - INFO - 🔍 DRY RUN: Would execute Workflow Migration
+2025-07-04 04:39:54,119 - src.migration.migration_coordinator - INFO - 📍 Executing: RAG System Migration
+2025-07-04 04:39:54,119 - src.migration.migration_coordinator - INFO - 🔍 DRY RUN: Would execute RAG System Migration
+2025-07-04 04:39:54,119 - src.migration.migration_coordinator - INFO - ✅ Migration completed successfully!
+2025-07-04 04:40:16,262 - src.migration.migration_coordinator - INFO - 🚀 Starting ActivePieces to n8n migration
+2025-07-04 04:40:16,263 - src.migration.migration_coordinator - INFO - 📍 Executing: Prerequisites Validation
+2025-07-04 04:40:16,263 - src.migration.migration_coordinator - INFO - 🔍 Validating migration prerequisites...
+2025-07-04 04:40:16,263 - GCloudValidator - INFO - Validating Google Cloud authentication...
+2025-07-04 04:40:20,876 - GCloudValidator - INFO - ✅ Google Cloud validation passed
+2025-07-04 04:40:20,876 - KubectlValidator - INFO - Validating Kubernetes cluster access...
+2025-07-04 04:40:24,525 - KubectlValidator - INFO - Found 1 ActivePieces namespaces
+2025-07-04 04:40:24,525 - KubectlValidator - INFO - ✅ Kubernetes validation passed
+2025-07-04 04:40:24,525 - N8nServiceValidator - INFO - Validating n8n service deployment...
+2025-07-04 04:40:27,110 - N8nServiceValidator - ERROR - ❌ n8n Cloud Run service not found
+2025-07-04 04:40:27,110 - src.migration.migration_coordinator - ERROR - ❌ Step failed: Prerequisites Validation
