@@ -1,8 +1,12 @@
 # Terraform
 terraform/terraform.tfvars
-terraform/*.tfstate*
+terraform/*.tfstate
 terraform/.terraform/
 terraform/.terraform.lock.hcl
+
+# Allow important terraform files
+!terraform/*.tf
+!terraform/modules/
 
 # Environment variables
 .env
@@ -13,11 +17,13 @@ terraform/.terraform.lock.hcl
 
 # Secrets and credentials
 secrets/
-credentials/
 *.pem
 *.key
 *.crt
 service-account*.json
+
+# Allow n8n credentials (already committed)
+!custom-nodes/rag-system/credentials/
 
 # N8N specific
 n8n/
@@ -75,7 +81,10 @@ gcloud-service-key.json
 *.backup
 *.bak
 *.tmp
-migration-backup/
+
+# Allow specific backup files
+!terraform/terraform.tfstate.backup
+!migration-backup/migration.log
 
 # Local development
 .local/
