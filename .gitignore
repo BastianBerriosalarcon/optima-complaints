@@ -105,4 +105,4 @@ coverage/
 
 # Build outputs
 dist/
-build/
+build/frontend/

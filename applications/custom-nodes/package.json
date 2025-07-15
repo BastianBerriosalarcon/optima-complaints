@@ -1,0 +1,48 @@
+{
+  "name": "@optimacx/n8n-custom-nodes",
+  "version": "1.0.0",
+  "description": "Custom N8N nodes for OptimaCX Platform following SOLID principles",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint . --ext .ts",
+    "test": "jest"
+  },
+  "keywords": [
+    "n8n",
+    "nodes",
+    "optimacx",
+    "automotive",
+    "leads"
+  ],
+  "author": "OptimaCX Team",
+  "license": "MIT",
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/OptimaCxApi.credentials.js",
+      "dist/credentials/WhatsAppBusiness.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/LeadProcessor/LeadProcessor.node.js",
+      "dist/nodes/TenantConfigLoader/TenantConfigLoader.node.js",
+      "dist/nodes/AIAnalyzer/AIAnalyzer.node.js",
+      "dist/nodes/AdvisorAssigner/AdvisorAssigner.node.js",
+      "dist/nodes/WhatsAppSender/WhatsAppSender.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.0.0",
+    "@typescript-eslint/parser": "^5.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.0.0",
+    "typescript": "^4.8.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.50.5",
+    "n8n-core": "^1.0.0",
+    "n8n-workflow": "^1.0.0"
+  }
+}

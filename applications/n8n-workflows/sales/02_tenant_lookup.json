@@ -1,0 +1,168 @@
+{
+  "name": "Tenant - Búsqueda y Configuración",
+  "description": "Workflow enfocado en identificar el tenant y obtener su configuración",
+  "tags": ["tenant", "configuration", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada únicamente en mapear phone_number_id a tenant_id\n// Principio SRP: Una sola responsabilidad - lookup de tenant\n\nconst input = $input.all()[0].json;\nconst phoneNumberId = input.phoneNumberId;\n\n// Configuración de mapeo de tenants\n// En producción, esto vendría de una tabla de configuración\nconst tenantMapping = {\n  '123456789012345': {\n    tenant_id: 'a0e1d2c3-b4a5-9687-4321-000000000001',\n    nombre: 'Toyota Central',\n    region: 'santiago'\n  },\n  '234567890123456': {\n    tenant_id: 'a0e1d2c3-b4a5-9687-4321-000000000002', \n    nombre: 'Nissan Las Condes',\n    region: 'santiago'\n  },\n  '345678901234567': {\n    tenant_id: 'a0e1d2c3-b4a5-9687-4321-000000000003',\n    nombre: 'Chevrolet Valparaíso', \n    region: 'valparaiso'\n  }\n};\n\nconst tenantInfo = tenantMapping[phoneNumberId];\n\nif (!tenantInfo) {\n  throw new Error(`Tenant no encontrado para phone_number_id: ${phoneNumberId}`);\n}\n\n// Resultado con información del tenant\nconst result = {\n  // Datos del tenant\n  tenant_id: tenantInfo.tenant_id,\n  tenant_name: tenantInfo.nombre,\n  tenant_region: tenantInfo.region,\n  \n  // Mensaje original para siguiente paso\n  validated_message: input.validatedMessage,\n  \n  // Metadatos\n  lookup_timestamp: new Date().toISOString(),\n  lookup_success: true\n};\n\nconsole.log('Tenant encontrado:', {\n  phoneNumberId,\n  tenantId: tenantInfo.tenant_id,\n  tenantName: tenantInfo.nombre\n});\n\nreturn [{ json: result }];"
+      },
+      "id": "lookup-tenant",
+      "name": "Buscar Tenant por Phone ID",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT t.id, t.nombre, t.telefono_principal, t.configuracion_ai, t.configuracion_horarios, t.activo FROM concesionarios t WHERE t.id = $1 AND t.activo = true",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.tenant_id] }}"
+        }
+      },
+      "id": "get-tenant-config",
+      "name": "Obtener Configuración del Tenant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "greaterThan",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "validate-tenant-exists",
+      "name": "¿Tenant Existe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en estructurar la configuración del tenant\n// Principio SRP: Una sola responsabilidad - preparar configuración\n\nconst tenantData = $('Obtener Configuración del Tenant').item.json[0];\nconst lookupData = $('Buscar Tenant por Phone ID').item.json;\n\n// Estructura completa para el siguiente workflow\nconst tenantConfig = {\n  // Identificación del tenant\n  tenant_id: tenantData.id,\n  tenant_name: tenantData.nombre,\n  tenant_phone: tenantData.telefono_principal,\n  tenant_active: tenantData.activo,\n  \n  // Configuración de IA\n  ai_config: tenantData.configuracion_ai || {\n    modelo_ia: 'gemini-2.0-flash-exp',\n    temperatura: 0.7,\n    max_tokens: 1000,\n    umbral_intencion: 0.7\n  },\n  \n  // Horarios de negocio\n  business_hours: tenantData.configuracion_horarios || {\n    lunes_a_viernes: { inicio: '09:00', fin: '18:00' },\n    sabados: { inicio: '09:00', fin: '14:00' },\n    domingos: { activo: false },\n    timezone: 'America/Santiago'\n  },\n  \n  // Mensaje original para análisis\n  validated_message: lookupData.validated_message,\n  \n  // Metadatos de procesamiento\n  processing: {\n    tenant_lookup_at: lookupData.lookup_timestamp,\n    config_retrieved_at: new Date().toISOString(),\n    next_step: 'lead_analysis'\n  }\n};\n\nconsole.log('Configuración del tenant preparada:', {\n  tenantId: tenantConfig.tenant_id,\n  tenantName: tenantConfig.tenant_name,\n  aiModel: tenantConfig.ai_config.modelo_ia\n});\n\nreturn [{ json: tenantConfig }];"
+      },
+      "id": "prepare-tenant-config",
+      "name": "Preparar Configuración",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 280]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "lead-analysis-workflow",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-lead-analysis",
+      "name": "Iniciar Análisis de Lead",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1200, 280]
+    },
+    {
+      "parameters": {
+        "message": "Tenant inactivo o no encontrado",
+        "level": "error",
+        "additionalFields": {
+          "fields": {
+            "tenant_id": "={{ $('Buscar Tenant por Phone ID').item.json.tenant_id }}",
+            "phone_number_id": "={{ $('Buscar Tenant por Phone ID').item.json.validated_message.whatsapp_phone_number_id }}"
+          }
+        }
+      },
+      "id": "log-tenant-error",
+      "name": "Log Error Tenant",
+      "type": "n8n-nodes-base.logger",
+      "typeVersion": 1,
+      "position": [800, 480]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "Buscar Tenant por Phone ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Tenant por Phone ID": {
+      "main": [
+        [
+          {
+            "node": "Obtener Configuración del Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Configuración del Tenant": {
+      "main": [
+        [
+          {
+            "node": "¿Tenant Existe?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tenant Existe?": {
+      "main": [
+        [
+          {
+            "node": "Preparar Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Error Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Configuración": {
+      "main": [
+        [
+          {
+            "node": "Iniciar Análisis de Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

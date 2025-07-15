@@ -1,0 +1,215 @@
+{
+  "name": "Lead - Análisis con IA",
+  "description": "Workflow enfocado en analizar mensajes con IA y extraer insights del lead",
+  "tags": ["ai", "analysis", "lead", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM leads WHERE telefono_cliente = $1 AND concesionario_id = $2 ORDER BY created_at DESC LIMIT 1",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.validated_message.from, $json.tenant_id] }}"
+        }
+      },
+      "id": "check-existing-lead",
+      "name": "Buscar Lead Existente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "greaterThan",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "is-existing-lead",
+      "name": "¿Lead Existente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en preparar contexto para análisis de IA\n// Principio SRP: Una sola responsabilidad - preparar prompt para IA\n\nconst input = $input.all()[0].json;\nconst tenantConfig = input;\nconst message = tenantConfig.validated_message;\n\n// Verificar si hay lead existente\nconst existingLeadData = $('Buscar Lead Existente').item.json;\nconst hasExistingLead = existingLeadData.length > 0;\nconst existingLead = hasExistingLead ? existingLeadData[0] : null;\n\n// Construir contexto para análisis\nlet analysisContext = `\nMensaje del cliente: \"${message.body}\"\nCanal: WhatsApp\nFecha: ${message.timestamp}\nTenant: ${tenantConfig.tenant_name}\n`;\n\nif (hasExistingLead) {\n  analysisContext += `\nCliente existente:\n- Nombre: ${existingLead.nombre_cliente || 'No especificado'}\n- Estado actual: ${existingLead.estado}\n- Nivel de interés previo: ${existingLead.nivel_interes}/10\n- Vehículo de interés: ${existingLead.vehiculo_interes || 'No especificado'}\n- Notas previas: ${existingLead.notas_ia || 'Sin notas'}\n- Último contacto: ${existingLead.updated_at}\n`;\n} else {\n  analysisContext += `\nCliente nuevo - primer contacto\n`;\n}\n\n// Prompt especializado para análisis de leads automotriz\nconst analysisPrompt = `\nEres un asistente de IA especializado en análisis de leads para concesionarios automotrices.\n\nContexto del mensaje:\n${analysisContext}\n\nAnaliza el mensaje y proporciona una respuesta en formato JSON con la siguiente estructura:\n{\n  \"intencion\": \"compra|informacion|servicio|reclamo|otro\",\n  \"nivel_interes\": número_del_1_al_10,\n  \"sentimiento\": \"positivo|neutral|negativo\",\n  \"confianza\": número_del_0_al_1,\n  \"entidades_extraidas\": {\n    \"nombre\": \"nombre_detectado_o_null\",\n    \"email\": \"email_detectado_o_null\",\n    \"vehiculo_mencionado\": \"vehiculo_o_null\",\n    \"presupuesto\": número_o_null,\n    \"fecha_visita\": \"fecha_ISO_o_null\",\n    \"servicio_solicitado\": \"tipo_servicio_o_null\"\n  },\n  \"requiere_asesor\": boolean,\n  \"respuesta_sugerida\": \"respuesta_personalizada_para_el_cliente\",\n  \"urgencia\": \"baja|media|alta\",\n  \"siguiente_accion\": \"descripcion_de_la_accion_recomendada\"\n}\n\nConsidera:\n1. Intención de compra: palabras como \"comprar\", \"precio\", \"financiamiento\", \"modelo\"\n2. Servicio post-venta: \"mantención\", \"reparación\", \"repuestos\", \"revisión\"\n3. Nivel de interés basado en especificidad y urgencia del mensaje\n4. Extrae entidades relevantes para el negocio automotriz\n5. Genera respuesta personalizada y profesional\n\nResponde SOLO con el JSON, sin texto adicional.\n`;\n\n// Preparar datos para el servicio de IA\nconst aiRequest = {\n  prompt: analysisPrompt,\n  model: tenantConfig.ai_config.modelo_ia,\n  temperature: tenantConfig.ai_config.temperatura,\n  max_tokens: tenantConfig.ai_config.max_tokens,\n  \n  // Contexto adicional\n  context: {\n    tenant_id: tenantConfig.tenant_id,\n    has_existing_lead: hasExistingLead,\n    existing_lead_id: existingLead?.id || null,\n    message_from: message.from,\n    message_timestamp: message.timestamp\n  }\n};\n\nconsole.log('Análisis de IA preparado:', {\n  tenantId: tenantConfig.tenant_id,\n  hasExistingLead,\n  messageLength: message.body.length,\n  aiModel: tenantConfig.ai_config.modelo_ia\n});\n\nreturn [{ json: aiRequest }];"
+      },
+      "id": "prepare-ai-analysis",
+      "name": "Preparar Análisis IA",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "prompt": "={{ $json.prompt }}",
+        "options": {
+          "temperature": "={{ $json.temperature }}",\n          \"maxTokens\": \"={{ $json.max_tokens }}\",\n          \"topP\": 1\n        }\n      },\n      \"id\": \"ai-analysis\",\n      \"name\": \"Análisis con IA\",\n      \"type\": \"@n8n/n8n-nodes-langchain.openAi\",\n      \"typeVersion\": 1,\n      \"position\": [1000, 300]\n    },\n    {\n      \"parameters\": {\n        \"functionCode\": \"// Función enfocada en procesar y validar respuesta de IA\\n// Principio SRP: Una sola responsabilidad - procesar resultado de IA\\n\\nconst aiResponse = $input.all()[0].json.response;\\nconst originalContext = $('Preparar Análisis IA').item.json.context;\\nconst tenantConfig = $('Trigger del Workflow').item.json;\\n\\ntry {\\n  // Parsear respuesta JSON de la IA\\n  const analysis = JSON.parse(aiResponse);\\n  \\n  // Validar estructura de respuesta\\n  const requiredFields = ['intencion', 'nivel_interes', 'sentimiento', 'confianza', 'entidades_extraidas', 'respuesta_sugerida'];\\n  const missingFields = requiredFields.filter(field => !(field in analysis));\\n  \\n  if (missingFields.length > 0) {\\n    throw new Error(`Campos faltantes en análisis IA: ${missingFields.join(', ')}`);\\n  }\\n  \\n  // Normalizar y validar valores\\n  analysis.nivel_interes = Math.min(10, Math.max(1, analysis.nivel_interes));\\n  analysis.confianza = Math.min(1, Math.max(0, analysis.confianza));\\n  \\n  // Agregar metadatos de procesamiento\\n  const processedAnalysis = {\\n    ...analysis,\\n    \\n    // Contexto original\\n    context: originalContext,\\n    tenant_config: {\\n      tenant_id: tenantConfig.tenant_id,\\n      tenant_name: tenantConfig.tenant_name\\n    },\\n    \\n    // Mensaje original\\n    original_message: tenantConfig.validated_message,\\n    \\n    // Metadatos de análisis\\n    analysis_metadata: {\\n      processed_at: new Date().toISOString(),\\n      ai_model: tenantConfig.ai_config.modelo_ia,\\n      analysis_version: '1.0',\\n      validation_passed: true\\n    },\\n    \\n    // Siguiente paso basado en el análisis\\n    next_action: {\\n      workflow: analysis.requiere_asesor ? 'advisor-assignment' : 'automated-response',\\n      priority: analysis.urgencia,\\n      estimated_response_time: analysis.urgencia === 'alta' ? '5min' : analysis.urgencia === 'media' ? '30min' : '2h'\\n    }\\n  };\\n  \\n  console.log('Análisis procesado exitosamente:', {\\n    tenantId: originalContext.tenant_id,\\n    intencion: analysis.intencion,\\n    nivelInteres: analysis.nivel_interes,\\n    requiereAsesor: analysis.requiere_asesor,\\n    urgencia: analysis.urgencia\\n  });\\n  \\n  return [{ json: processedAnalysis }];\\n  \\n} catch (error) {\\n  console.error('Error procesando análisis IA:', error.message);\\n  \\n  // Análisis de respaldo en caso de error\\n  const fallbackAnalysis = {\\n    intencion: 'otro',\\n    nivel_interes: 5,\\n    sentimiento: 'neutral',\\n    confianza: 0.3,\\n    entidades_extraidas: {},\\n    requiere_asesor: true,\\n    respuesta_sugerida: 'Gracias por contactarnos. Un asesor se comunicará contigo pronto.',\\n    urgencia: 'media',\\n    \\n    // Contexto y metadatos\\n    context: originalContext,\\n    tenant_config: {\\n      tenant_id: tenantConfig.tenant_id,\\n      tenant_name: tenantConfig.tenant_name\\n    },\\n    original_message: tenantConfig.validated_message,\\n    \\n    analysis_metadata: {\\n      processed_at: new Date().toISOString(),\\n      ai_model: 'fallback',\\n      analysis_version: '1.0-fallback',\\n      validation_passed: false,\\n      error: error.message\\n    },\\n    \\n    next_action: {\\n      workflow: 'advisor-assignment',\\n      priority: 'media',\\n      estimated_response_time: '30min'\\n    }\\n  };\\n  \\n  return [{ json: fallbackAnalysis }];\\n}\""
+      },
+      "id": "process-ai-response",
+      "name": "Procesar Respuesta IA",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.next_action.workflow === 'advisor-assignment' }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "requires-advisor",
+      "name": "¿Requiere Asesor?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "advisor-assignment-workflow",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-advisor-assignment",
+      "name": "Asignar Asesor",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1600, 280]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "automated-response-workflow",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-automated-response",
+      "name": "Respuesta Automática",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1600, 380]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "Buscar Lead Existente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Lead Existente": {
+      "main": [
+        [
+          {
+            "node": "¿Lead Existente?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Lead Existente?": {
+      "main": [
+        [
+          {
+            "node": "Preparar Análisis IA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Análisis IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Análisis IA": {
+      "main": [
+        [
+          {
+            "node": "Análisis con IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Análisis con IA": {
+      "main": [
+        [
+          {
+            "node": "Procesar Respuesta IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Respuesta IA": {
+      "main": [
+        [
+          {
+            "node": "¿Requiere Asesor?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Requiere Asesor?": {
+      "main": [
+        [
+          {
+            "node": "Asignar Asesor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta Automática",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

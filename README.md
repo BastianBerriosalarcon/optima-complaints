@@ -1,9 +1,20 @@
-# OptimaCx GCP - n8n Cloud Run Deployment
+# OptimaCX Platform - GCP Multi-Service Infrastructure
 
-Sistema de automatización para el proyecto OptimaCx desplegado en Google Cloud Run.
+Plataforma multitenant de experiencia al cliente que combina N8N, Chatwoot y un frontend personalizado, desplegada en Google Cloud Platform usando infraestructura como código (Terraform).
 
 ## 🚀 Estado del Proyecto
 
+### Infraestructura Actual (Terraform)
+**🔄 EN DESARROLLO** - Infraestructura base completada
+- **N8N Dev:** https://n8n-dev-1008284849803.southamerica-west1.run.app ❌
+- **Chatwoot Dev:** https://chatwoot-dev-1008284849803.southamerica-west1.run.app ❌
+- **Frontend Dev:** https://optimacx-frontend-dev-1008284849803.southamerica-west1.run.app ❌
+- **Base de Datos:** Supabase PostgreSQL (Brasil) ✅
+- **Redis:** Cloud Memorystore (10.129.0.4:6379) ✅
+- **Región:** southamerica-west1
+- **Último Deploy:** 2025-07-15
+
+### Infraestructura Legacy (Funcionando)
 **✅ ACTIVO y FUNCIONANDO**
 - **n8n URL:** https://n8n-optima-cx-e6nurdtj6a-tl.a.run.app
 - **Base de Datos:** n8n-optima-cx-postgres (Cloud SQL)
@@ -19,7 +30,37 @@ OptimaCx es una plataforma multitenant de experiencia al cliente para el sector 
 - ✅ **Multitenant:** Aislamiento completo por concesionario
 - ✅ **Automatización Inteligente:** Workflows personalizados
 
-## 🏗️ Arquitectura Actual
+## 🏗️ Arquitectura Nueva (Terraform)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Google Cloud Platform                    │
+├─────────────────────────────────────────────────────────────────┤
+│  Cloud Run Services                                            │
+│  ├── N8N (southamerica-west1)                                 │
+│  ├── Chatwoot (southamerica-west1)                            │
+│  └── OptimaCX Frontend (southamerica-west1)                   │
+├─────────────────────────────────────────────────────────────────┤
+│  Supabase PostgreSQL (Brasil)                                  │
+│  ├── Schema: n8n_dev                                          │
+│  ├── Schema: chatwoot_dev                                     │
+│  ├── Schema: public (frontend)                                │
+│  └── Row Level Security (RLS)                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  Cloud Memorystore Redis                                       │
+│  ├── Instance: chatwoot-redis-dev                             │
+│  ├── Memory: 1GB STANDARD_HA                                  │
+│  └── Private VPC: 10.129.0.4:6379                            │
+├─────────────────────────────────────────────────────────────────┤
+│  Infrastructure as Code                                        │
+│  ├── Terraform Modules (reusable)                             │
+│  ├── Environment Configurations                               │
+│  ├── Secret Manager Integration                               │
+│  └── VPC Private Networking                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## 🏗️ Arquitectura Legacy (Funcionando)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -47,19 +88,32 @@ OptimaCx es una plataforma multitenant de experiencia al cliente para el sector 
 ## 📁 Estructura del Proyecto
 
 ```
-n8n-cloudrun-deployment/
-├── custom-nodes/                    # Nodos personalizados n8n
-│   └── rag-system/                 # Sistema RAG OptimaCx
-│       └── credentials/            # Credenciales n8n
-├── docker/                         # Configuración Docker
-├── src/                           # Código fuente
-│   ├── config/                    # Configuraciones
-│   └── monitoring/                # Monitoreo y métricas
-├── terraform/                     # Infraestructura como código
-│   └── terraform.tfstate.backup   # Backup del estado
-├── tests/                         # Pruebas
+optimacx-platform/
+├── infrastructure/terraform/        # Nueva infraestructura IaC
+│   ├── modules/                    # Módulos reutilizables
+│   │   ├── cloud-run/             # Configuración genérica Cloud Run
+│   │   ├── networking/            # VPC, subnets, conectores
+│   │   ├── security/              # Service accounts, IAM
+│   │   ├── database/              # Secrets para Supabase
+│   │   └── redis/                 # Cloud Memorystore
+│   ├── services/                  # Configuraciones específicas
+│   │   ├── n8n/                  # N8N service
+│   │   ├── chatwoot/             # Chatwoot service
+│   │   ├── optimacx-frontend/    # Frontend service
+│   │   └── supabase/             # Supabase secrets
+│   └── environments/             # Configuraciones por ambiente
+│       └── dev/                  # Desarrollo
+├── custom-nodes/                   # Nodos personalizados n8n (legacy)
+│   └── rag-system/                # Sistema RAG OptimaCx
+│       └── credentials/           # Credenciales n8n
+├── terraform/                     # Infraestructura legacy
+│   └── terraform.tfstate.backup   # Backup del estado legacy
+├── scripts/                       # Scripts de base de datos
+│   └── init-db.sql               # Inicialización DB
 ├── migration-backup/              # Logs de migración
-│   └── migration.log             # Log de migración ActivePieces → n8n
+│   └── migration.log             # Log migración ActivePieces → n8n
+├── docker-compose.yml             # Docker local development
+├── Makefile                       # Comandos automatizados
 └── README.md                      # Este archivo
 ```
 
@@ -96,7 +150,46 @@ n8n-cloudrun-deployment/
 Reclamo → Embedding → Vector Search → Contexto → Gemini → Respuesta Estructurada
 ```
 
-## 🔧 Configuración Actual
+## 🔧 Configuración Nueva (Terraform)
+
+### Variables de Ambiente Supabase + Redis
+```bash
+# Supabase Database
+SUPABASE_URL=https://pnkdyagqibqxfxziqwxt.supabase.co
+SUPABASE_HOST=aws-0-sa-east-1.pooler.supabase.com
+SUPABASE_USER=postgres.pnkdyagqibqxfxziqwxt
+SUPABASE_PASSWORD=***
+
+# N8N Configuration
+DB_TYPE=postgresdb
+DB_POSTGRESDB_HOST=aws-0-sa-east-1.pooler.supabase.com
+DB_POSTGRESDB_DATABASE=postgres
+DB_POSTGRESDB_SCHEMA=n8n_dev
+N8N_USER_MANAGEMENT_DISABLED=true
+N8N_METRICS=true
+
+# Chatwoot Configuration
+POSTGRES_HOST=aws-0-sa-east-1.pooler.supabase.com
+POSTGRES_DATABASE=postgres
+REDIS_URL=redis://10.129.0.4:6379
+RAILS_ENV=development
+DATABASE_URL=postgresql://postgres.pnkdyagqibqxfxziqwxt:***@aws-0-sa-east-1.pooler.supabase.com:5432/postgres?schema=chatwoot_dev
+
+# Google Cloud
+PROJECT_ID=burnished-data-463915-d8
+REGION=southamerica-west1
+```
+
+### Terraform Deployment
+```bash
+# Deploy infrastructure
+cd infrastructure/terraform/environments/dev
+terraform init
+terraform plan
+terraform apply
+```
+
+## 🔧 Configuración Legacy (Funcionando)
 
 ### Variables de Ambiente (Configuradas en Cloud Run)
 ```bash

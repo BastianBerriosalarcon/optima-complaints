@@ -1,0 +1,273 @@
+{
+  "name": "Lead - Gestión y Persistencia",
+  "description": "Workflow enfocado en crear/actualizar leads y persistir información en base de datos",
+  "tags": ["lead", "database", "crud", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.context.has_existing_lead }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "is-existing-lead",
+      "name": "¿Lead Existente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en preparar datos para CREAR nuevo lead\n// Principio SRP: Una sola responsabilidad - preparar datos de creación\n\nconst analysis = $input.all()[0].json;\nconst message = analysis.original_message;\nconst entities = analysis.entidades_extraidas;\n\n// Mapear intención a estado inicial\nconst estadoMap = {\n  'compra': 'calificado',\n  'informacion': 'nuevo', \n  'servicio': 'nuevo',\n  'reclamo': 'nuevo',\n  'otro': 'nuevo'\n};\n\n// Preparar datos del nuevo lead\nconst newLeadData = {\n  // Identificación\n  concesionario_id: analysis.tenant_config.tenant_id,\n  telefono_cliente: message.from,\n  \n  // Información del cliente (extraída por IA)\n  nombre_cliente: entities.nombre || message.contact_name || null,\n  email_cliente: entities.email || null,\n  \n  // Estado y clasificación\n  estado: estadoMap[analysis.intencion] || 'nuevo',\n  origen: 'whatsapp',\n  intencion_detectada: analysis.intencion,\n  nivel_interes: analysis.nivel_interes,\n  \n  // Información del vehículo\n  vehiculo_interes: entities.vehiculo_mencionado ? {\n    modelo: entities.vehiculo_mencionado,\n    tipo: 'no_especificado'\n  } : null,\n  \n  // Información financiera\n  presupuesto_estimado: entities.presupuesto || null,\n  \n  // Notas y contexto\n  notas_ia: `Análisis IA: ${analysis.intencion} (${analysis.nivel_interes}/10). Sentimiento: ${analysis.sentimiento}. Mensaje: \"${message.body}\"`,\n  \n  // Metadata\n  metadata: {\n    whatsapp_message_id: message.whatsapp_message_id,\n    phone_number_id: message.whatsapp_phone_number_id,\n    analysis_confidence: analysis.confianza,\n    ai_model: analysis.analysis_metadata.ai_model,\n    urgencia: analysis.urgencia,\n    next_action: analysis.siguiente_accion,\n    created_from_workflow: true\n  },\n  \n  // Timestamps\n  created_at: new Date().toISOString(),\n  updated_at: new Date().toISOString()\n};\n\nconsole.log('Datos para nuevo lead preparados:', {\n  tenantId: newLeadData.concesionario_id,\n  telefono: newLeadData.telefono_cliente,\n  nombre: newLeadData.nombre_cliente,\n  intencion: newLeadData.intencion_detectada,\n  nivelInteres: newLeadData.nivel_interes\n});\n\nreturn [{ json: newLeadData }];"
+      },
+      "id": "prepare-new-lead",
+      "name": "Preparar Nuevo Lead",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [600, 240]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en preparar datos para ACTUALIZAR lead existente\n// Principio SRP: Una sola responsabilidad - preparar datos de actualización\n\nconst analysis = $input.all()[0].json;\nconst message = analysis.original_message;\nconst entities = analysis.entidades_extraidas;\nconst existingLeadId = analysis.context.existing_lead_id;\n\n// Preparar datos de actualización (solo campos que han cambiado)\nconst updateData = {\n  lead_id: existingLeadId,\n  \n  // Actualizar información si se detectó nueva\n  nombre_cliente: entities.nombre || undefined,\n  email_cliente: entities.email || undefined,\n  \n  // Actualizar nivel de interés si cambió significativamente\n  nivel_interes: analysis.nivel_interes,\n  \n  // Actualizar vehículo de interés si se mencionó uno nuevo\n  vehiculo_interes: entities.vehiculo_mencionado ? {\n    modelo: entities.vehiculo_mencionado,\n    tipo: 'no_especificado',\n    actualizado_en: new Date().toISOString()\n  } : undefined,\n  \n  // Actualizar presupuesto si se mencionó\n  presupuesto_estimado: entities.presupuesto || undefined,\n  \n  // Agregar nueva nota\n  nueva_nota: `[${new Date().toLocaleString('es-CL')}] Nuevo mensaje: \"${message.body}\". Análisis: ${analysis.intencion} (${analysis.nivel_interes}/10). Sentimiento: ${analysis.sentimiento}.`,\n  \n  // Actualizar metadata\n  metadata_update: {\n    ultimo_mensaje_id: message.whatsapp_message_id,\n    ultimo_contacto: new Date().toISOString(),\n    total_mensajes: 'increment',\n    analysis_confidence: analysis.confianza,\n    ultima_intencion: analysis.intencion,\n    urgencia_actual: analysis.urgencia\n  },\n  \n  // Timestamp de actualización\n  updated_at: new Date().toISOString()\n};\n\n// Remover campos undefined para evitar actualizaciones innecesarias\nObject.keys(updateData).forEach(key => {\n  if (updateData[key] === undefined) {\n    delete updateData[key];\n  }\n});\n\nconsole.log('Datos para actualización de lead preparados:', {\n  leadId: existingLeadId,\n  camposActualizar: Object.keys(updateData),\n  nuevaIntencion: analysis.intencion,\n  nuevoNivelInteres: analysis.nivel_interes\n});\n\nreturn [{ json: updateData }];"
+      },
+      "id": "prepare-update-lead",
+      "name": "Preparar Actualización Lead",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [600, 360]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "leads",
+        "columns": "concesionario_id, telefono_cliente, nombre_cliente, email_cliente, estado, origen, intencion_detectada, nivel_interes, vehiculo_interes, presupuesto_estimado, notas_ia, metadata",
+        "additionalFields": {
+          "values": "={{ [$json.concesionario_id, $json.telefono_cliente, $json.nombre_cliente, $json.email_cliente, $json.estado, $json.origen, $json.intencion_detectada, $json.nivel_interes, JSON.stringify($json.vehiculo_interes), $json.presupuesto_estimado, $json.notas_ia, JSON.stringify($json.metadata)] }}"
+        }
+      },
+      "id": "create-lead",
+      "name": "Crear Lead en BD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [800, 240]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE leads SET nombre_cliente = COALESCE($2, nombre_cliente), email_cliente = COALESCE($3, email_cliente), nivel_interes = $4, vehiculo_interes = COALESCE($5::jsonb, vehiculo_interes), presupuesto_estimado = COALESCE($6, presupuesto_estimado), notas_ia = CONCAT(notas_ia, '\\n', $7), metadata = metadata || $8::jsonb, updated_at = NOW() WHERE id = $1 RETURNING *",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.lead_id, $json.nombre_cliente, $json.email_cliente, $json.nivel_interes, JSON.stringify($json.vehiculo_interes), $json.presupuesto_estimado, $json.nueva_nota, JSON.stringify($json.metadata_update)] }}"
+        }
+      },
+      "id": "update-lead",
+      "name": "Actualizar Lead en BD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [800, 360]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en preparar respuesta de éxito\n// Principio SRP: Una sola responsabilidad - formatear respuesta\n\nconst operationType = $('¿Lead Existente?').item.json.context.has_existing_lead ? 'update' : 'create';\nconst dbResult = operationType === 'create' ? \n  $('Crear Lead en BD').item.json :\n  $('Actualizar Lead en BD').item.json;\n\nconst originalAnalysis = $('Trigger del Workflow').item.json;\n\n// Resultado estructurado de la operación\nconst result = {\n  // Estado de la operación\n  operation: operationType,\n  success: true,\n  lead_id: operationType === 'create' ? dbResult.insertId : originalAnalysis.context.existing_lead_id,\n  \n  // Datos del lead procesado\n  lead_data: {\n    telefono: originalAnalysis.original_message.from,\n    nombre: dbResult[0]?.nombre_cliente || 'No especificado',\n    estado: dbResult[0]?.estado || 'nuevo',\n    intencion: originalAnalysis.intencion,\n    nivel_interes: originalAnalysis.nivel_interes,\n    urgencia: originalAnalysis.urgencia\n  },\n  \n  // Análisis original para siguiente workflow\n  analysis: originalAnalysis,\n  \n  // Metadatos de procesamiento\n  processing: {\n    processed_at: new Date().toISOString(),\n    operation_type: operationType,\n    tenant_id: originalAnalysis.tenant_config.tenant_id,\n    workflow_correlation_id: originalAnalysis.analysis_metadata.processed_at\n  },\n  \n  // Próximo paso basado en el análisis\n  next_step: originalAnalysis.next_action\n};\n\nconsole.log('Lead procesado exitosamente:', {\n  operation: operationType,\n  leadId: result.lead_id,\n  telefono: result.lead_data.telefono,\n  intencion: result.lead_data.intencion,\n  nextWorkflow: result.next_step.workflow\n});\n\nreturn [{ json: result }];"
+      },
+      "id": "format-success-response",
+      "name": "Formatear Respuesta",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit_log (entity_type, entity_id, action, tenant_id, user_id, changes, metadata, created_at) VALUES ('lead', $1, $2, $3, 'system', $4, $5, NOW())",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.lead_id, $json.operation, $json.processing.tenant_id, JSON.stringify($json.lead_data), JSON.stringify($json.processing)] }}"
+        }
+      },
+      "id": "log-audit",
+      "name": "Registrar Auditoría",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.next_step.workflow }}",
+              "operation": "equal",
+              "value2": "advisor-assignment"
+            }
+          ]
+        }
+      },
+      "id": "check-next-workflow",
+      "name": "¿Requiere Asesor?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "advisor-assignment-workflow",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-advisor-workflow",
+      "name": "Activar Asignación Asesor",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1600, 260]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "automated-response-workflow",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-response-workflow",
+      "name": "Activar Respuesta Automática",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1600, 340]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "¿Lead Existente?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Lead Existente?": {
+      "main": [
+        [
+          {
+            "node": "Preparar Actualización Lead",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Nuevo Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Nuevo Lead": {
+      "main": [
+        [
+          {
+            "node": "Crear Lead en BD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Actualización Lead": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Lead en BD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Lead en BD": {
+      "main": [
+        [
+          {
+            "node": "Formatear Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar Lead en BD": {
+      "main": [
+        [
+          {
+            "node": "Formatear Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Respuesta": {
+      "main": [
+        [
+          {
+            "node": "Registrar Auditoría",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Auditoría": {
+      "main": [
+        [
+          {
+            "node": "¿Requiere Asesor?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Requiere Asesor?": {
+      "main": [
+        [
+          {
+            "node": "Activar Asignación Asesor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Activar Respuesta Automática",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}
