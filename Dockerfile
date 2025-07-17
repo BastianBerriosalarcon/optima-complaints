@@ -19,8 +19,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared ./shared
 
-# Copiar el código fuente del frontend
+# Copiar el código fuente completo
 COPY frontend/ ./frontend/
+COPY shared/ ./shared/
 
 # Construir la aplicación de frontend
 # La variable de entorno asegura que no se genere telemetría anónima en el build
