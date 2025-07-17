@@ -48,13 +48,16 @@ export class ConfigService {
 
   private loadConfig(): ServiceConfig {
     // Configuración basada en variables de entorno
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54321';
+    const key = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'default-anon-key';
+    
     return {
       name: 'optimacx-platform',
       version: '1.0.0',
       environment: this.environment,
       database: {
-        url: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-        key: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+        url,
+        key,
         serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
         type: 'supabase',
         pool_size: 10,

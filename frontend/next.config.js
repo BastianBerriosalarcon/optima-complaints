@@ -4,11 +4,19 @@ const nextConfig = {
     images: {
         domains: ['images.unsplash.com'],
     },
-    transpilePackages: ['@optimacx/shared']
+    transpilePackages: ['@optimacx/shared'],
+    output: 'standalone',
+    trailingSlash: true,
+    experimental: {
+        isrMemoryCacheSize: 0,
+    },
+    generateStaticParams: false,
+    dynamicParams: true,
 };
 
 if (process.env.NEXT_PUBLIC_TEMPO) {
     nextConfig["experimental"] = {
+        ...nextConfig.experimental,
         // NextJS 13.4.8 up to 14.1.3:
         // swcPlugins: [[require.resolve("tempo-devtools/swc/0.86"), {}]],
         // NextJS 14.1.3 to 14.2.11:
