@@ -39,7 +39,7 @@ export function useAuth(): AuthState {
         
         if (result.success) {
           setAuthState({
-            user: result.data,
+            user: result.data || null,
             loading: false,
             error: null,
             isAuthenticated: !!result.data
