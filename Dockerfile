@@ -20,11 +20,12 @@ COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
 COPY --from=deps /app/shared ./shared
 
 # Copiar el código fuente del frontend
-COPY frontend/ .
+COPY frontend/ ./frontend/
 
 # Construir la aplicación de frontend
 # La variable de entorno asegura que no se genere telemetría anónima en el build
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
+WORKDIR /app/frontend
 RUN npm run build
 
 # Etapa 3: Imagen final de producción
@@ -38,10 +39,10 @@ RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
 
 # Copiar solo los artefactos necesarios para producción
-COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json .
+COPY --from=builder /app/frontend/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next ./.next
+COPY --from=builder /app/frontend/node_modules ./node_modules
+COPY --from=builder /app/frontend/package.json .
 
 USER nextjs
 EXPOSE 3000
