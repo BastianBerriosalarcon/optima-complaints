@@ -1,5 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
-import { config } from "../../shared/config/ConfigService";
+import { config } from "@optimacx/shared/config/ConfigService";
 
 export const createClient = () => {
   const dbConfig = config.getDatabaseConfig();

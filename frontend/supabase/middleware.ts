@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { config } from "../../shared/config/ConfigService";
+import { config } from "@optimacx/shared/config/ConfigService";
 
 export const updateSession = async (request: NextRequest) => {
   try {

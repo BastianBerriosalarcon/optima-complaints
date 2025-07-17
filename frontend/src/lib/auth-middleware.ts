@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { type UserRole } from '@/hooks/useAuth';
 import { type Permission } from '@/hooks/useRole';
-import { config } from '../../../shared/config/ConfigService';
+import { config } from '@optimacx/shared/config/ConfigService';
 
 // Configuración de rutas protegidas
 interface RouteConfig {

@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { config } from "../../shared/config/ConfigService";
+import { config } from "@optimacx/shared/config/ConfigService";
 
 export const createClient = async () => {
   const cookieStore = cookies();

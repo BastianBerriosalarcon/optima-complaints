@@ -1,6 +1,6 @@
 // Servicio de autenticación usando las abstracciones
 import { createClient } from "../../supabase/client";
-import { ServiceFactory } from "../../../shared/services/ServiceFactory";
+import { ServiceFactory } from "@optimacx/shared/services/ServiceFactory";
 import { ServiceResponse, WorkflowContext } from "../../../shared/types/core";
 
 export interface User {

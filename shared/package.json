@@ -1,23 +1,6 @@
 {
   "name": "@optimacx/shared",
   "version": "1.0.0",
-  "description": "Shared services and utilities for OptimaCX Platform",
-  "main": "index.js",
-  "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
-    "js-yaml": "^4.1.0"
-  },
-  "devDependencies": {
-    "@types/js-yaml": "^4.0.8",
-    "@types/node": "^20.10.0",
-    "typescript": "^5.3.0"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
-  }
+  "private": true,
+  "main": "index.ts"
 }
