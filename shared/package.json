@@ -7,6 +7,6 @@
     "build": "echo 'No build required for TypeScript modules'"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.44.4"
+    "@supabase/supabase-js": "^2.52.0"
   }
 }

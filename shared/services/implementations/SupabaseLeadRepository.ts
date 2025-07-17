@@ -37,7 +37,7 @@ export class SupabaseLeadRepository implements ILeadRepository {
     this.dataService = new SupabaseDataService();
   }
 
-  async create(data: CreateLead, context: WorkflowContext): Promise<ServiceResponse<Lead>> {
+  async create(data: CreateLead, context: WorkflowContext): Promise<ServiceResponse<Lead | null>> {
     const sql = `
       INSERT INTO leads (tenant_id, phone, name, email, status, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
@@ -61,11 +61,11 @@ export class SupabaseLeadRepository implements ILeadRepository {
       WHERE id = $1 AND tenant_id = $2
     `;
     
-    const params = [id, context.tenantId];
+    const params = [id, context.tenant_id];
     return await this.dataService.queryOne<Lead>(sql, params, context);
   }
 
-  async update(id: string, data: UpdateLead, context: WorkflowContext): Promise<ServiceResponse<Lead>> {
+  async update(id: string, data: UpdateLead, context: WorkflowContext): Promise<ServiceResponse<Lead | null>> {
     const updates: string[] = [];
     const params: any[] = [];
     let paramIndex = 1;
@@ -88,7 +88,7 @@ export class SupabaseLeadRepository implements ILeadRepository {
     }
 
     updates.push(`updated_at = NOW()`);
-    params.push(id, context.tenantId);
+    params.push(id, context.tenant_id);
 
     const sql = `
       UPDATE leads 
@@ -106,28 +106,26 @@ export class SupabaseLeadRepository implements ILeadRepository {
       WHERE id = $1 AND tenant_id = $2
     `;
     
-    const params = [id, context.tenantId];
+    const params = [id, context.tenant_id];
     const result = await this.dataService.query(sql, params, context);
     
     if (result.success) {
       return {
         success: true,
-        data: undefined,
-        context: context
+        data: undefined
       };
     }
     
     return {
       success: false,
       error: result.error,
-      data: undefined,
-      context: context
+      data: undefined
     };
   }
 
   async findMany(filters: Record<string, any>, context: WorkflowContext): Promise<ServiceResponse<Lead[]>> {
     let sql = `SELECT * FROM leads WHERE tenant_id = $1`;
-    const params = [context.tenantId];
+    const params = [context.tenant_id];
     let paramIndex = 2;
 
     // Agregar filtros dinámicamente
@@ -157,7 +155,6 @@ export class SupabaseLeadRepository implements ILeadRepository {
       return {
         success: true,
         data: result.data?.rows || [],
-        context: context
       };
     }
     
@@ -165,7 +162,6 @@ export class SupabaseLeadRepository implements ILeadRepository {
       success: false,
       error: result.error,
       data: [],
-      context: context
     };
   }
 
@@ -186,7 +182,7 @@ export class SupabaseLeadRepository implements ILeadRepository {
     return await this.findMany(filters, contextWithTenant);
   }
 
-  async updateStatus(id: string, status: string, context: WorkflowContext): Promise<ServiceResponse<Lead>> {
+  async updateStatus(id: string, status: string, context: WorkflowContext): Promise<ServiceResponse<Lead | null>> {
     return await this.update(id, { status }, context);
   }
 }

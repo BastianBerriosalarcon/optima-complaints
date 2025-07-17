@@ -25,7 +25,7 @@ export class AuthService {
   private supabase = createClient();
   private dataService = ServiceFactory.getDataService();
 
-  async signIn(data: SignInData): Promise<ServiceResponse<User>> {
+  async signIn(data: SignInData): Promise<ServiceResponse<User | null>> {
     try {
       const { data: authData, error } = await this.supabase.auth.signInWithPassword({
         email: data.email,
@@ -42,10 +42,10 @@ export class AuthService {
 
       // Obtener información adicional del usuario
       const context: WorkflowContext = {
-        requestId: crypto.randomUUID(),
-        tenantId: '', // Se obtendrá de la consulta
-        userId: authData.user.id,
-        timestamp: new Date().toISOString()
+        tenant_id: '', // Se obtendrá de la consulta
+        user_id: authData.user.id,
+        correlation_id: crypto.randomUUID(),
+        timestamp: new Date()
       };
 
       const userResult = await this.dataService.queryOne<User>(
@@ -75,7 +75,7 @@ export class AuthService {
     }
   }
 
-  async signUp(data: SignUpData): Promise<ServiceResponse<User>> {
+  async signUp(data: SignUpData): Promise<ServiceResponse<User | null>> {
     try {
       const { data: authData, error } = await this.supabase.auth.signUp({
         email: data.email,
@@ -100,10 +100,10 @@ export class AuthService {
 
       // Crear perfil de usuario
       const context: WorkflowContext = {
-        requestId: crypto.randomUUID(),
-        tenantId: data.tenant_id,
-        userId: authData.user.id,
-        timestamp: new Date().toISOString()
+        tenant_id: data.tenant_id,
+        user_id: authData.user.id,
+        correlation_id: crypto.randomUUID(),
+        timestamp: new Date()
       };
 
       const userResult = await this.dataService.queryOne<User>(
@@ -172,10 +172,10 @@ export class AuthService {
       }
 
       const context: WorkflowContext = {
-        requestId: crypto.randomUUID(),
-        tenantId: '',
-        userId: authData.user.id,
-        timestamp: new Date().toISOString()
+        tenant_id: '',
+        user_id: authData.user.id,
+        correlation_id: crypto.randomUUID(),
+        timestamp: new Date()
       };
 
       const userResult = await this.dataService.queryOne<User>(

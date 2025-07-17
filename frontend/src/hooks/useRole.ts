@@ -182,7 +182,7 @@ export function useRole(): RoleHook {
   };
 
   return {
-    role: user?.role || null,
+    role: (user?.role as UserRole) || null,
     concesionarioId: user?.tenant_id || null,
     isRole,
     hasPermission,

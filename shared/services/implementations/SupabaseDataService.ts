@@ -27,8 +27,7 @@ export class SupabaseDataService implements IDataService {
         return {
           success: false,
           error: error.message,
-          data: null,
-          context: context
+          data: undefined
         };
       }
 
@@ -37,15 +36,13 @@ export class SupabaseDataService implements IDataService {
         data: {
           rows: data || [],
           rowCount: data?.length || 0
-        },
-        context: context
+        }
       };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        data: null,
-        context: context
+        data: undefined
       };
     }
   }
@@ -61,16 +58,14 @@ export class SupabaseDataService implements IDataService {
       return {
         success: false,
         error: result.error,
-        data: null,
-        context: context
-      };
+        data: undefined
+              };
     }
 
     return {
       success: true,
       data: result.data?.rows[0] || null,
-      context: context
-    };
+          };
   }
 
   async transaction<T>(
@@ -86,15 +81,13 @@ export class SupabaseDataService implements IDataService {
       return {
         success: true,
         data: result,
-        context: context
-      };
+              };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Transaction failed',
-        data: null,
-        context: context
-      };
+        data: undefined
+              };
     }
   }
 
