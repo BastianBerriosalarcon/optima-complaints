@@ -3,7 +3,8 @@
 const nextConfig = {
     images: {
         domains: ['images.unsplash.com'],
-    }
+    },
+    transpilePackages: ['@optimacx/shared']
 };
 
 if (process.env.NEXT_PUBLIC_TEMPO) {
