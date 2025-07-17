@@ -1,13 +1,15 @@
 // Lead Processor Service - Implementación de lógica de negocio separada
 import { IExecuteFunctions } from 'n8n-workflow';
 import { IOptimaCxNodeService } from '../base/OptimaCxNodeBase';
-import { ServiceResponse } from '@shared/types/core';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { ServiceResponse, WorkflowContext } from '@shared/types/core';
+import { ServiceFactory } from '@shared/services/ServiceFactory';
+import { ILeadRepository } from '@shared/services/interfaces/IDataService';
+import { CreateLead, UpdateLead } from '@shared/services/implementations/SupabaseLeadRepository';
 
 export class LeadProcessorService implements IOptimaCxNodeService {
   private credentials: any;
   private options: any;
-  private supabase: SupabaseClient;
+  private leadRepository: ILeadRepository;
 
   constructor(credentials: any, options: any = {}) {
     this.credentials = credentials;
@@ -18,11 +20,11 @@ export class LeadProcessorService implements IOptimaCxNodeService {
       ...options
     };
 
-    if (!credentials.supabaseUrl || !credentials.supabaseServiceKey) {
-      throw new Error('Supabase URL and Service Key are required in credentials');
+    if (!credentials.tenantId) {
+      throw new Error('Tenant ID is required in credentials');
     }
 
-    this.supabase = createClient(credentials.supabaseUrl, credentials.supabaseServiceKey);
+    this.leadRepository = ServiceFactory.getLeadRepository();
   }
 
   async validate(input: any): Promise<ServiceResponse<boolean>> {
@@ -64,54 +66,48 @@ export class LeadProcessorService implements IOptimaCxNodeService {
         return { success: false, error: 'Phone number is required for lead creation' };
       }
 
+      const workflowContext: WorkflowContext = {
+        requestId: crypto.randomUUID(),
+        tenantId: this.credentials.tenantId,
+        userId: 'n8n-system',
+        timestamp: new Date().toISOString()
+      };
+
       // Check if lead already exists
-      const { data: existingLead, error: findError } = await this.supabase
-        .from('leads')
-        .select('id')
-        .eq('concesionario_id', this.credentials.tenantId)
-        .eq('telefono', leadData.telefono_cliente)
-        .single();
+      const existingLead = await this.leadRepository.findByPhone(
+        leadData.telefono_cliente,
+        this.credentials.tenantId,
+        workflowContext
+      );
 
-      if (findError && findError.code !== 'PGRST116') { // Ignore 'not found' error
-        throw new Error(`Error checking for existing lead: ${findError.message}`);
-      }
-      if (existingLead) {
-        return { success: false, error: `Lead with phone ${leadData.telefono_cliente} already exists with id ${existingLead.id}` };
+      if (existingLead.success && existingLead.data) {
+        return { 
+          success: false, 
+          error: `Lead with phone ${leadData.telefono_cliente} already exists with id ${existingLead.data.id}` 
+        };
       }
 
-      const newLeadPayload = {
-        concesionario_id: this.credentials.tenantId,
-        telefono: leadData.telefono_cliente,
-        nombre_completo: leadData.nombre_cliente || 'Unknown',
+      const newLeadData: CreateLead = {
+        tenant_id: this.credentials.tenantId,
+        phone: leadData.telefono_cliente,
+        name: leadData.nombre_cliente || 'Unknown',
         email: leadData.email_cliente || null,
-        canal_origen: leadData.origen || 'whatsapp',
-        estado: 'nuevo',
-        score_calidad: 50, // Initial score
-        notas: `Lead creado desde n8n. Mensaje inicial: ${leadData.mensaje_inicial || ''}`,
-        metadata: {
-          created_by_node: true,
-          node_version: '1.0.0',
-          initial_message: leadData.mensaje_inicial || ''
-        }
+        status: 'nuevo'
       };
 
       if (this.options.enableLogging) {
-        console.log('Creating lead with payload:', newLeadPayload);
+        console.log('Creating lead with data:', newLeadData);
       }
 
-      const { data, error } = await this.supabase
-        .from('leads')
-        .insert(newLeadPayload)
-        .select()
-        .single();
+      const result = await this.leadRepository.create(newLeadData, workflowContext);
 
-      if (error) {
-        throw new Error(`Supabase insert error: ${error.message}`);
+      if (!result.success) {
+        return { success: false, error: `Create lead failed: ${result.error}` };
       }
 
       return {
         success: true,
-        data,
+        data: result.data,
         metadata: {
           operation: 'createLead',
           tenant_id: this.credentials.tenantId
@@ -126,8 +122,7 @@ export class LeadProcessorService implements IOptimaCxNodeService {
   private async updateLead(context: IExecuteFunctions, input: any): Promise<ServiceResponse<any>> {
     try {
       const leadId = context.getNodeParameter('leadId', 0) as string;
-      // The entire input is the update data
-      const { id, created_at, concesionario_id, ...updateData } = input;
+      const { id, created_at, tenant_id, ...updateData } = input;
 
       if (!leadId) {
         return { success: false, error: 'Lead ID is required for update operation' };
@@ -137,29 +132,33 @@ export class LeadProcessorService implements IOptimaCxNodeService {
         return { success: false, error: 'No data provided for update.' };
       }
 
-      const updatePayload = {
-        ...updateData,
-        updated_at: new Date().toISOString(),
+      const workflowContext: WorkflowContext = {
+        requestId: crypto.randomUUID(),
+        tenantId: this.credentials.tenantId,
+        userId: 'n8n-system',
+        timestamp: new Date().toISOString()
+      };
+
+      const updatePayload: UpdateLead = {
+        name: updateData.name,
+        email: updateData.email,
+        status: updateData.status,
+        assigned_advisor_id: updateData.assigned_advisor_id
       };
       
       if (this.options.enableLogging) {
         console.log(`Updating lead ${leadId} with payload:`, updatePayload);
       }
 
-      const { data, error } = await this.supabase
-        .from('leads')
-        .update(updatePayload)
-        .eq('id', leadId)
-        .select()
-        .single();
+      const result = await this.leadRepository.update(leadId, updatePayload, workflowContext);
 
-      if (error) {
-        throw new Error(`Supabase update error: ${error.message}`);
+      if (!result.success) {
+        return { success: false, error: `Update lead failed: ${result.error}` };
       }
 
       return {
         success: true,
-        data,
+        data: result.data,
         metadata: {
           operation: 'updateLead',
           lead_id: leadId,

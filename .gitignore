@@ -3,6 +3,10 @@ terraform/terraform.tfvars
 terraform/*.tfstate
 terraform/.terraform/
 terraform/.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+infrastructure/terraform/**/*.tfstate
+infrastructure/terraform/**/*.tfstate.backup
 
 # Allow important terraform files
 !terraform/*.tf
@@ -33,6 +37,7 @@ n8n-data/
 # Docker
 .docker/
 docker-compose.override.yml
+infrastructure/docker/docker-compose.yml
 
 # Logs
 *.log
@@ -82,9 +87,9 @@ gcloud-service-key.json
 *.bak
 *.tmp
 
-# Allow specific backup files
-!terraform/terraform.tfstate.backup
-!migration-backup/migration.log
+# Migration backups and logs
+migration-backup/
+*.migration.log
 
 # Local development
 .local/

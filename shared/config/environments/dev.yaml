@@ -19,5 +19,13 @@ cloud_run:
   min_instances: 0
   max_instances: 3
 
+n8n:
+  user_management_disabled: true
+  metrics_enabled: true
+  diagnostics_enabled: true
+
+security:
+  session_timeout: 7200
+
 monitoring:
   logging_level: "DEBUG"

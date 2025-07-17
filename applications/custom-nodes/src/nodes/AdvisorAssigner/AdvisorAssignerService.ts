@@ -1,13 +1,14 @@
 // Advisor Assigner Service - Principio de Responsabilidad Única
 import { IExecuteFunctions } from 'n8n-workflow';
 import { IOptimaCxNodeService } from '../base/OptimaCxNodeBase';
-import { ServiceResponse } from '@shared/types/core';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { ServiceResponse, WorkflowContext } from '@shared/types/core';
+import { ServiceFactory } from '@shared/services/ServiceFactory';
+import { IDataService } from '@shared/services/interfaces/IDataService';
 
 export class AdvisorAssignerService implements IOptimaCxNodeService {
   private credentials: any;
   private options: any;
-  private supabase: SupabaseClient;
+  private dataService: IDataService;
 
   constructor(credentials: any, options: any = {}) {
     this.credentials = credentials;
@@ -21,11 +22,11 @@ export class AdvisorAssignerService implements IOptimaCxNodeService {
       ...options
     };
 
-    if (!credentials.supabaseUrl || !credentials.supabaseServiceKey) {
-      throw new Error('Supabase URL and Service Key are required in credentials');
+    if (!credentials.tenantId) {
+      throw new Error('Tenant ID is required in credentials');
     }
 
-    this.supabase = createClient(credentials.supabaseUrl, credentials.supabaseServiceKey);
+    this.dataService = ServiceFactory.getDataService();
   }
 
   async validate(input: any): Promise<ServiceResponse<boolean>> {
@@ -42,12 +43,6 @@ export class AdvisorAssignerService implements IOptimaCxNodeService {
           success: false,
           error: 'Tenant ID is required in credentials'
         };
-      }
-
-      // Test Supabase connection
-      const { data, error } = await this.supabase.from('concesionarios').select('id').limit(1);
-      if (error) {
-        throw new Error(`Supabase connection failed: ${error.message}`);
       }
 
       return {
