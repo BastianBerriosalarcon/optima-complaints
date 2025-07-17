@@ -1,7 +1,4 @@
 // Servicio centralizado de configuración
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import yaml from 'js-yaml';
 
 export interface DatabaseConfig {
   url: string;
@@ -50,33 +47,33 @@ export class ConfigService {
   }
 
   private loadConfig(): ServiceConfig {
-    try {
-      // Cargar configuración base
-      const basePath = join(__dirname, 'base.yaml');
-      const baseConfig = yaml.load(readFileSync(basePath, 'utf8')) as any;
-
-      // Cargar configuración específica del ambiente
-      const envPath = join(__dirname, 'environments', `${this.environment}.yaml`);
-      const envConfig = yaml.load(readFileSync(envPath, 'utf8')) as any;
-
-      // Combinar configuraciones
-      const mergedConfig = this.mergeConfigs(baseConfig, envConfig);
-
-      // Agregar variables de entorno
-      return {
-        ...mergedConfig,
-        environment: this.environment,
-        database: {
-          ...mergedConfig.database,
-          url: process.env.SUPABASE_URL || '',
-          key: process.env.SUPABASE_ANON_KEY || '',
-          serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-        }
-      };
-    } catch (error) {
-      console.error('Error loading configuration:', error);
-      throw new Error('Failed to load configuration');
-    }
+    // Configuración basada en variables de entorno
+    return {
+      name: 'optimacx-platform',
+      version: '1.0.0',
+      environment: this.environment,
+      database: {
+        url: process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+        key: process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+        serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+        type: 'supabase',
+        pool_size: 10,
+        timeout: 30000
+      },
+      n8n: {
+        user_management_disabled: false,
+        metrics_enabled: true,
+        diagnostics_enabled: this.environment !== 'prod'
+      },
+      security: {
+        encryption_algorithm: 'AES-256-GCM',
+        session_timeout: 3600000
+      },
+      monitoring: {
+        logging_level: this.environment === 'prod' ? 'warn' : 'debug',
+        metrics_enabled: true
+      }
+    };
   }
 
   private mergeConfigs(base: any, env: any): any {

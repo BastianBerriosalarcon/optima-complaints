@@ -7,10 +7,6 @@
     "build": "echo 'No build required for TypeScript modules'"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0",
     "@supabase/supabase-js": "^2.44.4"
-  },
-  "devDependencies": {
-    "@types/js-yaml": "^4.0.5"
   }
 }
