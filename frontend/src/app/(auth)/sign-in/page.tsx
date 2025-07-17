@@ -6,6 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 
+// Force dynamic rendering to avoid Supabase client creation during static generation
+export const dynamic = 'force-dynamic';
+
 interface LoginProps {
   searchParams: Promise<Message>;
 }

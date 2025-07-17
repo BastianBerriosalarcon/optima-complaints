@@ -3,6 +3,9 @@ import { InfoIcon, UserCircle } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "../../../supabase/server";
 
+// Force dynamic rendering - don't pre-render this page
+export const dynamic = 'force-dynamic';
+
 export default async function Dashboard() {
   const supabase = await createClient();
 

@@ -8,6 +8,9 @@ import { forgotPasswordAction } from "@/app/actions";
 import Navbar from "@/components/navbar";
 import { UrlProvider } from "@/components/url-provider";
 
+// Force dynamic rendering to avoid Supabase client creation during static generation
+export const dynamic = 'force-dynamic';
+
 export default async function ForgotPassword(props: {
   searchParams: Promise<Message>;
 }) {

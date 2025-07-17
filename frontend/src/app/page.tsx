@@ -6,6 +6,9 @@ import StatsSection from "@/components/sections/StatsSection";
 import BenefitsSection from "@/components/sections/BenefitsSection";
 import CTASection from "@/components/sections/CTASection";
 
+// Force dynamic rendering to avoid Supabase client creation during static generation
+export const dynamic = 'force-dynamic';
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
