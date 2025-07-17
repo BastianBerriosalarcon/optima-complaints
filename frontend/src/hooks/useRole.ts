@@ -133,22 +133,22 @@ export interface RoleHook {
 }
 
 export function useRole(): RoleHook {
-  const { profile, isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   const isRole = (role: UserRole | UserRole[]): boolean => {
-    if (!isAuthenticated || !profile) return false;
+    if (!isAuthenticated || !user) return false;
     
     if (Array.isArray(role)) {
-      return role.includes(profile.role);
+      return role.includes(user.role as UserRole);
     }
     
-    return profile.role === role;
+    return user.role === role;
   };
 
   const hasPermission = (permission: Permission): boolean => {
-    if (!isAuthenticated || !profile) return false;
+    if (!isAuthenticated || !user) return false;
     
-    const userPermissions = ROLE_PERMISSIONS[profile.role] || [];
+    const userPermissions = ROLE_PERMISSIONS[user.role as UserRole] || [];
     return userPermissions.includes(permission);
   };
 
@@ -161,7 +161,7 @@ export function useRole(): RoleHook {
   };
 
   const canAccessModule = (module: 'ventas' | 'post_venta' | 'config' | 'metrics'): boolean => {
-    if (!isAuthenticated || !profile) return false;
+    if (!isAuthenticated || !user) return false;
     
     switch (module) {
       case 'ventas':
@@ -182,8 +182,8 @@ export function useRole(): RoleHook {
   };
 
   return {
-    role: profile?.role || null,
-    concesionarioId: profile?.concesionario_id || null,
+    role: user?.role || null,
+    concesionarioId: user?.tenant_id || null,
     isRole,
     hasPermission,
     hasAnyPermission,
