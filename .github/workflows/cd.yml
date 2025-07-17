@@ -30,7 +30,7 @@ jobs:
       - name: Build and push Docker image
         run: |
           gcloud auth configure-docker southamerica-west1-docker.pkg.dev
-          docker build -t southamerica-west1-docker.pkg.dev/burnished-data-463915-d8/optimacx-images/frontend:latest ./frontend
+          docker build -t southamerica-west1-docker.pkg.dev/burnished-data-463915-d8/optimacx-images/frontend:latest .
           docker push southamerica-west1-docker.pkg.dev/burnished-data-463915-d8/optimacx-images/frontend:latest
 
       - name: Deploy to Cloud Run
