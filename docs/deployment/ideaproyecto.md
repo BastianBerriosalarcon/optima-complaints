@@ -52,6 +52,7 @@ La plataforma maneja distintos roles de usuario con permisos y vistas de datos e
   - Modelo de vehículo de interés
   - Urgencia y nivel de interés
   - Datos de contacto y preferencias
+  (todo esto debe ser por concecionario, recordar multitenant)
 
 **🎯 Scoring y Clasificación Automática:**
 * **Score de Calidad:** Algoritmo que evalúa la probabilidad de conversión (1-100)
@@ -212,7 +213,7 @@ Mejorar la experiencia del cliente y la eficiencia operativa a través de la imp
 
 Componente de Inteligencia Artificial con RAG (Integrado con n8n): n8nse conectará con servicios externos de PLN/IA (ej., Google Cloud Natural Language API, OpenAI GPT, Claude), pensando bien, como el proyecto esta en GCP y será con Gemini embedding 001 , idealmente será con Gemini 2.5 pro, implementando RAG (Retrieval Augmented Generation) para:
 
-Base de Conocimiento Personalizada: Cada concesionario tendrá su propia base de conocimiento documental almacenada en una Base de Datos Vectorial (Vertex AI Vector Search o Cloud SQL PostgreSQL con pgvector), completamente segregada por tenant_id.
+Base de Conocimiento Personalizada: Cada concesionario tendrá su propia base de conocimiento documental almacenada en una Base de Datos Vectorial (utilizando la extensión pgvector en la instancia principal de Supabase), completamente segregada por tenant_id.
 Recuperación Contextual Inteligente: Antes del procesamiento PLN, el sistema generará embeddings (Gemini embedding 001) del reclamo y consultará la base vectorial específica del concesionario para recuperar información relevante (políticas, procedimientos, productos, servicios específicos, etc).
 Procesamiento de lenguaje natural (PLN) Aumentado: El LLM recibirá tanto el reclamo original como el contexto recuperado de la base de conocimiento del concesionario para generar:
 Extracción de datos clave: sucursal, tipo de reclamo, cliente ( patente, vin, marca de vehículo, modelo), descripción resumida, urgencia
@@ -226,8 +227,8 @@ Ingesta Documental: Proceso automatizado para que cada concesionario pueda carga
 Versionado de Conocimiento: Control de versiones de documentos para mantener consistencia y trazabilidad.
 también idealmente se debe poder modificar la información, por si llega algún nuevo modelo o se actualiza alguna política de la empresa
 
-Backend Principal: Django, responsable del registro, asignación lógica (a Jefe de Servicio y Asesor de la sucursal correspondiente), seguimiento del ciclo de vida y almacenamiento de los reclamos.
-Interacción n8n-Django: n8nutilizará APIs y Webhooks para la comunicación bidireccional con el backend de Django para el intercambio de datos y actualizaciones de estado.
+Backend Principal: supabase, responsable del registro, asignación lógica (a Jefe de Servicio y Asesor de la sucursal correspondiente), seguimiento del ciclo de vida y almacenamiento de los reclamos.
+Interacción n8n-supabase: n8nutilizará APIs y Webhooks para la comunicación bidireccional con el backend de supabase para el intercambio de datos y actualizaciones de estado.
 
 Flujo del Proceso de Reclamos (con Agente IA RAG orquestado por n8n):
 
@@ -246,23 +247,18 @@ n8nconstruye un prompt enriquecido que incluye:
 Reclamo original del cliente
 Contexto recuperado de la base de conocimiento específica del concesionario
 Custom prompts configurados por el concesionario
-
-
 Envía el prompt aumentado al servicio de IA externo (Google gemini 2.5 pro)
-
-
 Respuesta IA Contextualizada:
 
 El Agente IA devuelve información estructurada más precisa y contextualizada a n8n:
-
 Datos extraídos (sucursal, tipo, urgencia, cliente)
 Clasificación automática basada en las políticas específicas del concesionario: (esto que sea personalizable)
 Sugerencias de resolución personalizadas
 Referencias a documentos/procedimientos aplicables
 
 
-n8nvalida los datos extraídos y enriquecidos, y los envía al backend de Django vía API para su registro
-Django registra el reclamo enriquecido con la información contextual y lo asigna automáticamente al Jefe de Servicio y Asesor de la sucursal correspondiente (basado en la sucursal extraída por la IA y la lógica de asignación de Django)
+n8nvalida los datos extraídos y enriquecidos, y los envía al backend de supabase vía API para su registro
+supabase registra el reclamo enriquecido con la información contextual y lo asigna automáticamente al Jefe de Servicio y Asesor de la sucursal correspondiente (basado en la sucursal extraída por la IA y la lógica de asignación de supabase)
 n8nenvía notificaciones automáticas y personalizadas utilizando el contexto recuperado para personalizar los mensajes:
 
 Al cliente: Confirmación de recepción con información específica y número de seguimiento, a través del mismo canal de origen si es posible
@@ -286,7 +282,6 @@ Portal de Carga Documental: Interface para que cada concesionario pueda cargar, 
 Procesamiento Automático: Pipeline automatizado para convertir documentos cargados en embeddings y almacenarlos en la base vectorial con el tenant_id correspondiente.
 Calidad de Conocimiento: Validación automática de documentos para asegurar calidad y relevancia de la base de conocimiento.
 
-
 Ventajas del Agente IA con RAG y n8n:
 Precisión Contextual Mejorada: Clasificación y procesamiento de reclamos mucho más preciso basado en el conocimiento específico de cada concesionario
 Consistencia de Marca: Respuestas y procedimientos alineados con las políticas y estilo específico de cada concesionario
@@ -294,23 +289,21 @@ Eficiencia y mejora de la experiencia del cliente: Resoluciones más directas y 
 Reducción de la carga de trabajo manual: Personal puede enfocarse en casos complejos mientras la IA maneja casos rutinarios con alta precisión
 Escalabilidad del procesamiento: n8npermite manejar volúmenes crecientes de reclamos manteniendo calidad contextual
 
-
 Monitoreo y Optimización de RAG:
-
 Métricas de Calidad: Tracking de precisión de clasificaciones, relevancia de contexto recuperado, y satisfacción de resoluciones sugeridas
 Feedback Loop: Sistema para que los usuarios puedan mejorar la base de conocimiento basado en casos mal clasificados o resueltos
 Optimización Continua: Análisis de patrones para identificar gaps en la base de conocimiento y oportunidades de mejora por concesionario
 
 #### Consideraciones Clave y Estrategia de Implementación de n8n:
 
-* **Aislamiento Multitenant:** Cada flujo de n8ny las configuraciones específicas de cada concesionario (incluyendo credenciales de WhatsApp, correos y configuración del servicio de IA) deben ser completamente aisladas y configurables.
+* **Aislamiento Multitenant:** Cada flujo de n8n y las configuraciones específicas de cada concesionario (incluyendo credenciales de WhatsApp, correos y configuración del servicio de IA) deben ser completamente aisladas y configurables.
 
 * **Automatización de Provisión de Flujos de n8n:** Capacidad futura de automatizar la creación de flujos de n8npara reclamos (y encuestas) cuando se agregue un nuevo concesionario. Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con variables que se inyectarán con las configuraciones específicas de cada concesionario.
 
 * **Ventajas del Agente IA con n8n:** 
   * Eficiencia y mejora de la experiencia del cliente (más directa y menos frustrante que un chatbot conversacional)
   * Reducción de la carga de trabajo manual para el personal
-  * Escalabilidad del procesamiento de reclamos que n8npermite al integrar los servicios de IA
+  * Escalabilidad del procesamiento de reclamos que n8n permite al integrar los servicios de IA
 
 #### Campos Requeridos para Reclamos:
 
@@ -341,7 +334,7 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
   - Equipos de Venta y Postventa
 
 #### Gestión Manual y Ciclo de Vida:
-
+* **el reclamo puede caer por whatsapp** respuestas con RAG, ia, solicitando los datos correspondientes. 
 * **Registro y Asignación por Sucursal:** Los usuarios de Contact Center también pueden ingresar reclamos manualmente en la plataforma. Inmediatamente, el sistema debe asignar automáticamente el reclamo tanto al **Asesor de Servicio** como al **Jefe de Servicio** que correspondan a la **sucursal** del cliente via mail.
 * **Estados del Reclamo:** 
   - **Pendiente:** Estado inicial del reclamo
@@ -415,7 +408,7 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 ├── Integración con Gemini IA
 ├── Webhooks bidireccionales
 ├── RAG pipeline para reclamos
-└── URL: https://workflows.optimacx.com
+└── URL: pendiente
 ```
 
 **☁️ CLOUD RUN #3: chatwoot-conversations** (NUEVO)
@@ -426,7 +419,7 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 ├── PostgreSQL para chat history
 ├── Multitenant por subdominios
 ├── Agent interface por concesionario
-└── URL: https://chat.optimacx.com
+└── URL: pendiente 
 ```
 
 #### **¿Por qué esta es LA MEJOR opción para Óptima-CX?**
@@ -458,40 +451,8 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 
 3. **Escalabilidad Independiente:**
    - Óptima-CX escala por usuarios concurrentes
-   - n8nescala por volumen de automatizaciones
+   - n8n escala por volumen de automatizaciones
    - Un concesionario con alto volumen no afecta a otros
-
-#### **🔧 Arquitectura Específica Definitiva:**
-
-**☁️ CLOUD RUN #1: optima-cx-saas**
-```
-├── Django + Next.js
-├── Multi-tenant por subdominios
-├── Cloud SQL PostgreSQL (con schemas por tenant)
-├── Redis cache compartido
-└── APIs para comunicación con n8n
-```
-
-**☁️ GKE autoescale #2: activepieces-automation-hub** (TODO INTEGRADO)
-```
-├── n8nservice (núcleo de automatización)
-├── Cloud SQL PostgreSQL (workflows y configs)
-├── Configuraciones por concesionario:
-│   ├── Variables ambiente por tenant
-│   ├── Credenciales encriptadas por tenant
-│   ├── Workflows personalizados por tenant
-│   └── Endpoints webhook únicos por tenant
-├── APIs para recibir triggers desde Óptima-CX
-├── Integración RAG Completa:
-│   ├── Gemini embedding 001 para vectorización
-│   ├── Gemini 2.5 Pro para procesamiento IA aumentado
-│   ├── Vertex AI Vector Search (base de conocimiento)
-│   ├── API para gestión de conocimiento por tenant
-│   ├── Procesamiento de documentos y embeddings
-│   ├── APIs de búsqueda semántica por tenant
-│   └── Gestión de versiones de conocimiento
-└── Middleware de aislamiento multi-tenant
-```
 
 #### **💡 Flujo Multi-tenant Específico:**
 
@@ -514,39 +475,6 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 7. Dashboard actualizado con métricas filtradas por tenant
 ```
 
-#### **Cloud Run Service #1: optima-cx-saas**
-* **Responsabilidad:** Aplicación principal SaaS
-* **Componentes:** 
-  * Django Backend (API REST, autenticación, lógica de negocio)
-  * Next.js Frontend (interfaz de usuario, dashboards)
-* **Recursos:** 2-4 GB RAM, 1-2 vCPU, auto-scaling 0-50 instancias
-* **Base de Datos:** Cloud SQL PostgreSQL con schemas multi-tenant
-* **Cache:** Cloud Memorystore (Redis) compartido
-* **URL:** `https://optima-cx-saas.run.app`
-
-#### **GKE autoescale: n8n-automation-hub** (TODO INTEGRADO)
-* **Responsabilidad:** Motor de automatización completo + RAG + gestión de conocimiento
-* **Componentes:**
-  * n8nservice (workflows, automatizaciones)
-  * Integraciones WhatsApp Business API por concesionario
-  * Servicios de IA/PLN externos (Gemini 2.5 Pro, Gemini embedding 001)
-  * Sistema RAG completo (Vertex AI Vector Search)
-  * API REST para CRUD de documentos por tenant
-  * Pipeline de procesamiento de documentos (PDF, Word, Excel)
-  * Generación de embeddings con Gemini embedding 001
-  * Gestión de versiones de conocimiento
-  * APIs de búsqueda semántica avanzada
-  * Gestión de notificaciones y callbacks personalizados
-  * Middleware de aislamiento multi-tenant
-* **Recursos:** 8-16 GB RAM, 4-6 vCPU, auto-scaling 1-20 instancias
-* **Base de Datos:** Cloud SQL PostgreSQL separada para workflows + metadatos RAG
-* **Vector DB:** Vertex AI Vector Search (segregado por tenant_id)
-* **Storage:** Cloud Storage para documentos originales
-* **Configuración:** Min-instances: 1 (evitar cold starts críticos)
-* **URL:** pendiente
-
-### 6.2. Multi-tenancy Centralizado en n8n-automation-hub
-
 **Aislamiento de Configuraciones por Concesionario sin Duplicación de Infraestructura:**
 
 #### **Estructura de Configuración Multi-tenant:**
@@ -562,13 +490,13 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 │   ├── smtp_credentials: "encrypted_user_pass"
 │   └── from_email: "noreply@concesionario001.com"
 ├── ai_config:
-│   ├── provider: "google" | "openai" | "anthropic"
+│   ├── provider: "google" 
 │   ├── api_key: "sk-...encrypted"
-│   ├── model: "gemini-2.5-pro" | "gpt-4" | "claude-3-sonnet"
+│   ├── model: "gemini-2.5-pro" 
 │   ├── custom_prompts: {...}
 │   └── rag_config:
 │       ├── vector_index_id: "projects/.../vectorIndex123"
-│       ├── embedding_model: "text-embedding-004"
+│       ├── embedding_model: "gemini-embedding-001"
 │       ├── search_config: {"k": 5, "threshold": 0.7}
 │       └── knowledge_base_version: "v1.2.3"
 └── workflow_variables:
@@ -579,7 +507,7 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 ```
 
 #### **Ventajas del Multi-tenancy Centralizado con RAG:**
-* **Costo-Eficiencia:** Una instancia n8n+ RAG maneja todos los concesionarios vs. 20+ instancias separadas
+* **Costo-Eficiencia:** Una instancia n8n + RAG maneja todos los concesionarios vs. 20+ instancias separadas
 * **Mantenimiento Simplificado:** Un solo deployment para updates, bug fixes y nuevas features
 * **Monitoreo Centralizado:** Dashboard unificado para todas las automatizaciones con filtros por tenant
 * **Escalabilidad Inteligente:** Auto-scaling basado en carga agregada, no por tenant individual
@@ -598,8 +526,8 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
                                               ↓
                                          n8n-automation-hub
                                               ↓ (load tenant config A + RAG setup)
-                                         1. Generate embedding (text-embedding-004)
-                                         2. Query Vertex AI Vector Search (tenant filtered)
+                                         1. Generate embedding (gemini-embedding-001)
+                                         2. Query Supabase (pgvector) (tenant filtered)
                                          3. Retrieve relevant knowledge context
                                               ↓
                                          Gemini 2.5 Pro + RAG Context
@@ -633,7 +561,7 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 
 ### 6.4. Análisis Económico vs. Alternativas
 
-#### **Comparación de Costos para 20 Concesionarios (Arquitectura Definitiva):**
+#### **Comparación de Costos para 20 Concesionarios (Arquitectura Definitiva):** ESTO HAY QUE MODIFICARLO, YA QUE EL PROYECTO TUVO CAMBIOS
 
 | Arquitectura | Costo Mensual | Complejidad Operativa | Escalabilidad |
 |-------------|---------------|----------------------|---------------|
@@ -786,8 +714,7 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 * Etiquetado para monitoreo y facturación por concesionario
 
 **Módulo Cloud SQL:**
-* Instancia principal multitenant para optima-cx-saas
-* Instancia separada para workflows de n8n
+* Instancia dedicada para los datos internos de n8n (workflows, ejecuciones, etc.)
 * Configuración de backups automáticos con retención de 30 días
 * Bases de datos dinámicas por tenant con usuarios dedicados
 
@@ -869,44 +796,45 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 
 ## 7. Estado Actual y Roadmap
 
-### 7.1. Funcionalidades Implementadas ✅
+### 7.1. Funcionalidades completadas
 
-#### **Infraestructura Base (95% completada):**
-- ✅ Terraform configurado para GCP
-- ✅ Cloud Run setup para N8N
-- ✅ Secret Manager para credenciales
-- ✅ VPC y networking configurado
-- ✅ Supabase PostgreSQL con RLS
+#### **Infraestructura y Backend (95% completado):**
+- ✅ Terraform configurado para GCP (Cloud Run, Cloud SQL, Redis, etc.).
+- ✅ Esquema completo de base de datos en Supabase (tablas, funciones, RLS).
+- ✅ Migraciones y datos de prueba (seeds) definidos.
+- ✅ Secret Manager para credenciales.
+- ✅ Arquitectura de red (VPC) definida.
 
-#### **Frontend Moderno (90% completado):**
-- ✅ Next.js 14 con App Router
-- ✅ Autenticación con Supabase Auth
-- ✅ Componentes UI con Radix + Tailwind
-- ✅ Sistema de temas claro/oscuro
-- ✅ Landing page optimizada
-- ✅ Dashboard base implementado
+#### **Automatización con N8N (40% completado):**
+- ✅ Nodos personalizados de N8N para la API de OptimaCX creados.
+- ✅ Workflows para los módulos de Encuestas definidos en formato JSON.
+- ✅ Lógica de integración con IA (Gemini) definida en los nodos.
+- ⚠️ Despliegue y prueba de todos los workflows en Cloud Run pendiente.
+- ⚠️ Workflows para Leads y Reclamos en fase de diseño.
 
-#### **Módulo de Leads (85% completado):**
-- ✅ Schema de base de datos completo
-- ✅ Servicios de lógica de negocio
-- ✅ Análisis de intención con IA
-- ✅ Sistema de scoring automático
-- ✅ Asignación de asesores
-- ⚠️ Integración N8N workflows - En desarrollo
+#### **Frontend (20% completado):**
+- ✅ Proyecto Next.js 14 inicializado con TypeScript y Tailwind CSS.
+- ✅ Sistema de autenticación con Supabase Auth implementado.
+- ✅ Componentes básicos de la UI (botones, layout, sistema de temas) creados.
+- ✅ Estructura de carpetas y layout principal del dashboard definidos.
+- ⚠️ Desarrollo de las páginas, dashboards y formularios específicos para los módulos de Encuestas y Reclamos pendiente.
 
-#### **Módulo de Encuestas (90% completado):**
-- ✅ Estructura de 4 preguntas + comentarios
-- ✅ 3 canales de origen (QR, WhatsApp, llamada)
-- ✅ Automatización de alertas por puntaje
-- ✅ Filtrado inteligente por teléfono
-- ⚠️ Interface frontend - En desarrollo
+#### **Módulo de Reclamos (40% completado):**
+- ✅ Esquema de base de datos con Black Alert y campos para RAG definido.
+- ✅ Lógica de negocio principal definida en el esquema de la BD.
+- ⚠️ Implementación del pipeline de ingesta de documentos para RAG pendiente.
+- ⚠️ Creación y prueba del Agente IA para la clasificación de reclamos en desarrollo.
+- ⚠️ Integración con pgvector para la búsqueda de similitud pendiente.
 
-#### **Módulo de Reclamos (65% completado):**
-- ✅ Schema de base de datos con Black Alert
-- ✅ Estructura para RAG y IA
-- ⚠️ Agente IA con procesamiento RAG - En desarrollo
-- ⚠️ Pipeline de documentos - Pendiente
-- ⚠️ Integración Vertex AI - Pendiente
+#### **Módulo de Leads y Ventas (15% completado):**
+- ✅ Esquema de base de datos inicial definido en Supabase.
+- ⚠️ Lógica de negocio, scoring de IA y asignación de asesores en fase de diseño.
+- ⚠️ Integración con Chatwoot y N8N pendiente.
+
+#### **Integración con Chatwoot (10% completado):**
+- ✅ Servicio de Chatwoot desplegado en Cloud Run.
+- ⚠️ Configuración multitenant y conexión con WhatsApp Business API pendiente.
+- ⚠️ Integración con los flujos de N8N para Leads y Reclamos pendiente.
 
 ### 7.2. Próximos Pasos Críticos (Siguientes 4 semanas)
 
@@ -917,9 +845,6 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
    - Workflows para leads y encuestas
 
 2. **Finalizar Frontend de Módulos**
-   - Dashboard de leads para asesores
-   - Interface de encuestas
-   - Gestión de reclamos
 
 3. **Implementar RAG Pipeline**
    - Procesamiento de documentos con Gemini
@@ -932,32 +857,15 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 3. Optimización de performance
 4. Documentación técnica completa
 
-### 7.3. Cambios Arquitectónicos Realizados
-
-#### **Migración Django → Supabase + Next.js:**
-- **Beneficios:** Desarrollo más rápido, costos reducidos, mejor UX
-- **Estado:** Completado exitosamente
-- **Impacto:** Arquitectura 50% más eficiente y escalable
-
-#### **GKE → Cloud Run:**
-- **Beneficios:** Simplicidad operativa, auto-scaling, costos optimizados
-- **Estado:** Implementado para frontend, N8N en progreso
-- **Ahorro:** ~60% reducción en costos de infraestructura
-
-#### **Adición Módulo de Ventas:**
-- **Impacto:** Nueva fuente de valor para concesionarios
-- **Estado:** 85% implementado con IA funcional
-- **ROI:** Potencial aumento 30% en conversión de leads
-
 ## 8. Especificaciones Técnicas RAG para Agente de Reclamos
 
 ### 9.1. Arquitectura RAG Multi-tenant
 
 #### **Base de Datos Vectorial:**
-* **Tecnología:** Vertex AI Vector Search (Google Cloud)
-* **Modelo de Embeddings:** text-embedding-004 (Google)
+* **Tecnología:** Supabase (extensión pgvector)
+* **Modelo de Embeddings:** gemini-embedding-001 (Google)
 * **Segregación:** Filtros estrictos por tenant_id en todas las consultas
-* **Dimensiones:** 768 dimensiones por embedding
+* **Dimensiones:** 
 * **Índices:** Un índice por concesionario para máximo aislamiento
 
 #### **Pipeline de Procesamiento de Documentos:**
@@ -992,9 +900,9 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 ```
 1. Cliente envía reclamo → n8n recibe webhook
 2. n8nextrae tenant_id y preprocessa texto
-3. Generación de embedding con text-embedding-004
-4. Query a Vertex AI Vector Search (filtered by tenant)
-5. Recuperación de top-k chunks relevantes (k=5, threshold=0.7)
+3. Generación de embedding con gemini-embedding-001
+4. Query a Supabase (pgvector) (filtered by tenant)
+5. Recuperación de top-k chunks relevantes (revisar lo mas optimo)
 6. Construcción de prompt enriquecido:
    - Reclamo original
    - Contexto recuperado
@@ -1002,7 +910,7 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
    - Instrucciones específicas
 7. Envío a Gemini 2.5 Pro
 8. Respuesta estructurada con clasificación y sugerencias
-9. Callback a Django con datos enriquecidos
+9. Callback a supabase con datos enriquecidos
 ```
 
 #### **Prompt Engineering Específico:**
@@ -1102,10 +1010,10 @@ index_config:
       }
     },
     {
-      "name": "Vector Search",
+      "name": "Vector Search (Supabase)",
       "type": "http-request", 
       "parameters": {
-        "url": "https://aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/indexEndpoints/{endpoint_id}:findNeighbors"
+        "url": "https://{project_ref}.supabase.co/rest/v1/rpc/match_documents"
       }
     },
     {
@@ -1117,7 +1025,7 @@ index_config:
       "type": "google-ai-studio"
     },
     {
-      "name": "Send to Django",
+      "name": "Send to supabase",
       "type": "http-request"
     }
   ]
