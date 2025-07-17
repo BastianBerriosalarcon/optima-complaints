@@ -16,10 +16,10 @@ Plataforma multitenant de experiencia al cliente que combina N8N, Chatwoot y un 
 
 ### Infraestructura Legacy (Funcionando)
 **✅ ACTIVO y FUNCIONANDO**
-- **n8n URL:** https://n8n-optima-cx-e6nurdtj6a-tl.a.run.app
-- **Base de Datos:** n8n-optima-cx-postgres (Cloud SQL)
+- **n8n URL:** https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/
+- **Base de Datos:** Supabase PostgreSQL (Schema: n8n_prod)
 - **Región:** southamerica-west1
-- **Último Deploy:** 2025-07-04T20:41:11.403042Z
+- **Último Deploy:** 2025-07-17
 
 ## 📋 Descripción del Proyecto
 
@@ -305,9 +305,10 @@ docker-compose up -d
 ## 🎯 Estado Actual: PRODUCCIÓN ACTIVA
 
 **El sistema está funcionando correctamente en Google Cloud Run**
-- n8n: ✅ Activo
-- PostgreSQL: ✅ Activo  
+- n8n: ✅ Activo (https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/)
+- Supabase PostgreSQL: ✅ Activo (Schema: n8n_prod)
 - RAG System: ✅ Configurado
 - Multitenant: ✅ Funcionando
+- Custom Nodes: ✅ Refactorizados con abstracciones
 
-**Última verificación:** 2025-07-08 18:04 UTC
+**Última verificación:** 2025-07-17 - **Restructuración completada**
