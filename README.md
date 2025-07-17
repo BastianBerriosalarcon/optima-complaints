@@ -6,9 +6,9 @@ Plataforma multitenant de experiencia al cliente que combina N8N, Chatwoot y un 
 
 ### Infraestructura Actual (Terraform)
 **🔄 EN DESARROLLO** - Infraestructura base completada
-- **N8N Dev:** https://n8n-dev-1008284849803.southamerica-west1.run.app ❌
-- **Chatwoot Dev:** https://chatwoot-dev-1008284849803.southamerica-west1.run.app ❌
-- **Frontend Dev:** https://optimacx-frontend-dev-1008284849803.southamerica-west1.run.app ❌
+- **N8N Dev:** No desplegado aún ❌
+- **Chatwoot Dev:** No desplegado aún ❌
+- **Frontend Dev:** No desplegado aún ❌
 - **Base de Datos:** Supabase PostgreSQL (Brasil) ✅
 - **Redis:** Cloud Memorystore (10.129.0.4:6379) ✅
 - **Región:** southamerica-west1
