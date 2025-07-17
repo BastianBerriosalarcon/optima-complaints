@@ -80,7 +80,7 @@ OptimaCx es una plataforma multitenant de experiencia al cliente para el sector 
 ├─────────────────────────────────────────────────────────────────┤
 │  AI/ML Services                                                │
 │  ├── Gemini 2.5 Pro (LLM)                                     │
-│  ├── Text-Embedding-004 (Embeddings)                          │
+│  ├── gemini-embedding-001 (Embeddings)                          │
 │  └── Vertex AI Vector Search                                   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -140,7 +140,7 @@ optimacx-platform/
 ## 🤖 Sistema RAG para Reclamos
 
 ### Componentes Técnicos
-- **Embeddings:** Gemini text-embedding-004
+- **Embeddings:** gemini-embedding-001 (3,072 dimensiones)
 - **Vector DB:** Vertex AI Vector Search + pgvector
 - **LLM:** Gemini 2.5 Pro
 - **Procesamiento:** n8n workflows

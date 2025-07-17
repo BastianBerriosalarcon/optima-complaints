@@ -183,7 +183,7 @@ INSERT INTO public.tenant_config (id, concesionario_id, whatsapp_token, whatsapp
     'noreply@toyotacentral.cl',
     'noreply@toyotacentral.cl',
     'gemini',
-    'gemini-2.0-flash-exp',
+    'gemini-2.5-pro',
     '{
         "saludo_inicial": "¡Hola! Soy el asistente virtual de Toyota Central. ¿En qué puedo ayudarte hoy?",
         "calificacion_lead": "Analiza este lead y asigna un score del 1-100 basado en: presupuesto, urgencia, datos completos, canal de origen.",
@@ -219,7 +219,7 @@ INSERT INTO public.tenant_config (id, concesionario_id, whatsapp_token, whatsapp
     'noreply@nissancondes.cl',
     'noreply@nissancondes.cl',
     'gemini',
-    'gemini-2.0-flash-exp',
+    'gemini-2.5-pro',
     '{
         "saludo_inicial": "Bienvenido a Nissan Las Condes. Somos especialistas en vehículos premium. ¿Cómo podemos ayudarte?",
         "calificacion_lead": "Evalúa este lead premium considerando: poder adquisitivo, perfil ejecutivo, urgencia de compra.",

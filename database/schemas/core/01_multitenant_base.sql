@@ -489,7 +489,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_config (
     -- Configuración IA
     ai_provider VARCHAR(50) DEFAULT 'gemini',
     ai_api_key TEXT,
-    ai_model VARCHAR(100) DEFAULT 'gemini-2.0-flash-exp',
+    ai_model VARCHAR(100) DEFAULT 'gemini-2.5-pro',
     
     -- Prompts específicos por módulo
     prompts_ventas JSONB DEFAULT '{}',

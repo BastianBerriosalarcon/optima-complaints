@@ -70,6 +70,14 @@ export class OptimaCxRagApi implements ICredentialType {
       type: 'options',
       options: [
         {
+          name: 'Gemini Embedding 001 (Recommended)',
+          value: 'gemini-embedding-001',
+        },
+        {
+          name: 'Text Embedding 005',
+          value: 'text-embedding-005',
+        },
+        {
           name: 'Text Embedding 004',
           value: 'text-embedding-004',
         },
@@ -82,7 +90,7 @@ export class OptimaCxRagApi implements ICredentialType {
           value: 'textembedding-gecko-multilingual',
         },
       ],
-      default: 'text-embedding-004',
+      default: 'gemini-embedding-001',
       description: 'Default embedding model to use',
     },
     {
@@ -91,7 +99,7 @@ export class OptimaCxRagApi implements ICredentialType {
       type: 'options',
       options: [
         {
-          name: 'Gemini 2.5 Pro',
+          name: 'Gemini 2.5 Pro (Recommended)',
           value: 'gemini-2.5-pro',
         },
         {

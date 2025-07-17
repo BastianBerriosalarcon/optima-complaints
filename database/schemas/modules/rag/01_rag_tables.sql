@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS public.documento_chunks (
     subcategoria VARCHAR(100),
     
     -- Vector embedding (dimensiones según modelo)
-    embedding vector(1536), -- text-embedding-004 (1536 dim)
+    embedding vector(3072), -- gemini-embedding-001 (3072 dim)
     
     -- Metadatos específicos del chunk
     metadata JSONB DEFAULT '{}', -- Info específica: precios, fechas, modelos aplicables
@@ -114,8 +114,8 @@ CREATE TABLE IF NOT EXISTS public.rag_config_tenant (
     concesionario_id UUID REFERENCES public.concesionarios(id) ON DELETE CASCADE,
     
     -- Configuración de embeddings
-    modelo_embedding VARCHAR(100) DEFAULT 'text-embedding-004',
-    dimensiones_vector INTEGER DEFAULT 1536,
+    modelo_embedding VARCHAR(100) DEFAULT 'gemini-embedding-001',
+    dimensiones_vector INTEGER DEFAULT 3072,
     
     -- Configuración de búsqueda
     num_resultados_default INTEGER DEFAULT 5,
@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS public.rag_config_tenant (
     prompts_post_venta JSONB DEFAULT '{}',
     
     -- Configuración de modelo LLM
-    modelo_llm VARCHAR(100) DEFAULT 'gemini-2.0-flash-exp',
+    modelo_llm VARCHAR(100) DEFAULT 'gemini-2.5-pro',
     temperatura DECIMAL(3,2) DEFAULT 0.7,
     max_tokens INTEGER DEFAULT 1000,
     
@@ -271,7 +271,7 @@ CREATE TRIGGER update_rag_config_tenant_updated_at
 INSERT INTO public.rag_config_tenant (concesionario_id, modelo_embedding, config_ventas, config_post_venta)
 SELECT 
     id,
-    'text-embedding-004',
+    'gemini-embedding-001',
     '{
         "num_resultados": 5,
         "threshold": 0.7,
