@@ -14,6 +14,10 @@ RUN npm install
 FROM node:18-alpine AS builder
 WORKDIR /app
 
+# Build arguments para las variables de entorno necesarias en build time
+ARG SUPABASE_URL
+ARG SUPABASE_ANON_KEY
+
 # Copiar las dependencias instaladas de la etapa anterior
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/frontend/node_modules ./frontend/node_modules
@@ -26,6 +30,8 @@ COPY shared/ ./shared/
 # Construir la aplicación de frontend
 # La variable de entorno asegura que no se genere telemetría anónima en el build
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV SUPABASE_URL=$SUPABASE_URL
+ENV SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
 WORKDIR /app/frontend
 RUN npm run build
 
@@ -33,8 +39,14 @@ RUN npm run build
 FROM node:18-alpine AS runner
 WORKDIR /app
 
+# Build arguments para runtime
+ARG SUPABASE_URL
+ARG SUPABASE_ANON_KEY
+
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED 1
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV SUPABASE_URL=$SUPABASE_URL
+ENV SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
 
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S nextjs -u 1001
