@@ -896,19 +896,19 @@ Optimización Continua: Análisis de patrones para identificar gaps en la base d
 
 ### 9.2. Flujo RAG Integrado con n8n
 
-#### **Procesamiento de Reclamo con RAG:**
+#### **Procesamiento de Reclamo con RAG (Pipeline Mejorado con Cohere):**
 ```
 1. Cliente envía reclamo → n8n recibe webhook
-2. n8nextrae tenant_id y preprocessa texto
+2. n8n extrae tenant_id y preprocessa texto
 3. Generación de embedding con gemini-embedding-001
-4. Query a Supabase (pgvector) (filtered by tenant)
-5. Recuperación de top-k chunks relevantes (revisar lo mas optimo)
-6. Construcción de prompt enriquecido:
+4. **Recuperación (Retrieval):** Query a Supabase (pgvector) para obtener un grupo amplio de chunks relevantes (ej. top 20-50).
+5. **Re-clasificación (Rerank):** Se envía la consulta original y los chunks recuperados a la API de **Cohere Rerank** para obtener los 3-5 resultados más relevantes.
+6. **Construcción de Prompt Enriquecido:**
    - Reclamo original
-   - Contexto recuperado
+   - **Contexto de alta precisión** (los 3-5 chunks re-clasificados por Cohere)
    - Custom prompts del concesionario
    - Instrucciones específicas
-7. Envío a Gemini 2.5 Pro
+7. **Generación:** Envío a Gemini 2.5 Pro (o al LLM de Cohere) para la respuesta final.
 8. Respuesta estructurada con clasificación y sugerencias
 9. Callback a supabase con datos enriquecidos
 ```
@@ -976,6 +976,13 @@ FORMATO DE RESPUESTA JSON:
 * **Knowledge Gap Detection:** Identificación de áreas sin cobertura
 * **Performance Analytics:** Dashboard de métricas RAG por tenant
 
+#### **Mejora de Precisión con Cohere Rerank:**
+* **Justificación:** Mientras que la búsqueda vectorial es eficiente para encontrar documentos semánticamente similares, no siempre garantiza la máxima relevancia contextual. El modelo **Cohere Rerank** está específicamente entrenado para tomar un conjunto de resultados de búsqueda y re-clasificarlos según su relevancia real para la consulta original.
+* **Beneficios:**
+    *   **Mayor Precisión:** Reduce el "ruido" y las "alucinaciones" al proporcionar al LLM final un contexto de mucha mayor calidad.
+    *   **Mejor Experiencia:** Las respuestas generadas son más coherentes y útiles para el usuario.
+    *   **Eficiencia:** Permite realizar una búsqueda inicial más amplia (ej. top 50) y luego refinarla a los mejores 3-5 resultados, mejorando la calidad sin sacrificar el rendimiento.
+
 ### 9.5. Configuración Técnica Específica
 
 #### **Vertex AI Vector Search Configuration:**
@@ -994,40 +1001,14 @@ index_config:
 ```json
 {
   "nodes": [
-    {
-      "name": "Webhook Trigger",
-      "type": "webhook"
-    },
-    {
-      "name": "Extract Tenant Config",
-      "type": "function"
-    },
-    {
-      "name": "Generate Embedding",
-      "type": "http-request",
-      "parameters": {
-        "url": "https://aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/text-embedding-004:predict"
-      }
-    },
-    {
-      "name": "Vector Search (Supabase)",
-      "type": "http-request", 
-      "parameters": {
-        "url": "https://{project_ref}.supabase.co/rest/v1/rpc/match_documents"
-      }
-    },
-    {
-      "name": "Build Enhanced Prompt",
-      "type": "function"
-    },
-    {
-      "name": "Gemini Processing",
-      "type": "google-ai-studio"
-    },
-    {
-      "name": "Send to supabase",
-      "type": "http-request"
-    }
+    { "name": "Webhook Trigger" },
+    { "name": "Extract Tenant Config" },
+    { "name": "Generate Embedding (Gemini)" },
+    { "name": "Vector Search (Supabase)" },
+    { "name": "Rerank Documents (Cohere)" },
+    { "name": "Build Enhanced Prompt" },
+    { "name": "Generate Response (Gemini)" },
+    { "name": "Callback to Supabase" }
   ]
 }
 ```

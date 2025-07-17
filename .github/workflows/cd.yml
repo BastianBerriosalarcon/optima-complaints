@@ -1,0 +1,42 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Authenticate to Google Cloud
+        uses: 'google-github-actions/auth@v1'
+        with:
+          workload_identity_provider: 'projects/1008284849803/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions-deployer@burnished-data-463915-d8.iam.gserviceaccount.com'
+
+      - name: Set up Cloud SDK
+        uses: 'google-github-actions/setup-gcloud@v1'
+
+      - name: Build and push Docker image
+        run: |
+          gcloud auth configure-docker southamerica-west1-docker.pkg.dev
+          docker build -t southamerica-west1-docker.pkg.dev/burnished-data-463915-d8/optimacx-images/frontend:latest ./frontend
+          docker push southamerica-west1-docker.pkg.dev/burnished-data-463915-d8/optimacx-images/frontend:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy optimacx-frontend-dev \
+            --image=southamerica-west1-docker.pkg.dev/burnished-data-463915-d8/optimacx-images/frontend:latest \
+            --region=southamerica-west1 \
+            --platform=managed \
+            --allow-unauthenticated
