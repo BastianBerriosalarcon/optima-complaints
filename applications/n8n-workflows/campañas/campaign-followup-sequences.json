@@ -1,0 +1,228 @@
+{
+  "name": "Campaña - Secuencias de Seguimiento",
+  "description": "Workflow para ejecutar acciones específicas dentro de una secuencia de seguimiento para un lead.",
+  "tags": ["campaign", "followup", "automation", "lead"],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/campaign/followup",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-followup-trigger",
+      "name": "Webhook Trigger Seguimiento",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "tenant-config-loader",
+        "data": "={{ JSON.stringify({ tenant_id: $json.tenant_id, lead_id: $json.lead_id, tipo_accion: $json.tipo_accion, campaign_id: $json.campaign_id, message_content: $json.message_content, email_subject: $json.email_subject, email_html: $json.email_html, email_text: $json.email_text }) }}"
+      },
+      "id": "trigger-tenant-loader",
+      "name": "Cargar Configuración Tenant",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT telefono_cliente, email_cliente, nombre_cliente FROM leads WHERE id = $1 AND concesionario_id = $2 LIMIT 1",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.lead_id, $json.tenant_id] }}"
+        }
+      },
+      "id": "get-lead-info",
+      "name": "Obtener Info Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Prepara los datos para la acción de seguimiento.\nconst input = $input.all()[0].json;\nconst leadInfo = $('Obtener Info Lead').item.json[0];\n\nif (!leadInfo) {\n  throw new Error(`Lead con ID ${input.lead_id} no encontrado para el tenant ${input.tenant_id}`);\n}\n\nconst payload = {\n  tenant_id: input.tenant_id,\n  campaign_id: input.campaign_id || 'followup_sequence',\n  recipients: [\n    {\n      id: input.lead_id,\n      phone_number: leadInfo.telefono_cliente,\n      email: leadInfo.email_cliente,\n      name: leadInfo.nombre_cliente\n    }\n  ],\n  message_content: input.message_content,\n  email_subject: input.email_subject,\n  email_html: input.email_html,\n  email_text: input.email_text,\n  // Propagar datos originales del webhook para los sub-workflows\n  original_tenant_id: input.tenant_id,\n  original_total_recipients: 1, // Siempre 1 para un seguimiento individual\n  original_message_content: input.message_content,\n  original_email_subject: input.email_subject,\n  original_email_html: input.email_html,\n  original_email_text: input.email_text\n};\n\nreturn [{ json: payload }];"
+      },
+      "id": "prepare-action-data",
+      "name": "Preparar Datos Acción",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.tipo_accion }}",
+              "operation": "equal",
+              "value2": "enviar_email"
+            }
+          ]
+        }
+      },
+      "id": "check-action-type",
+      "name": "¿Tipo de Acción?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "campaign-email-automation",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-email-campaign",
+      "name": "Disparar Campaña Email",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1200, 240]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "campaign-whatsapp-bulk",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-whatsapp-campaign",
+      "name": "Disparar Campaña WhatsApp",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1200, 360]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE leads SET last_followup_action = $2, updated_at = NOW() WHERE id = $1",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.lead_id, $json.tipo_accion] }}"
+        }
+      },
+      "id": "update-lead-followup-status",
+      "name": "Actualizar Estado Seguimiento Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Acción de seguimiento ejecutada.\",\n  \"lead_id\": \"={{ $json.lead_id }}\",\n  \"action_type\": \"={{ $json.tipo_accion }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1600, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger Seguimiento": {
+      "main": [
+        [
+          {
+            "node": "Cargar Configuración Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Configuración Tenant": {
+      "main": [
+        [
+          {
+            "node": "Obtener Info Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Info Lead": {
+      "main": [
+        [
+          {
+            "node": "Preparar Datos Acción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Datos Acción": {
+      "main": [
+        [
+          {
+            "node": "¿Tipo de Acción?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tipo de Acción?": {
+      "main": [
+        [
+          {
+            "node": "Disparar Campaña Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Disparar Campaña WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparar Campaña Email": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Estado Seguimiento Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparar Campaña WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Estado Seguimiento Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar Estado Seguimiento Lead": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

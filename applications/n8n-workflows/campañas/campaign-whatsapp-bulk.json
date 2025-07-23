@@ -1,0 +1,230 @@
+{
+  "name": "Campaña - Envío Masivo WhatsApp",
+  "description": "Workflow para enviar mensajes masivos de WhatsApp a una lista de destinatarios.",
+  "tags": ["campaign", "whatsapp", "bulk", "marketing"],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/whatsapp/bulk-send",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-bulk-send",
+      "name": "Webhook Envío Masivo",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "original_tenant_id",
+              "value": "={{ $json.tenant_id }}"
+            },
+            {
+              "name": "original_total_recipients",
+              "value": "={{ $json.recipients.length }}"
+            },
+            {
+              "name": "original_message_content",
+              "value": "={{ $json.message_content }}"
+            }
+          ]
+        }
+      },
+      "id": "set-initial-data",
+      "name": "Set Initial Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "tenant-config-loader",
+        "data": "={{ JSON.stringify({ tenant_id: $json.original_tenant_id, message_content: $json.original_message_content, recipients: $json.recipients, campaign_id: $json.campaign_id }) }}"
+      },
+      "id": "trigger-tenant-loader",
+      "name": "Cargar Configuración Tenant",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Prepara los datos para la iteración, asegurando que 'recipients' sea un array.\nconst input = $input.all()[0].json;\nconst recipients = input.recipients || [];\n\n// Asegúrate de que cada destinatario tenga al menos un número de teléfono.\nconst validRecipients = recipients.filter(r => r.phone_number);\n\nreturn validRecipients.map(recipient => ({\n  json: {\n    ...input,\n    current_recipient: recipient\n  }\n}));"
+      },
+      "id": "prepare-recipients",
+      "name": "Preparar Destinatarios",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "mode": "iterate"
+      },
+      "id": "iterate-recipients",
+      "name": "Iterar Destinatarios",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Prepara el payload para el envío de WhatsApp.\nconst input = $input.all()[0].json;\nconst tenantConfig = input.tenant_config;\nconst recipient = input.current_recipient;\nconst messageContent = input.original_message_content;\n\nconst whatsappPayload = {\n  to: recipient.phone_number,\n  type: 'text',\n  text: { body: messageContent },\n  tenant_id: tenantConfig.tenant_id,\n  campaign_id: input.campaign_id || 'manual_bulk_send',\n  recipient_id: recipient.id || recipient.phone_number\n};\n\nreturn [{ json: { ...whatsappPayload, original_message_content: messageContent } }];"
+      },
+      "id": "prepare-whatsapp-message",
+      "name": "Preparar Mensaje WhatsApp",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-whatsapp",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "payload",
+              "value": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-whatsapp-message",
+      "name": "Enviar Mensaje WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "campaign_logs",
+        "columns": "campaign_id, tenant_id, recipient_id, phone_number, message_content, status, response_data, created_at",
+        "additionalFields": {
+          "values": "={{ [$json.campaign_id, $json.tenant_id, $json.recipient_id, $json.to, $json.original_message_content, $node[\"Enviar Mensaje WhatsApp\"].json.success ? 'sent' : 'failed', JSON.stringify($node[\"Enviar Mensaje WhatsApp\"].json), new Date().toISOString()] }}"
+        }
+      },
+      "id": "log-campaign-send",
+      "name": "Registrar Envío Campaña",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Campaña de WhatsApp iniciada. Verifique logs para el estado de cada envío.\",\n  \"campaign_id\": \"={{ $json.campaign_id || 'manual_bulk_send' }}\",\n  \"total_recipients\": \"={{ $('Set Initial Data').first().json.original_total_recipients }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1600, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Envío Masivo": {
+      "main": [
+        [
+          {
+            "node": "Set Initial Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Initial Data": {
+      "main": [
+        [
+          {
+            "node": "Cargar Configuración Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Configuración Tenant": {
+      "main": [
+        [
+          {
+            "node": "Preparar Destinatarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Destinatarios": {
+      "main": [
+        [
+          {
+            "node": "Iterar Destinatarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iterar Destinatarios": {
+      "main": [
+        [
+          {
+            "node": "Preparar Mensaje WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Mensaje WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Enviar Mensaje WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Mensaje WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Registrar Envío Campaña",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Envío Campaña": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

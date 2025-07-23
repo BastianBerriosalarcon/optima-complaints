@@ -1,0 +1,254 @@
+{
+  "name": "Campaña - Automatización Email",
+  "description": "Workflow para enviar emails masivos como parte de una campaña de automatización.",
+  "tags": ["campaign", "email", "automation", "marketing"],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/email/bulk-send",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-email-bulk-send",
+      "name": "Webhook Envío Email Masivo",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "original_tenant_id",
+              "value": "={{ $json.tenant_id }}"
+            },
+            {
+              "name": "original_total_recipients",
+              "value": "={{ $json.recipients.length }}"
+            },
+            {
+              "name": "original_email_subject",
+              "value": "={{ $json.email_subject }}"
+            },
+            {
+              "name": "original_email_html",
+              "value": "={{ $json.email_html }}"
+            },
+            {
+              "name": "original_email_text",
+              "value": "={{ $json.email_text }}"
+            }
+          ]
+        }
+      },
+      "id": "set-initial-data",
+      "name": "Set Initial Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "tenant-config-loader",
+        "data": "={{ JSON.stringify({ tenant_id: $json.original_tenant_id, email_subject: $json.original_email_subject, email_html: $json.original_email_html, email_text: $json.original_email_text, recipients: $json.recipients, campaign_id: $json.campaign_id }) }}"
+      },
+      "id": "trigger-tenant-loader",
+      "name": "Cargar Configuración Tenant",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Prepara los datos para la iteración, asegurando que 'recipients' sea un array.\nconst input = $input.all()[0].json;\nconst recipients = input.recipients || [];\n\n// Asegúrate de que cada destinatario tenga al menos un email.\nconst validRecipients = recipients.filter(r => r.email);\n\nreturn validRecipients.map(recipient => ({\n  json: {\n    ...input,\n    current_recipient: recipient\n  }\n}));"
+      },
+      "id": "prepare-recipients",
+      "name": "Preparar Destinatarios",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "mode": "iterate"
+      },
+      "id": "iterate-recipients",
+      "name": "Iterar Destinatarios",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Prepara el payload para el envío de email.\nconst input = $input.all()[0].json;\nconst tenantConfig = input.tenant_config;\nconst recipient = input.current_recipient;\nconst emailSubject = input.original_email_subject;\nconst emailHtml = input.original_email_html;\nconst emailText = input.original_email_text;\n\nconst emailPayload = {\n  to: recipient.email,\n  subject: emailSubject,\n  html: emailHtml,\n  text: emailText,\n  from: tenantConfig.email_sender || 'no-reply@optimacx.com', // Asume una configuración de remitente\n  tenant_id: tenantConfig.tenant_id,\n  campaign_id: input.campaign_id || 'manual_email_bulk_send',\n  recipient_id: recipient.id || recipient.email\n};\n\nreturn [{ json: { ...emailPayload, original_email_subject: emailSubject, original_email_html: emailHtml, original_email_text: emailText } }];"
+      },
+      "id": "prepare-email-message",
+      "name": "Preparar Mensaje Email",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email", // Webhook genérico para enviar email
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "name": "html",
+              "value": "={{ $json.html }}"
+            },
+            {
+              "name": "text",
+              "value": "={{ $json.text }}"
+            },
+            {
+              "name": "from",
+              "value": "={{ $json.from }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-email-message",
+      "name": "Enviar Mensaje Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "campaign_logs", // Asumiendo la misma tabla para logs de campañas
+        "columns": "campaign_id, tenant_id, recipient_id, email, message_content, status, response_data, created_at",
+        "additionalFields": {
+          "values": "={{ [$json.campaign_id, $json.tenant_id, $json.recipient_id, $json.to, $json.original_email_html || $json.original_email_text, $node[\"Enviar Mensaje Email\"].json.success ? 'sent' : 'failed', JSON.stringify($node[\"Enviar Mensaje Email\"].json), new Date().toISOString()] }}"
+        }
+      },
+      "id": "log-campaign-send",
+      "name": "Registrar Envío Campaña",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Campaña de Email iniciada. Verifique logs para el estado de cada envío.\",\n  \"campaign_id\": \"={{ $json.campaign_id || 'manual_email_bulk_send' }}\",\n  \"total_recipients\": \"={{ $('Set Initial Data').first().json.original_total_recipients }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1600, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Envío Email Masivo": {
+      "main": [
+        [
+          {
+            "node": "Set Initial Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Initial Data": {
+      "main": [
+        [
+          {
+            "node": "Cargar Configuración Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Configuración Tenant": {
+      "main": [
+        [
+          {
+            "node": "Preparar Destinatarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Destinatarios": {
+      "main": [
+        [
+          {
+            "node": "Iterar Destinatarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iterar Destinatarios": {
+      "main": [
+        [
+          {
+            "node": "Preparar Mensaje Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Mensaje Email": {
+      "main": [
+        [
+          {
+            "node": "Enviar Mensaje Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Mensaje Email": {
+      "main": [
+        [
+          {
+            "node": "Registrar Envío Campaña",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Envío Campaña": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

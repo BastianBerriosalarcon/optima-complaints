@@ -24,7 +24,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Cache inteligente para configuraciones de tenant\nconst triggerData = $input.first().json;\nconst phoneNumberId = triggerData.phoneNumberId;\nconst cacheKey = `tenant_config_phone_${phoneNumberId}`;\n\n// Verificar cache en memoria (staticData es un KV store a nivel de workflow)\nconst cacheTimeout = 5 * 60 * 1000; // 5 minutos\nconst now = Date.now();\n\nconst staticData = this.getWorkflowStaticData('global');\nconst cachedData = staticData[cacheKey];\n\nif (cachedData && cachedData.timestamp && (now - cachedData.timestamp) < cacheTimeout) {\n  // Cache hit\n  console.log(`Cache HIT for tenant with phone ID: ${phoneNumberId}`);\n  return {\n    ...triggerData,\n    tenant_config_source: 'cache',\n    tenant_config: cachedData.config\n  };\n} else {\n  // Cache miss\n  console.log(`Cache MISS for tenant with phone ID: ${phoneNumberId}`);\n  return {\n    ...triggerData,\n    tenant_config_source: 'database',\n    cache_key: cacheKey\n  };\n}"
+        "jsCode": "// Cache inteligente para configuraciones de tenant\nconst triggerData = $input.first().json;\nconst tenantId = triggerData.tenant_id;\nconst phoneNumberId = triggerData.phoneNumberId;\n\nlet cacheKey;\nif (tenantId) {\n  cacheKey = `tenant_config_id_${tenantId}`;\n} else if (phoneNumberId) {\n  cacheKey = `tenant_config_phone_${phoneNumberId}`;\n} else {\n  throw new Error('Se requiere tenant_id o phoneNumberId para cargar la configuración del tenant.');\n}\n\n// Verificar cache en memoria (staticData es un KV store a nivel de workflow)\nconst cacheTimeout = 5 * 60 * 1000; // 5 minutos\nconst now = Date.now();\n\nconst staticData = this.getWorkflowStaticData('global');\nconst cachedData = staticData[cacheKey];\n\nif (cachedData && cachedData.timestamp && (now - cachedData.timestamp) < cacheTimeout) {\n  // Cache hit\n  console.log(`Cache HIT for tenant: ${tenantId || phoneNumberId}`);\n  return {\n    ...triggerData,\n    tenant_config_source: 'cache',\n    tenant_config: cachedData.config\n  };\n} else {\n  // Cache miss\n  console.log(`Cache MISS for tenant: ${tenantId || phoneNumberId}`);\n  return {\n    ...triggerData,\n    tenant_config_source: 'database',\n    cache_key: cacheKey,\n    tenant_id_input: tenantId,\n    phone_number_id_input: phoneNumberId\n  };\n}"
       },
       "id": "check-tenant-cache",
       "name": "Check Tenant Cache",
@@ -59,9 +59,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id as tenant_id, nombre as tenant_name, telefono_principal, configuracion_ai, configuracion_horarios, activo FROM concesionarios WHERE whatsapp_phone_number_id = $1 AND activo = true LIMIT 1",
+        "query": "={{ $json.tenant_id_input ? 'SELECT id as tenant_id, nombre as tenant_name, telefono_principal, configuracion_ai, configuracion_horarios, activo FROM concesionarios WHERE id = $1 AND activo = true LIMIT 1' : 'SELECT id as tenant_id, nombre as tenant_name, telefono_principal, configuracion_ai, configuracion_horarios, activo FROM concesionarios WHERE whatsapp_phone_number_id = $1 AND activo = true LIMIT 1' }}",
         "additionalFields": {
-          "queryParameters": "={{ [$json.phoneNumberId] }}"
+          "queryParameters": "={{ [$json.tenant_id_input || $json.phone_number_id_input] }}"
         }
       },
       "id": "load-tenant-config-db",
@@ -75,7 +75,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Actualizar cache con nueva configuración\nconst cacheData = $('Check Tenant Cache').first().json;\nconst dbResponse = $input.first().json;\nconst cacheKey = cacheData.cache_key;\n\nif (!dbResponse || dbResponse.length === 0) {\n  throw new Error(`Tenant configuration not found for phone ID: ${cacheData.phoneNumberId}`);\n}\n\nconst config = dbResponse[0];\n\n// Guardar en cache\nconst staticData = this.getWorkflowStaticData('global');\nstaticData[cacheKey] = {\n  config: config,\n  timestamp: Date.now()\n};\n\nconsole.log(`Cache UPDATED for tenant with phone ID: ${cacheData.phoneNumberId}`);\n\nreturn {\n  ...cacheData,\n  tenant_config: config\n};"
+        "jsCode": "// Actualizar cache con nueva configuración\nconst cacheData = $('Check Tenant Cache').first().json;\nconst dbResponse = $input.first().json;\nconst cacheKey = cacheData.cache_key;\n\nif (!dbResponse || dbResponse.length === 0) {\n  throw new Error(`Tenant configuration not found for ID: ${cacheData.tenant_id_input || cacheData.phone_number_id_input}`);\n}\n\nconst config = dbResponse[0];\n\n// Guardar en cache\nconst staticData = this.getWorkflowStaticData('global');\nstaticData[cacheKey] = {\n  config: config,\n  timestamp: Date.now()\n};\n\nconsole.log(`Cache UPDATED for tenant: ${cacheData.tenant_id_input || cacheData.phone_number_id_input}`);\n\nreturn {\n  ...cacheData,\n  tenant_config: config\n};"
       },
       "id": "update-cache",
       "name": "Update Cache",
