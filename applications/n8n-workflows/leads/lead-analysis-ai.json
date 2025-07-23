@@ -73,7 +73,7 @@
       "parameters": {
         "operation": "create",
         "resource": "execution",
-        "workflowId": "lead-scoring-workflow", // ID del nuevo workflow de scoring
+        "workflowId": "lead-scoring-ai", // ID del nuevo workflow de scoring
         "data": "={{ JSON.stringify($json) }}"
       },
       "id": "trigger-lead-scoring",
@@ -99,32 +99,6 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [1400, 300]
-    },
-    {
-      "parameters": {
-        "operation": "create",
-        "resource": "execution",
-        "workflowId": "advisor-assignment-workflow",
-        "data": "={{ JSON.stringify($json) }}"
-      },
-      "id": "trigger-advisor-assignment",
-      "name": "Asignar Asesor",
-      "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
-      "position": [1600, 280]
-    },
-    {
-      "parameters": {
-        "operation": "create",
-        "resource": "execution",
-        "workflowId": "automated-response-workflow",
-        "data": "={{ JSON.stringify($json) }}"
-      },
-      "id": "trigger-automated-response",
-      "name": "Respuesta Automática",
-      "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
-      "position": [1600, 380]
     }
   ],
   "connections": {
@@ -213,22 +187,7 @@
       ]
     },
     "¿Requiere Asesor?": {
-      "main": [
-        [
-          {
-            "node": "Asignar Asesor",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Respuesta Automática",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": []
     }
   },
   "settings": {
