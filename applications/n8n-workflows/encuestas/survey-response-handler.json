@@ -1,7 +1,7 @@
 {
   "name": "Survey - Response Handler",
-  "description": "Centraliza el registro de encuestas completadas y dispara notificaciones por baja calificación.",
-  "tags": ["survey", "handler", "srp"],
+  "description": "Workflow enfocado en manejar respuestas de encuestas, registrarlas en BD y disparar notificaciones. Principio SRP: Una sola responsabilidad - manejo de respuestas.",
+  "tags": ["survey", "response", "handler", "srp"],
   "nodes": [
     {
       "parameters": {
@@ -11,41 +11,59 @@
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [200, 300]
+      "position": [240, 300]
     },
     {
       "parameters": {
-        "operation": "insert",
-        "schema": "public",
-        "table": "encuestas",
-        "columns": "concesionario_id, sucursal_id, cliente_nombre, cliente_rut, cliente_telefono, recomendacion, satisfaccion, lavado, asesor, comentario, origen, estado, fecha_creacion, average_score",
+        "functionCode": "// Función enfocada en validar y normalizar respuesta de encuesta\n// Principio SRP: Una sola responsabilidad - validación de respuesta\n\nconst surveyResponse = $input.first().json;\n\n// Validaciones críticas siguiendo patrón de otros workflows\nconst requiredFields = ['concesionario_id', 'cliente_telefono', 'recomendacion', 'satisfaccion', 'lavado', 'asesor'];\nfor (const field of requiredFields) {\n  if (surveyResponse[field] === undefined || surveyResponse[field] === null) {\n    throw new Error(`Campo requerido faltante: ${field}`);\n  }\n}\n\n// Validar que las calificaciones estén en el rango 1-10\nconst scoreFields = ['recomendacion', 'satisfaccion', 'lavado', 'asesor'];\nfor (const field of scoreFields) {\n  const score = surveyResponse[field];\n  if (typeof score !== 'number' || score < 1 || score > 10) {\n    throw new Error(`Calificación inválida para ${field}: ${score}. Debe ser un número entre 1 y 10.`);\n  }\n}\n\n// Validar UUID de concesionario\nconst uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nif (!uuidRegex.test(surveyResponse.concesionario_id)) {\n  throw new Error('concesionario_id debe ser un UUID válido');\n}\n\n// Calcular promedio de las calificaciones\nconst totalScore = scoreFields.reduce((sum, field) => sum + surveyResponse[field], 0);\nconst averageScore = totalScore / scoreFields.length;\n\n// Normalizar datos para la base de datos\nconst normalizedSurvey = {\n  concesionario_id: surveyResponse.concesionario_id,\n  sucursal_id: surveyResponse.sucursal_id || null,\n  cliente_nombre: surveyResponse.cliente_nombre || null,\n  cliente_rut: surveyResponse.cliente_rut || null,\n  cliente_telefono: surveyResponse.cliente_telefono,\n  recomendacion: surveyResponse.recomendacion,\n  satisfaccion: surveyResponse.satisfaccion,\n  lavado: surveyResponse.lavado,\n  asesor: surveyResponse.asesor,\n  comentario: surveyResponse.comentario || null,\n  origen: surveyResponse.origen || 'unknown',\n  estado: 'completado',\n  fecha_creacion: new Date().toISOString(),\n  \n  // Campos calculados\n  average_score: Math.round(averageScore * 10) / 10, // redondear a 1 decimal\n  \n  // Clasificación para lógica de negocio\n  score_category: averageScore >= 9 ? 'excelente' : averageScore >= 7 ? 'bueno' : averageScore >= 5 ? 'regular' : 'bajo',\n  requires_notification: averageScore <= 8 // Notas 1-8 requieren notificación\n};\n\nconsole.log('Respuesta de encuesta validada:', {\n  concesionarioId: normalizedSurvey.concesionario_id,\n  origen: normalizedSurvey.origen,\n  averageScore: normalizedSurvey.average_score,\n  requiresNotification: normalizedSurvey.requires_notification\n});\n\nreturn [{ json: normalizedSurvey }];"
+      },
+      "id": "validate-survey-response",
+      "name": "Validar Respuesta Encuesta",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO encuestas (concesionario_id, sucursal_id, cliente_nombre, cliente_rut, cliente_telefono, recomendacion, satisfaccion, lavado, asesor, comentario, origen, estado, average_score) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *",
         "additionalFields": {
-          "values": "={{ [$json.concesionario_id, $json.sucursal_id, $json.cliente_nombre, $json.cliente_rut, $json.cliente_telefono, $json.recomendacion, $json.satisfaccion, $json.lavado, $json.asesor, $json.comentario, $json.origen, $json.estado, $json.fecha_creacion, $json.average_score] }}"
+          "queryParameters": "={{ [$json.concesionario_id, $json.sucursal_id, $json.cliente_nombre, $json.cliente_rut, $json.cliente_telefono, $json.recomendacion, $json.satisfaccion, $json.lavado, $json.asesor, $json.comentario, $json.origen, $json.estado, $json.average_score] }}"
         }
       },
-      "id": "register-survey-in-db",
-      "name": "Registrar Encuesta en DB",
+      "id": "insert-survey-response",
+      "name": "Registrar Encuesta",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2,
-      "position": [400, 300]
+      "position": [680, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "number": [
+          "boolean": [
             {
-              "value1": "={{ $json.average_score }}",
-              "operation": "lessThanOrEqual",
-              "value2": 8
+              "value1": "={{ $('Validar Respuesta Encuesta').first().json.requires_notification }}",
+              "operation": "equal",
+              "value2": true
             }
           ]
         }
       },
-      "id": "check-low-score",
-      "name": "¿Calificación Baja (1-8)?",
+      "id": "check-notification-required",
+      "name": "¿Requiere Notificación?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [600, 300]
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en preparar datos para notificación\n// Principio SRP: Una sola responsabilidad - preparar notificación\n\nconst validatedSurvey = $('Validar Respuesta Encuesta').first().json;\nconst insertedSurvey = $('Registrar Encuesta').first().json[0];\n\n// Preparar datos para el workflow de notificación de baja calificación\nconst notificationData = {\n  // Datos de la encuesta\n  survey_id: insertedSurvey.id,\n  concesionario_id: insertedSurvey.concesionario_id,\n  sucursal_id: insertedSurvey.sucursal_id,\n  \n  // Datos del cliente\n  cliente_info: {\n    nombre: insertedSurvey.cliente_nombre,\n    telefono: insertedSurvey.cliente_telefono,\n    rut: insertedSurvey.cliente_rut\n  },\n  \n  // Calificaciones detalladas\n  scores: {\n    recomendacion: insertedSurvey.recomendacion,\n    satisfaccion: insertedSurvey.satisfaccion,\n    lavado: insertedSurvey.lavado,\n    asesor: insertedSurvey.asesor,\n    promedio: insertedSurvey.average_score\n  },\n  \n  // Contexto adicional\n  survey_context: {\n    origen: insertedSurvey.origen,\n    comentario: insertedSurvey.comentario,\n    fecha_respuesta: insertedSurvey.created_at,\n    categoria_score: validatedSurvey.score_category\n  },\n  \n  // Control de flujo\n  notification_type: 'low_score_alert',\n  urgency: insertedSurvey.average_score <= 5 ? 'alta' : 'media'\n};\n\nconsole.log('Preparando notificación de baja calificación:', {\n  surveyId: notificationData.survey_id,\n  averageScore: notificationData.scores.promedio,\n  urgency: notificationData.urgency,\n  origen: notificationData.survey_context.origen\n});\n\nreturn [{ json: notificationData }];"
+      },
+      "id": "prepare-notification-data",
+      "name": "Preparar Datos Notificación",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 200]
     },
     {
       "parameters": {
@@ -58,18 +76,17 @@
       "name": "Disparar Notificación Baja Calificación",
       "type": "n8n-nodes-base.n8n",
       "typeVersion": 1,
-      "position": [800, 200]
+      "position": [1340, 200]
     },
     {
       "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Encuesta procesada y registrada exitosamente.\",\n  \"survey_id\": \"={{ $('Registrar Encuesta en DB').first().json.id }}\",\n  \"average_score\": {{ $('Trigger del Workflow').first().json.average_score }}\n}"
+        "functionCode": "// Función enfocada en generar respuesta de éxito\n// Principio SRP: Una sola responsabilidad - generar respuesta final\n\nconst validatedSurvey = $('Validar Respuesta Encuesta').first().json;\nconst insertedSurvey = $('Registrar Encuesta').first().json[0];\nconst checkResult = $('¿Requiere Notificación?').first().json;\n\n// Generar respuesta de éxito con información completa\nconst successResponse = {\n  status: 'success',\n  message: 'Encuesta procesada exitosamente.',\n  \n  survey_data: {\n    id: insertedSurvey.id,\n    cliente_telefono: insertedSurvey.cliente_telefono,\n    origen: insertedSurvey.origen,\n    estado: insertedSurvey.estado\n  },\n  \n  scoring_summary: {\n    recomendacion: insertedSurvey.recomendacion,\n    satisfaccion: insertedSurvey.satisfaccion,\n    lavado: insertedSurvey.lavado,\n    asesor: insertedSurvey.asesor,\n    promedio: insertedSurvey.average_score,\n    categoria: validatedSurvey.score_category\n  },\n  \n  processing_info: {\n    notification_triggered: validatedSurvey.requires_notification,\n    workflow_completed: true,\n    processed_at: new Date().toISOString()\n  }\n};\n\nconsole.log('Encuesta procesada exitosamente:', {\n  surveyId: successResponse.survey_data.id,\n  averageScore: successResponse.scoring_summary.promedio,\n  notificationTriggered: successResponse.processing_info.notification_triggered\n});\n\nreturn [{ json: successResponse }];"
       },
-      "id": "success-response",
-      "name": "Respuesta Exitosa",
-      "type": "n8n-nodes-base.respondToWebhook",
+      "id": "generate-success-response",
+      "name": "Generar Respuesta Éxito",
+      "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [1000, 300]
+      "position": [1340, 400]
     }
   ],
   "connections": {
@@ -77,36 +94,58 @@
       "main": [
         [
           {
-            "node": "Registrar Encuesta en DB",
+            "node": "Validar Respuesta Encuesta",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Registrar Encuesta en DB": {
+    "Validar Respuesta Encuesta": {
       "main": [
         [
           {
-            "node": "¿Calificación Baja (1-8)?",
+            "node": "Registrar Encuesta",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "¿Calificación Baja (1-8)?": {
+    "Registrar Encuesta": {
       "main": [
         [
           {
-            "node": "Disparar Notificación Baja Calificación",
+            "node": "¿Requiere Notificación?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Requiere Notificación?": {
+      "main": [
+        [
+          {
+            "node": "Preparar Datos Notificación",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Respuesta Exitosa",
+            "node": "Generar Respuesta Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Datos Notificación": {
+      "main": [
+        [
+          {
+            "node": "Disparar Notificación Baja Calificación",
             "type": "main",
             "index": 0
           }
@@ -117,7 +156,7 @@
       "main": [
         [
           {
-            "node": "Respuesta Exitosa",
+            "node": "Generar Respuesta Éxito",
             "type": "main",
             "index": 0
           }

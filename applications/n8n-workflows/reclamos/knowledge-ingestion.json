@@ -1,0 +1,162 @@
+{
+  "name": "Knowledge - Document Ingestion",
+  "description": "Workflow enfocado en validar documentos y crear registro inicial. Principio SRP: Una sola responsabilidad - validación e ingesta.",
+  "tags": ["rag", "knowledge", "ingestion", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/knowledge/ingest",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-knowledge-input",
+      "name": "Knowledge Upload Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "knowledge-ingestion"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en validar datos del documento\n// Principio SRP: Una sola responsabilidad - validación de entrada\n\nconst uploadData = $input.first().json;\n\n// Validaciones críticas siguiendo patrón de otros workflows\nconst requiredFields = ['tenant_id', 'document_title', 'file_content'];\nfor (const field of requiredFields) {\n  if (!uploadData[field]) {\n    throw new Error(`Campo requerido faltante: ${field}`);\n  }\n}\n\n// Validar tenant_id es UUID válido (mismo patrón que complaint-rag-processor)\nconst uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nif (!uuidRegex.test(uploadData.tenant_id)) {\n  throw new Error('tenant_id debe ser un UUID válido');\n}\n\n// Validar contenido del archivo\nif (uploadData.file_content.length < 100) {\n  throw new Error('El contenido del documento debe tener al menos 100 caracteres');\n}\n\nif (uploadData.file_content.length > 1000000) { // 1MB texto\n  throw new Error('El contenido del documento es demasiado grande (máximo 1MB)');\n}\n\n// Normalizar datos siguiendo estructura de otros workflows\nconst validatedDocument = {\n  tenant_id: uploadData.tenant_id,\n  document_title: uploadData.document_title.trim(),\n  file_content: uploadData.file_content,\n  category: uploadData.category || 'general',\n  tags: uploadData.tags || [],\n  author: uploadData.author || 'Sistema',\n  version: uploadData.version || '1.0',\n  language: uploadData.language || 'es',\n  \n  // Metadatos adicionales\n  original_filename: uploadData.original_filename || null,\n  mime_type: uploadData.mime_type || 'text/plain',\n  content_length: uploadData.file_content.length,\n  \n  // Timestamp de procesamiento\n  ingestion_timestamp: new Date().toISOString()\n};\n\nconsole.log('Documento validado exitosamente:', {\n  tenantId: validatedDocument.tenant_id,\n  titulo: validatedDocument.document_title,\n  tamaño: validatedDocument.content_length,\n  categoria: validatedDocument.category\n});\n\nreturn [{ json: validatedDocument }];"
+      },
+      "id": "validate-document-input",
+      "name": "Validar Entrada de Documento",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO documentos_conocimiento (concesionario_id, titulo, contenido_original, categoria, tags, autor, version, idioma, estado, metadatos) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.tenant_id, $json.document_title, $json.file_content, $json.category, JSON.stringify($json.tags), $json.author, $json.version, $json.language, 'procesando', JSON.stringify({original_filename: $json.original_filename, mime_type: $json.mime_type, content_length: $json.content_length})] }}"
+        }
+      },
+      "id": "create-document-record",
+      "name": "Crear Registro Documento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en preparar datos para el siguiente workflow\n// Principio SRP: Una sola responsabilidad - preparar contexto\n\nconst validatedData = $('Validar Entrada de Documento').item.json;\nconst createdDoc = $input.first().json[0];\n\n// Preparar datos estructurados para el workflow de chunking\nconst documentForChunking = {\n  // Datos del documento creado\n  document_id: createdDoc.id,\n  document_title: createdDoc.titulo,\n  content_to_chunk: createdDoc.contenido_original,\n  \n  // Configuración del tenant\n  tenant_id: createdDoc.concesionario_id,\n  \n  // Metadatos para procesamiento\n  processing_config: {\n    categoria: createdDoc.categoria,\n    tags: JSON.parse(createdDoc.tags || '[]'),\n    author: createdDoc.autor,\n    version: createdDoc.version,\n    language: createdDoc.idioma\n  },\n  \n  // Control de flujo\n  processing_step: 'chunking',\n  next_workflow: 'knowledge-chunking',\n  created_at: createdDoc.created_at\n};\n\nconsole.log('Documento registrado, iniciando chunking:', {\n  documentId: documentForChunking.document_id,\n  tenantId: documentForChunking.tenant_id,\n  contentLength: documentForChunking.content_to_chunk.length\n});\n\nreturn [{ json: documentForChunking }];"
+      },
+      "id": "prepare-for-chunking",
+      "name": "Preparar para Chunking",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "knowledge-chunking",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-chunking-workflow",
+      "name": "Iniciar Chunking",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Documento ingresado exitosamente. Iniciando procesamiento automático.\",\n  \"document_data\": {\n    \"id\": \"{{ $('Crear Registro Documento').first().json[0].id }}\",\n    \"title\": \"{{ $('Validar Entrada de Documento').first().json.document_title }}\",\n    \"content_length\": {{ $('Validar Entrada de Documento').first().json.content_length }},\n    \"category\": \"{{ $('Validar Entrada de Documento').first().json.category }}\",\n    \"status\": \"processing\",\n    \"next_step\": \"chunking\"\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"Error en la ingesta del documento.\",\n  \"error_details\": \"{{ $json.error?.message || 'Error desconocido en validación' }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error-response",
+      "name": "Respuesta de Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 500]
+    }
+  ],
+  "connections": {
+    "Knowledge Upload Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validar Entrada de Documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Entrada de Documento": {
+      "main": [
+        [
+          {
+            "node": "Crear Registro Documento",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta de Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Registro Documento": {
+      "main": [
+        [
+          {
+            "node": "Preparar para Chunking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar para Chunking": {
+      "main": [
+        [
+          {
+            "node": "Iniciar Chunking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Iniciar Chunking": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "name": "Knowledge - Embedding Generation",
+  "description": "Workflow enfocado en generar embeddings para chunks de documentos. Principio SRP: Una sola responsabilidad - embeddings.",
+  "tags": ["rag", "knowledge", "embedding", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en preparar chunks para embedding\n// Principio SRP: Una sola responsabilidad - preparar lotes\n\nconst chunkData = $input.first().json;\n\n// Validar datos de entrada\nif (!chunkData.chunks || !Array.isArray(chunkData.chunks)) {\n  throw new Error('Datos de chunks inválidos o faltantes');\n}\n\nif (chunkData.chunks.length === 0) {\n  throw new Error('No hay chunks para procesar embeddings');\n}\n\n// Configuración de lotes para evitar rate limits de Gemini\nconst BATCH_SIZE = 5; // Procesar 5 chunks por lote\nconst chunks = chunkData.chunks;\n\n// Preparar chunks con información de lote\nconst chunksWithBatchInfo = chunks.map((chunk, index) => ({\n  ...chunk,\n  global_index: index,\n  batch_number: Math.floor(index / BATCH_SIZE),\n  position_in_batch: index % BATCH_SIZE,\n  text_for_embedding: chunk.contenido, // Texto que se enviará a Gemini\n  \n  // Metadatos del documento para contexto\n  document_context: {\n    document_id: chunkData.document_id,\n    tenant_id: chunkData.tenant_id,\n    document_title: chunkData.document_title\n  }\n}));\n\n// Calcular número total de lotes\nconst totalBatches = Math.ceil(chunks.length / BATCH_SIZE);\n\nconsole.log('Chunks preparados para embedding:', {\n  documentId: chunkData.document_id,\n  totalChunks: chunks.length,\n  batchSize: BATCH_SIZE,\n  totalBatches: totalBatches\n});\n\nreturn [{\n  json: {\n    // Datos originales\n    document_id: chunkData.document_id,\n    tenant_id: chunkData.tenant_id,\n    document_title: chunkData.document_title,\n    chunking_stats: chunkData.chunking_stats,\n    \n    // Chunks con información de lote\n    chunks_for_embedding: chunksWithBatchInfo,\n    \n    // Configuración de procesamiento\n    embedding_config: {\n      batch_size: BATCH_SIZE,\n      total_batches: totalBatches,\n      model: 'gemini-embedding-001',\n      task_type: 'RETRIEVAL_DOCUMENT'\n    },\n    \n    // Control de flujo\n    processing_step: 'embedding_generation',\n    next_workflow: 'knowledge-storage'\n  }\n}];"
+      },
+      "id": "prepare-embedding-batches",
+      "name": "Preparar Lotes Embedding",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 5,
+        "options": {}
+      },
+      "id": "split-into-batches",
+      "name": "Dividir en Lotes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en procesar un lote de chunks\n// Principio SRP: Una sola responsabilidad - procesar lote actual\n\nconst embeddingData = $('Preparar Lotes Embedding').first().json;\nconst batchInfo = $input.first().json;\n\n// Obtener chunks del lote actual\nconst allChunks = embeddingData.chunks_for_embedding;\nconst batchSize = embeddingData.embedding_config.batch_size;\nconst startIndex = batchInfo.batchIndex * batchSize;\nconst endIndex = Math.min(startIndex + batchSize, allChunks.length);\nconst currentBatchChunks = allChunks.slice(startIndex, endIndex);\n\n// Preparar requests para Gemini\nconst embeddingRequests = currentBatchChunks.map(chunk => ({\n  // Datos del chunk\n  chunk_data: {\n    documento_id: chunk.documento_id,\n    chunk_index: chunk.chunk_index,\n    contenido: chunk.contenido,\n    token_count: chunk.token_count,\n    metadata: chunk.metadata\n  },\n  \n  // Texto para embedding\n  text_to_embed: chunk.text_for_embedding,\n  \n  // Contexto del documento\n  document_context: chunk.document_context,\n  \n  // Información de lote\n  batch_info: {\n    batch_number: batchInfo.batchIndex,\n    position_in_batch: chunk.position_in_batch,\n    global_index: chunk.global_index\n  }\n}));\n\nconsole.log('Procesando lote de embeddings:', {\n  batchNumber: batchInfo.batchIndex,\n  chunksInBatch: embeddingRequests.length,\n  documentId: embeddingData.document_id\n});\n\nreturn embeddingRequests;"
+      },
+      "id": "process-current-batch",
+      "name": "Procesar Lote Actual",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $vars.GEMINI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "body": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={\n  \"parts\": [\n    {\n      \"text\": \"{{ $json.text_to_embed }}\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "taskType",
+              "value": "RETRIEVAL_DOCUMENT"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          }
+        }
+      },
+      "id": "generate-gemini-embeddings",
+      "name": "Generar Embeddings Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en combinar embeddings con chunks\n// Principio SRP: Una sola responsabilidad - combinar resultados\n\nconst embeddingResponses = $input.all();\nconst embeddingData = $('Preparar Lotes Embedding').first().json;\n\n// Procesar cada respuesta de embedding\nconst chunksWithEmbeddings = embeddingResponses.map((response, index) => {\n  const requestData = response.json;\n  const chunkInfo = requestData.chunk_data;\n  const embeddingVector = requestData.embedding?.values;\n  \n  // Validar que se generó el embedding\n  if (!embeddingVector || !Array.isArray(embeddingVector)) {\n    throw new Error(`No se pudo generar embedding para chunk ${chunkInfo.chunk_index}`);\n  }\n  \n  // Validar dimensión del vector (debe ser 768 para gemini-embedding-001)\n  if (embeddingVector.length !== 768) {\n    throw new Error(`Dimensión de embedding incorrecta: ${embeddingVector.length}, esperada: 768`);\n  }\n  \n  return {\n    // Datos del chunk\n    documento_id: chunkInfo.documento_id,\n    chunk_index: chunkInfo.chunk_index,\n    contenido: chunkInfo.contenido,\n    token_count: chunkInfo.token_count,\n    \n    // Vector embedding\n    embedding: embeddingVector,\n    \n    // Metadatos enriquecidos\n    metadata: {\n      ...chunkInfo.metadata,\n      embedding_model: 'gemini-embedding-001',\n      embedding_dimensions: embeddingVector.length,\n      embedding_generated_at: new Date().toISOString(),\n      batch_processed: requestData.batch_info?.batch_number || 0\n    }\n  };\n});\n\n// Verificar que todos los chunks tienen embeddings\nconst successfulEmbeddings = chunksWithEmbeddings.filter(c => c.embedding && c.embedding.length === 768);\n\nif (successfulEmbeddings.length !== embeddingResponses.length) {\n  throw new Error(`Solo se generaron ${successfulEmbeddings.length} de ${embeddingResponses.length} embeddings`);\n}\n\nconsole.log('Embeddings generados exitosamente:', {\n  documentId: embeddingData.document_id,\n  chunksProcessed: successfulEmbeddings.length,\n  embeddingDimensions: 768\n});\n\n// Retornar chunks con embeddings para almacenamiento\nreturn [{\n  json: {\n    // Datos del documento\n    document_id: embeddingData.document_id,\n    tenant_id: embeddingData.tenant_id,\n    document_title: embeddingData.document_title,\n    \n    // Chunks con embeddings\n    chunks_with_embeddings: successfulEmbeddings,\n    \n    // Estadísticas de procesamiento\n    embedding_stats: {\n      total_chunks_processed: successfulEmbeddings.length,\n      embedding_model: 'gemini-embedding-001',\n      embedding_dimensions: 768,\n      processed_at: new Date().toISOString()\n    },\n    \n    // Control de flujo\n    processing_step: 'storage',\n    next_workflow: 'knowledge-storage'\n  }\n}];"
+      },
+      "id": "combine-embeddings-results",
+      "name": "Combinar Resultados",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "knowledge-storage",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-storage-workflow",
+      "name": "Iniciar Almacenamiento",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "Preparar Lotes Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Lotes Embedding": {
+      "main": [
+        [
+          {
+            "node": "Dividir en Lotes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dividir en Lotes": {
+      "main": [
+        [
+          {
+            "node": "Procesar Lote Actual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Lote Actual": {
+      "main": [
+        [
+          {
+            "node": "Generar Embeddings Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Embeddings Gemini": {
+      "main": [
+        [
+          {
+            "node": "Combinar Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combinar Resultados": {
+      "main": [
+        [
+          {
+            "node": "Iniciar Almacenamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

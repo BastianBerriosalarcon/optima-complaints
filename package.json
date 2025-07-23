@@ -5,5 +5,29 @@
   "workspaces": [
     "frontend",
     "shared"
-  ]
+  ],
+  "description": "Plataforma multitenant de experiencia al cliente que combina N8N, Chatwoot y un frontend personalizado, desplegada en Google Cloud Platform usando infraestructura como código (Terraform).",
+  "main": "create_search_function.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.52.1",
+    "dotenv": "^17.2.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BastianBerriosalarcon/optimacx-GCP.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/BastianBerriosalarcon/optimacx-GCP/issues"
+  },
+  "homepage": "https://github.com/BastianBerriosalarcon/optimacx-GCP#readme"
 }
