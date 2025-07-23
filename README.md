@@ -1,182 +1,279 @@
-# Supabase CLI (v1)
+# Plataforma OptimaCX - Infraestructura Multi-Servicio en GCP
 
-[![Coverage Status](https://coveralls.io/repos/github/supabase/cli/badge.svg?branch=main)](https://coveralls.io/github/supabase/cli?branch=main)
+Plataforma multitenant de experiencia al cliente que combina N8N, Chatwoot y un frontend personalizado, desplegada en Google Cloud Platform usando infraestructura como código (Terraform).
 
-[Supabase](https://supabase.io) is an open source Firebase alternative. We're building the features of Firebase using enterprise-grade open source tools.
+## 🚀 Estado del Proyecto
 
-This repository contains all the functionality for Supabase CLI.
+### Infraestructura Actual (Terraform)
+**🔄 EN DESARROLLO** - Infraestructura base completada
+- **N8N Dev:** No desplegado aún ❌
+- **Chatwoot Dev:** No desplegado aún ❌
+- **Frontend Dev:** No desplegado aún ❌
+- **Base de Datos:** Supabase PostgreSQL (Brasil) ✅
+- **Redis:** Cloud Memorystore (10.129.0.4:6379) ✅
+- **Región:** southamerica-west1
+- **Último Deploy:** 15 de julio, 2025
 
-- [x] Running Supabase locally
-- [x] Managing database migrations
-- [x] Creating and deploying Supabase Functions
-- [x] Generating types directly from your database schema
-- [x] Making authenticated HTTP requests to [Management API](https://supabase.com/docs/reference/api/introduction)
+### Infraestructura Legacy (Funcionando)
+**✅ ACTIVA y FUNCIONANDO**
+- **URL n8n:** https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/
+- **Base de Datos:** Supabase PostgreSQL (Schema: n8n_prod)
+- **Región:** southamerica-west1
+- **Último Deploy:** 17 de julio, 2025
 
-## Getting started
+## 📋 Descripción del Proyecto
 
-### Install the CLI
+OptimaCx es una plataforma multitenant de experiencia al cliente para el sector automotriz que utiliza n8n como motor de automatización para:
 
-Available via [NPM](https://www.npmjs.com) as dev dependency. To install:
+- ✅ **Sistema de Encuestas Multi-canal:** QR, WhatsApp, Contact Center
+- ✅ **Gestión de Reclamos con IA:** Procesamiento automatizado con RAG
+- ✅ **Multitenant:** Aislamiento completo por concesionario
+- ✅ **Automatización Inteligente:** Workflows personalizados
 
+## 🏗️ Arquitectura Nueva (Terraform)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Google Cloud Platform                    │
+├─────────────────────────────────────────────────────────────────┤
+│  Servicios Cloud Run                                           │
+│  ├── N8N (southamerica-west1)                                 │
+│  ├── Chatwoot (southamerica-west1)                            │
+│  └── Frontend OptimaCX (southamerica-west1)                   │
+├─────────────────────────────────────────────────────────────────┤
+│  Supabase PostgreSQL (Brasil)                                  │
+│  ├── Schema: n8n_dev                                          │
+│  ├── Schema: chatwoot_dev                                     │
+│  ├── Schema: public (frontend)                                │
+│  └── Row Level Security (RLS)                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  Cloud Memorystore Redis                                       │
+│  ├── Instancia: chatwoot-redis-dev                            │
+│  ├── Memoria: 1GB STANDARD_HA                                 │
+│  └── VPC Privada: 10.129.0.4:6379                            │
+├─────────────────────────────────────────────────────────────────┤
+│  Infraestructura como Código                                   │
+│  ├── Módulos Terraform (reutilizables)                        │
+│  ├── Configuraciones por Ambiente                             │
+│  ├── Integración Secret Manager                               │
+│  └── Networking VPC Privado                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## 🏗️ Arquitectura Legacy (Funcionando)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Google Cloud Platform                    │
+├─────────────────────────────────────────────────────────────────┤
+│  Cloud Run: n8n-optima-cx                                      │
+│  ├── Workflows n8n                                             │
+│  ├── Nodos Personalizados (Sistema RAG)                        │
+│  ├── Integraciones OptimaCx                                    │
+│  └── Configuración Multi-tenant                                │
+├─────────────────────────────────────────────────────────────────┤
+│  Cloud SQL: n8n-optima-cx-postgres                             │
+│  ├── PostgreSQL 15                                             │
+│  ├── Extensión pgvector                                        │
+│  ├── Datos Workflows n8n                                       │
+│  └── Datos Multi-tenant OptimaCx                               │
+├─────────────────────────────────────────────────────────────────┤
+│  Servicios IA/ML                                               │
+│  ├── Gemini 2.5 Pro (LLM)                                     │
+│  ├── gemini-embedding-001 (Embeddings)                         │
+│  └── Vertex AI Vector Search                                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## 📁 Estructura del Proyecto
+
+```
+optimacx-platform/
+├── applications/
+│   ├── n8n-workflows/              # Workflows N8N organizados por módulo
+│   │   ├── encuestas/             # Workflows de encuestas post-venta
+│   │   ├── leads/                 # Workflows de gestión de leads
+│   │   ├── reclamos/              # Workflows de reclamos con RAG
+│   │   └── utils/                 # Utilidades y configuraciones
+│   └── custom-nodes/              # Nodos personalizados N8N
+│       └── rag-system/            # Sistema RAG OptimaCx
+├── infrastructure/terraform/       # Nueva infraestructura IaC
+│   ├── modules/                   # Módulos reutilizables
+│   └── environments/             # Configuraciones por ambiente
+├── database/schemas/              # Esquemas de base de datos
+│   └── modules/rag/              # Módulo RAG con funciones de búsqueda
+├── shared/services/               # Servicios compartidos
+│   └── helpers/                  # Helpers como AdvisorWorkloadManager
+└── README.md                     # Este archivo
+```
+
+## 🔄 Flujo de Encuestas OptimaCx
+
+### Canal 1: Código QR (Inmediato)
+1. Cliente escanea QR único por concesionario
+2. Respuesta instantánea con 4 preguntas + datos del cliente
+3. Registro automático en BD
+4. Si calificación 1-8: Email automático a jefatura
+
+### Canal 2: WhatsApp (Automatizado)
+1. Carga masiva de clientes (día siguiente)
+2. Filtrado automático (excluye QR ya respondidos)
+3. Envío vía WhatsApp Business API
+4. Período de espera: 6 horas
+
+### Canal 3: Contact Center (Manual)
+1. Asignación automática de pendientes
+2. Distribución equitativa entre agentes
+3. Seguimiento telefónico
+4. Registro manual en sistema
+
+## 🤖 Sistema RAG para Reclamos
+
+### Componentes Técnicos
+- **Embeddings:** gemini-embedding-001 (3,072 dimensiones)
+- **Base de Datos Vectorial:** Vertex AI Vector Search + pgvector
+- **LLM:** Gemini 2.5 Pro
+- **Procesamiento:** workflows n8n
+
+### Flujo RAG
+```
+Reclamo → Embedding → Búsqueda Vectorial → Contexto → Gemini → Respuesta Estructurada
+```
+
+## 🔧 Configuración Nueva (Terraform)
+
+### Variables de Ambiente Supabase + Redis
 ```bash
-npm i supabase --save-dev
+# Base de Datos Supabase
+SUPABASE_URL=https://pnkdyagqibqxfxziqwxt.supabase.co
+SUPABASE_HOST=aws-0-sa-east-1.pooler.supabase.com
+SUPABASE_USER=postgres.pnkdyagqibqxfxziqwxt
+SUPABASE_PASSWORD=***
+
+# Configuración N8N
+DB_TYPE=postgresdb
+DB_POSTGRESDB_HOST=aws-0-sa-east-1.pooler.supabase.com
+DB_POSTGRESDB_DATABASE=postgres
+DB_POSTGRESDB_SCHEMA=n8n_dev
+N8N_USER_MANAGEMENT_DISABLED=true
+N8N_METRICS=true
+
+# Configuración Chatwoot
+POSTGRES_HOST=aws-0-sa-east-1.pooler.supabase.com
+POSTGRES_DATABASE=postgres
+REDIS_URL=redis://10.129.0.4:6379
+RAILS_ENV=development
+
+# Google Cloud
+PROJECT_ID=burnished-data-463915-d8
+REGION=southamerica-west1
 ```
 
-To install the beta release channel:
+## 🚀 Comandos Útiles
 
+### Verificar Estado
 ```bash
-npm i supabase@beta --save-dev
+# Estado Cloud Run
+gcloud run services list --region=southamerica-west1
+
+# Estado de Base de Datos
+gcloud sql instances list
+
+# Logs
+gcloud run services logs read n8n-optima-cx --region=southamerica-west1
 ```
 
-When installing with yarn 4, you need to disable experimental fetch with the following nodejs config.
-
-```
-NODE_OPTIONS=--no-experimental-fetch yarn add supabase
-```
-
-> **Note**
-For Bun versions below v1.0.17, you must add `supabase` as a [trusted dependency](https://bun.sh/guides/install/trusted) before running `bun add -D supabase`.
-
-<details>
-  <summary><b>macOS</b></summary>
-
-  Available via [Homebrew](https://brew.sh). To install:
-
-  ```sh
-  brew install supabase/tap/supabase
-  ```
-
-  To install the beta release channel:
-  
-  ```sh
-  brew install supabase/tap/supabase-beta
-  brew link --overwrite supabase-beta
-  ```
-  
-  To upgrade:
-
-  ```sh
-  brew upgrade supabase
-  ```
-</details>
-
-<details>
-  <summary><b>Windows</b></summary>
-
-  Available via [Scoop](https://scoop.sh). To install:
-
-  ```powershell
-  scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
-  scoop install supabase
-  ```
-
-  To upgrade:
-
-  ```powershell
-  scoop update supabase
-  ```
-</details>
-
-<details>
-  <summary><b>Linux</b></summary>
-
-  Available via [Homebrew](https://brew.sh) and Linux packages.
-
-  #### via Homebrew
-
-  To install:
-
-  ```sh
-  brew install supabase/tap/supabase
-  ```
-
-  To upgrade:
-
-  ```sh
-  brew upgrade supabase
-  ```
-
-  #### via Linux packages
-
-  Linux packages are provided in [Releases](https://github.com/supabase/cli/releases). To install, download the `.apk`/`.deb`/`.rpm`/`.pkg.tar.zst` file depending on your package manager and run the respective commands.
-
-  ```sh
-  sudo apk add --allow-untrusted <...>.apk
-  ```
-
-  ```sh
-  sudo dpkg -i <...>.deb
-  ```
-
-  ```sh
-  sudo rpm -i <...>.rpm
-  ```
-
-  ```sh
-  sudo pacman -U <...>.pkg.tar.zst
-  ```
-</details>
-
-<details>
-  <summary><b>Other Platforms</b></summary>
-
-  You can also install the CLI via [go modules](https://go.dev/ref/mod#go-install) without the help of package managers.
-
-  ```sh
-  go install github.com/supabase/cli@latest
-  ```
-
-  Add a symlink to the binary in `$PATH` for easier access:
-
-  ```sh
-  ln -s "$(go env GOPATH)/cli" /usr/bin/supabase
-  ```
-
-  This works on other non-standard Linux distros.
-</details>
-
-<details>
-  <summary><b>Community Maintained Packages</b></summary>
-
-  Available via [pkgx](https://pkgx.sh/). Package script [here](https://github.com/pkgxdev/pantry/blob/main/projects/supabase.com/cli/package.yml).
-  To install in your working directory:
-
-  ```bash
-  pkgx install supabase
-  ```
-
-  Available via [Nixpkgs](https://nixos.org/). Package script [here](https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/supabase-cli/default.nix).
-</details>
-
-### Run the CLI
-
+### Despliegue
 ```bash
-supabase bootstrap
+# Desplegar nueva versión
+gcloud run deploy n8n-optima-cx \
+  --source . \
+  --region=southamerica-west1 \
+  --allow-unauthenticated
 ```
 
-Or using npx:
+## 🔐 Seguridad
 
+### Multitenant
+- ✅ Filtros por `tenant_id` en todas las consultas
+- ✅ Credenciales encriptadas por concesionario
+- ✅ Workflows completamente aislados
+- ✅ Base de conocimiento segregada
+
+### Respaldos
+- ✅ Respaldos automáticos Cloud SQL
+- ✅ Respaldo del estado Terraform
+- ✅ Logs de migración preservados
+
+## 📊 Monitoreo
+
+### Métricas Disponibles
+- Tiempo de respuesta por tenant
+- Tasa de éxito de workflows
+- Performance de base de datos
+- Uso de API por concesionario
+
+### Alertas Configuradas
+- Fallas de workflow > 5%
+- Problemas de conexión a BD
+- Límites de rate de API
+
+## 🛠️ Desarrollo Local
+
+### Requisitos
+- Docker
+- Google Cloud SDK
+- Node.js >= 18
+
+### Configuración
 ```bash
-npx supabase bootstrap
+# Clonar repositorio
+git clone https://github.com/BastianBerriosalarcon/optimacx-GCP.git
+cd optimacx-GCP
+
+# Configurar variables
+cp .env.example .env
+
+# Ejecutar localmente
+docker-compose up -d
 ```
 
-The bootstrap command will guide you through the process of setting up a Supabase project using one of the [starter](https://github.com/supabase-community/supabase-samples/blob/main/samples.json) templates.
+## 📝 Historial de Cambios
 
-## Docs
+### v1.0.0 (4 de julio, 2025)
+- ✅ Implementación inicial OptimaCx
+- ✅ Migración desde ActivePieces a n8n
+- ✅ Sistema RAG con Gemini + pgvector
+- ✅ Despliegue exitoso en Cloud Run
+- ✅ Configuración multitenant
 
-Command & config reference can be found [here](https://supabase.com/docs/reference/cli/about).
+### v1.1.0 (8 de julio, 2025)
+- ✅ Repositorio GitHub configurado
+- ✅ Documentación completa
+- ✅ Respaldos y versionado implementado
 
-## Breaking changes
+### v1.2.0 (23 de julio, 2025)
+- ✅ Workflows RAG de procesamiento de conocimiento implementados
+- ✅ AdvisorWorkloadManager para asignación inteligente
+- ✅ Servidores MCP configurados (Supabase, N8N, Context7)
+- ✅ Esquemas de base de datos RAG completados
 
-We follow semantic versioning for changes that directly impact CLI commands, flags, and configurations.
+## 👥 Contacto
 
-However, due to dependencies on other service images, we cannot guarantee that schema migrations, seed.sql, and generated types will always work for the same CLI major version. If you need such guarantees, we encourage you to pin a specific version of CLI in package.json.
+- **Desarrollador:** Bastián Berríos
+- **Email:** bastianberriosalarcon@gmail.com
+- **GitHub:** @BastianBerriosalarcon
 
-## Developing
+---
 
-To run from source:
+## 🎯 Estado Actual: PRODUCCIÓN ACTIVA
 
-```sh
-# Go >= 1.22
-go run . help
-```
+**El sistema está funcionando correctamente en Google Cloud Run**
+- n8n: ✅ Activo (https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/)
+- Supabase PostgreSQL: ✅ Activo (Schema: n8n_prod)
+- Sistema RAG: ✅ Configurado con workflows de procesamiento de conocimiento
+- Multitenant: ✅ Funcionando
+- Nodos Personalizados: ✅ Refactorizados con abstracciones
+- Integración MCP: ✅ Supabase y N8N conectados
+
+**Última verificación:** 23 de julio, 2025 - **Workflows RAG e integración MCP completados**
