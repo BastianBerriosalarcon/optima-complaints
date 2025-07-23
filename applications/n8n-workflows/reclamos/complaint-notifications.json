@@ -1,0 +1,297 @@
+{
+  "name": "Complaint Notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/complaint/notifications",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Notifications Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "complaint-notifications"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "notification_targets",
+        "options": {}
+      },
+      "id": "split-notification-targets",
+      "name": "Split Notification Targets",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "/*** COMPLAINT NOTIFICATIONS - SRP: Solo notificaciones personalizadas por rol ***/\nconst notificationData = $('Notifications Trigger').first().json;\nconst currentTarget = $input.first().json;\n\nconst complaintData = notificationData.complaint_data;\nconst aiAnalysis = notificationData.ai_analysis;\nconst tenantConfig = notificationData.tenant_config;\nconst isBlackAlert = notificationData.is_black_alert;\n\n// Personalizar notificación por rol (siguiendo patrón de encuestas)\nlet emailSubject, emailContent, priority;\n\nswitch (currentTarget.role) {\n  case 'jefe_servicio':\n    emailSubject = `${isBlackAlert ? '🚨 BLACK ALERT - ' : ''}📋 Nuevo Reclamo ${complaintData.urgencia === 'alta' ? 'URGENTE' : ''} - ID: ${notificationData.complaint_id}`;\n    priority = complaintData.urgencia === 'alta' ? 'urgent' : 'high';\n    emailContent = `\n      <h2>📋 Nuevo Reclamo Asignado</h2>\n      ${isBlackAlert ? `\n      <div style=\"background: #fee2e2; border: 2px solid #dc2626; padding: 15px; border-radius: 8px; margin: 15px 0;\">\n        <h3 style=\"color: #dc2626;\">🚨 BLACK ALERT - LEY DEL CONSUMIDOR</h3>\n        <p><strong>Este reclamo requiere atención inmediata por posible aplicación de ley del consumidor</strong></p>\n      </div>\n      ` : ''}\n      <div style=\"background: #dbeafe; padding: 15px; border-radius: 8px; margin: 15px 0;\">\n        <h3>👨‍💼 Como Jefe de Servicio, usted supervisa la resolución de este reclamo</h3>\n      </div>\n    `;\n    break;\n    \n  case 'asesor_servicio':\n    emailSubject = `${isBlackAlert ? '🚨 BLACK ALERT - ' : ''}📝 Reclamo Asignado para Gestión - ID: ${notificationData.complaint_id}`;\n    priority = 'high';\n    emailContent = `\n      <h2>📝 Reclamo Asignado</h2>\n      ${isBlackAlert ? `\n      <div style=\"background: #fee2e2; border: 2px solid #dc2626; padding: 15px; border-radius: 8px; margin: 15px 0;\">\n        <h3 style=\"color: #dc2626;\">🚨 BLACK ALERT - LEY DEL CONSUMIDOR</h3>\n        <p><strong>ATENCIÓN: Este reclamo tiene prioridad legal máxima</strong></p>\n      </div>\n      ` : ''}\n      <div style=\"background: #ecfdf5; padding: 15px; border-radius: 8px; margin: 15px 0;\">\n        <h3>👨‍🔧 Como Asesor de Servicio, usted es el responsable directo de este reclamo</h3>\n      </div>\n    `;\n    break;\n    \n  case 'encargado_calidad':\n    emailSubject = `${isBlackAlert ? '🚨 BLACK ALERT - ' : ''}📊 Reclamo para Seguimiento de Calidad - ID: ${notificationData.complaint_id}`;\n    priority = isBlackAlert ? 'urgent' : 'normal';\n    emailContent = `\n      <h2>📊 Seguimiento de Calidad</h2>\n      ${isBlackAlert ? `\n      <div style=\"background: #fee2e2; border: 2px solid #dc2626; padding: 15px; border-radius: 8px; margin: 15px 0;\">\n        <h3 style=\"color: #dc2626;\">🚨 BLACK ALERT - LEY DEL CONSUMIDOR</h3>\n        <p><strong>Caso crítico para análisis de calidad y métricas</strong></p>\n      </div>\n      ` : ''}\n      <div style=\"background: #f0f9ff; padding: 15px; border-radius: 8px; margin: 15px 0;\">\n        <h3>📈 Como Encargado de Calidad, monitoree este reclamo para métricas y mejoras</h3>\n      </div>\n    `;\n    break;\n    \n  default:\n    emailSubject = `${isBlackAlert ? '🚨 BLACK ALERT - ' : ''}📋 Nuevo Reclamo - ID: ${notificationData.complaint_id}`;\n    priority = 'normal';\n    emailContent = `\n      <h2>📋 Nuevo Reclamo</h2>\n      <div style=\"background: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0;\">\n        <h3>📋 Reclamo asignado para su conocimiento</h3>\n      </div>\n    `;\n}\n\n// Contenido común del email (siguiendo patrón de encuestas)\nconst commonContent = `\n  ${emailContent}\n  \n  <div style=\"background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n    <h3>👤 Información del Cliente</h3>\n    <p><strong>Nombre:</strong> ${complaintData.cliente_nombre}</p>\n    <p><strong>Teléfono:</strong> ${complaintData.cliente_telefono}</p>\n    <p><strong>Email:</strong> ${complaintData.cliente_email || 'No proporcionado'}</p>\n    <p><strong>Canal:</strong> ${complaintData.canal_origen}</p>\n    ${complaintData.vehiculo_patente ? `<p><strong>Vehículo:</strong> ${complaintData.vehiculo_patente}</p>` : ''}\n  </div>\n  \n  <div style=\"background: #fffbeb; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n    <h3>🤖 Análisis Automático IA</h3>\n    <p><strong>Tipo:</strong> ${complaintData.tipo_reclamo}</p>\n    <p><strong>Categoría:</strong> ${complaintData.categoria}</p>\n    <p><strong>Urgencia:</strong> ${complaintData.urgencia}</p>\n    <p><strong>Sucursal:</strong> ${complaintData.sucursal}</p>\n    ${aiAnalysis.analisis?.resumen_problema ? `<p><strong>Resumen:</strong> ${aiAnalysis.analisis.resumen_problema}</p>` : ''}\n    ${notificationData.processing_metadata?.used_rag ? '<p>✅ <em>Análisis enriquecido con base de conocimiento específica</em></p>' : ''}\n  </div>\n  \n  <div style=\"background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n    <h3>📱 Detalle del Reclamo</h3>\n    <p style=\"font-style: italic; background: white; padding: 15px; border-left: 4px solid #2563eb;\">\n      ${complaintData.detalle}\n    </p>\n  </div>\n  \n  ${aiAnalysis.sugerencias_resolucion ? `\n  <div style=\"background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n    <h3>💡 Sugerencias de Resolución IA</h3>\n    <ul>\n    ${aiAnalysis.sugerencias_resolucion.map(sug => `\n      <li><strong>${sug.accion}</strong> - ${sug.responsable} (${sug.plazo}) - Prioridad: ${sug.prioridad}</li>\n    `).join('')}\n    </ul>\n  </div>\n  ` : ''}\n  \n  ${aiAnalysis.referencias_politicas && aiAnalysis.referencias_politicas.length > 0 ? `\n  <div style=\"background: #ecfdf5; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n    <h3>📚 Referencias de Políticas Aplicables</h3>\n    <ul>\n    ${aiAnalysis.referencias_politicas.map(ref => `<li>${ref}</li>`).join('')}\n    </ul>\n  </div>\n  ` : ''}\n  \n  <p style=\"text-align: center; margin-top: 30px;\">\n    <a href=\"${tenantConfig.dashboard_url || 'https://app.optimacx.com'}/reclamos/${notificationData.complaint_id}\" \n       style=\"background: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-size: 16px;\">\n       Ver Reclamo en Plataforma\n    </a>\n  </p>\n  \n  <div style=\"background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center;\">\n    <p style=\"margin: 0; font-size: 12px; color: #6b7280;\">\n      Sistema Óptima-CX - Notificación Automática | ${new Date().toLocaleString('es-CL')}\n    </p>\n  </div>\n`;\n\nreturn {\n  to: currentTarget.user.email,\n  subject: emailSubject,\n  html: commonContent,\n  priority: priority,\n  recipient_name: currentTarget.user.nombre,\n  recipient_role: currentTarget.role,\n  tenant_id: complaintData.concesionario_id,\n  complaint_id: notificationData.complaint_id,\n  is_black_alert: isBlackAlert\n};"
+      },
+      "id": "prepare-role-notification",
+      "name": "Prepare Role Notification",  
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email",
+        "headers": {
+          "parameters": [
+            {
+              "name": "Content-Type", 
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.N8N_WEBHOOK_AUTH_TOKEN }}"
+            }
+          ]
+        },
+        "body": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "name": "html",
+              "value": "={{ $json.html }}"
+            },
+            {
+              "name": "priority",
+              "value": "={{ $json.priority }}"
+            },
+            {
+              "name": "tenant_id",
+              "value": "={{ $json.tenant_id }}"
+            },
+            {
+              "name": "notification_type",
+              "value": "complaint_assignment"
+            }
+          ]
+        }
+      },
+      "id": "send-role-notification",
+      "name": "Send Role Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "id": "rate-limit-delay",
+      "name": "Rate Limit Delay",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar reporte de notificaciones enviadas\nconst notificationResults = $input.all();\nconst originalData = $('Notifications Trigger').first().json;\n\n// Contar notificaciones exitosas por rol\nconst successfulNotifications = notificationResults.filter(result => \n  result.json?.message_id || result.json?.status === 'sent'\n);\nconst failedNotifications = notificationResults.length - successfulNotifications.length;\n\n// Breakdown por rol\nconst notificationsByRole = {};\nnotificationResults.forEach(result => {\n  const role = result.json?.recipient_role || 'unknown';\n  if (!notificationsByRole[role]) {\n    notificationsByRole[role] = { sent: 0, failed: 0 };\n  }\n  if (result.json?.message_id || result.json?.status === 'sent') {\n    notificationsByRole[role].sent++;\n  } else {\n    notificationsByRole[role].failed++;\n  }\n});\n\nconst notificationReport = {\n  complaint_id: originalData.complaint_id,\n  tenant_id: originalData.complaint_data.concesionario_id,\n  notification_type: 'complaint_assignment',\n  \n  // Estadísticas generales\n  notification_stats: {\n    total_targets: originalData.notification_targets.length,\n    successful_sends: successfulNotifications.length,\n    failed_sends: failedNotifications,\n    success_rate: Math.round((successfulNotifications.length / notificationResults.length) * 100)\n  },\n  \n  // Breakdown por rol  \n  by_role: notificationsByRole,\n  \n  // Metadatos\n  complaint_urgency: originalData.complaint_data.urgencia,\n  is_black_alert: originalData.is_black_alert,\n  completed_at: new Date().toISOString(),\n  status: 'completed'\n};\n\nreturn notificationReport;"
+      },
+      "id": "generate-notification-report",
+      "name": "Generate Notification Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/complaint_notifications_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "body": {
+          "parameters": [
+            {
+              "name": "complaint_id",
+              "value": "={{ $json.complaint_id }}"
+            },
+            {
+              "name": "concesionario_id",
+              "value": "={{ $json.tenant_id }}"
+            },
+            {
+              "name": "notification_stats",
+              "value": "={{ JSON.stringify($json.notification_stats) }}"
+            },
+            {
+              "name": "by_role_breakdown",
+              "value": "={{ JSON.stringify($json.by_role) }}"
+            },
+            {
+              "name": "is_black_alert",
+              "value": "={{ $json.is_black_alert }}"
+            },
+            {
+              "name": "urgency_level",
+              "value": "={{ $json.complaint_urgency }}"
+            },
+            {
+              "name": "completed_at",
+              "value": "={{ $json.completed_at }}"
+            }
+          ]
+        }
+      },
+      "id": "log-notifications",
+      "name": "Log Notifications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Notificaciones de reclamo enviadas correctamente\",\n  \"notification_data\": {\n    \"complaint_id\": \"{{ $('Generate Notification Report').first().json.complaint_id }}\",\n    \"notifications_sent\": {{ $('Generate Notification Report').first().json.notification_stats.successful_sends }},\n    \"total_targets\": {{ $('Generate Notification Report').first().json.notification_stats.total_targets }},\n    \"success_rate\": \"{{ $('Generate Notification Report').first().json.notification_stats.success_rate }}%\",\n    \"by_role\": {{ JSON.stringify($('Generate Notification Report').first().json.by_role) }}\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Notifications Trigger": {
+      "main": [
+        [
+          {
+            "node": "Split Notification Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Notification Targets": {
+      "main": [
+        [
+          {
+            "node": "Prepare Role Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Role Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Role Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Role Notification": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Delay": {
+      "main": [
+        [
+          {
+            "node": "Generate Notification Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Notification Report": {
+      "main": [
+        [
+          {
+            "node": "Log Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Notifications": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "srp",
+      "name": "srp"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "reclamos",
+      "name": "reclamos"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "notifications",
+      "name": "notifications"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "complaint-notifications",
+  "versionId": "1.0.0"
+}

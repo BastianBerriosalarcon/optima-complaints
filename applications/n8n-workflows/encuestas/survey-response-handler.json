@@ -1,0 +1,133 @@
+{
+  "name": "Survey - Response Handler",
+  "description": "Centraliza el registro de encuestas completadas y dispara notificaciones por baja calificación.",
+  "tags": ["survey", "handler", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "encuestas",
+        "columns": "concesionario_id, sucursal_id, cliente_nombre, cliente_rut, cliente_telefono, recomendacion, satisfaccion, lavado, asesor, comentario, origen, estado, fecha_creacion, average_score",
+        "additionalFields": {
+          "values": "={{ [$json.concesionario_id, $json.sucursal_id, $json.cliente_nombre, $json.cliente_rut, $json.cliente_telefono, $json.recomendacion, $json.satisfaccion, $json.lavado, $json.asesor, $json.comentario, $json.origen, $json.estado, $json.fecha_creacion, $json.average_score] }}"
+        }
+      },
+      "id": "register-survey-in-db",
+      "name": "Registrar Encuesta en DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.average_score }}",
+              "operation": "lessThanOrEqual",
+              "value2": 8
+            }
+          ]
+        }
+      },
+      "id": "check-low-score",
+      "name": "¿Calificación Baja (1-8)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "survey-low-score-notifier",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-low-score-notification",
+      "name": "Disparar Notificación Baja Calificación",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Encuesta procesada y registrada exitosamente.\",\n  \"survey_id\": \"={{ $('Registrar Encuesta en DB').first().json.id }}\",\n  \"average_score\": {{ $('Trigger del Workflow').first().json.average_score }}\n}"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1000, 300]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "Registrar Encuesta en DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Encuesta en DB": {
+      "main": [
+        [
+          {
+            "node": "¿Calificación Baja (1-8)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Calificación Baja (1-8)?": {
+      "main": [
+        [
+          {
+            "node": "Disparar Notificación Baja Calificación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparar Notificación Baja Calificación": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

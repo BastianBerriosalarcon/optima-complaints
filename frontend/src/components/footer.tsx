@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Twitter, Linkedin, Github } from "lucide-react";
 
 export default function Footer() {
@@ -20,27 +21,6 @@ export default function Footer() {
                   Características
                 </Link>
               </li>
-              <li>
-                <Link
-                  href="#pricing"
-                  className="text-gray-600 hover:text-blue-600"
-                >
-                  Precios
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/dashboard"
-                  className="text-gray-600 hover:text-blue-600"
-                >
-                  Panel de Control
-                </Link>
-              </li>
-              <li>
-                <Link href="#" className="text-gray-600 hover:text-blue-600">
-                  API
-                </Link>
-              </li>
             </ul>
           </div>
 
@@ -58,16 +38,6 @@ export default function Footer() {
                   Blog
                 </Link>
               </li>
-              <li>
-                <Link href="#" className="text-gray-600 hover:text-blue-600">
-                  Carreras
-                </Link>
-              </li>
-              <li>
-                <Link href="#" className="text-gray-600 hover:text-blue-600">
-                  Prensa
-                </Link>
-              </li>
             </ul>
           </div>
 
@@ -83,16 +53,6 @@ export default function Footer() {
               <li>
                 <Link href="#" className="text-gray-600 hover:text-blue-600">
                   Centro de Ayuda
-                </Link>
-              </li>
-              <li>
-                <Link href="#" className="text-gray-600 hover:text-blue-600">
-                  Comunidad
-                </Link>
-              </li>
-              <li>
-                <Link href="#" className="text-gray-600 hover:text-blue-600">
-                  Estado
                 </Link>
               </li>
             </ul>
@@ -117,18 +77,22 @@ export default function Footer() {
                   Seguridad
                 </Link>
               </li>
-              <li>
-                <Link href="#" className="text-gray-600 hover:text-blue-600">
-                  Cookies
-                </Link>
-              </li>
             </ul>
           </div>
         </div>
 
         <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-200">
-          <div className="text-gray-600 mb-4 md:mb-0">
-            © {currentYear} Óptima-CX. Todos los derechos reservados.
+          <div className="flex items-center gap-3 mb-4 md:mb-0">
+            <Image 
+              src="/images/optimacx-logo.png" 
+              alt="Óptima-CX Logo" 
+              width={24} 
+              height={24}
+              className="object-contain"
+            />
+            <div className="text-gray-600">
+              © {currentYear} Óptima-CX. Todos los derechos reservados.
+            </div>
           </div>
 
           <div className="flex space-x-6">
@@ -139,10 +103,6 @@ export default function Footer() {
             <a href="#" className="text-gray-400 hover:text-gray-500">
               <span className="sr-only">LinkedIn</span>
               <Linkedin className="h-6 w-6" />
-            </a>
-            <a href="#" className="text-gray-400 hover:text-gray-500">
-              <span className="sr-only">GitHub</span>
-              <Github className="h-6 w-6" />
             </a>
           </div>
         </div>

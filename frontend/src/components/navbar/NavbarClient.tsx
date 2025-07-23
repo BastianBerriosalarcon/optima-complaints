@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { Button } from "../ui/button";
+import { Logo } from "../ui/logo";
 import UserProfile from "../user-profile";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -13,15 +13,8 @@ export default function NavbarClient() {
     return (
       <nav className="w-full border-b border-gray-200 bg-white py-2">
         <div className="container mx-auto px-4 flex justify-between items-center">
-          <Link href="/" prefetch className="flex items-center gap-3">
-            <Image 
-              src="/images/optimacx-logo.png" 
-              alt="OptimaCX Logo" 
-              width={40} 
-              height={40}
-              className="object-contain"
-            />
-            <span className="text-xl font-bold text-gray-900">Óptima-CX</span>
+          <Link href="/" prefetch>
+            <Logo width={40} height={40} showText textClassName="text-xl font-bold text-gray-900" />
           </Link>
           <div className="flex gap-4 items-center">
             <div className="w-20 h-8 bg-gray-200 animate-pulse rounded"></div>
@@ -34,15 +27,8 @@ export default function NavbarClient() {
   return (
     <nav className="w-full border-b border-gray-200 bg-white py-2">
       <div className="container mx-auto px-4 flex justify-between items-center">
-        <Link href="/" prefetch className="flex items-center gap-3">
-          <Image 
-            src="/images/optimacx-logo.png" 
-            alt="OptimaCX Logo" 
-            width={40} 
-            height={40}
-            className="object-contain"
-          />
-          <span className="text-xl font-bold text-gray-900">Óptima-CX</span>
+        <Link href="/" prefetch>
+          <Logo width={40} height={40} showText textClassName="text-xl font-bold text-gray-900" />
         </Link>
         <div className="flex gap-4 items-center">
           {user ? (

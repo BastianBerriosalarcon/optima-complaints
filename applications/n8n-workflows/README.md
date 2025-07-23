@@ -1,54 +1,57 @@
-# OptimaCX Platform - Workflows Modularizados
+# 🚀 Óptima-CX N8N Workflows
 
-## Transformación de Arquitectura Monolítica a SOLID
+## 📁 Arquitectura Modular por Módulos de Negocio
 
-### ❌ **Antes - Workflow Monolítico (642 líneas)**
 ```
-01_lead_whatsapp_capture.json
-├── Validación webhook
-├── Extracción de datos  
-├── Lookup de tenant
-├── Análisis con IA
-├── Creación/actualización de lead
-├── Asignación de asesor
-├── Envío de respuesta
-└── Logging y auditoría
+applications/n8n-workflows/
+├── 📋 README.md
+├── 🎯 leads/
+│   ├── lead-analysis-ai.json          # Análisis IA con Gemini
+│   ├── lead-assignment.json           # Asignación inteligente de asesores
+│   ├── lead-processor-whatsapp.json   # Procesador principal WhatsApp
+│   └── lead-scoring-ai.json           # Scoring automático de calidad
+│
+├── 📊 encuestas/
+│   ├── survey-qr-processor.json       # [Pendiente] Procesador encuestas QR
+│   ├── survey-whatsapp-campaign.json  # [Pendiente] Campañas WhatsApp
+│   ├── survey-call-center-assignment.json # [Pendiente] Asignación contact center
+│   ├── survey-alert-low-scores.json   # [Pendiente] Alertas notas bajas
+│   └── survey-excel-import.json       # [Pendiente] Importación masiva Excel
+│
+├── 🎫 reclamos/
+│   ├── complaint-rag-processor.json   # [Pendiente] Procesador RAG + IA
+│   ├── complaint-auto-assignment.json # [Pendiente] Asignación automática
+│   ├── complaint-black-alert.json     # [Pendiente] Alertas black alert
+│   ├── complaint-knowledge-ingestion.json # [Pendiente] Ingesta RAG
+│   └── complaint-notifications.json   # [Pendiente] Notificaciones
+│
+├── 🚀 campañas/
+│   ├── campaign-whatsapp-bulk.json    # [Pendiente] Envíos masivos WhatsApp
+│   ├── campaign-email-automation.json # [Pendiente] Automatización email
+│   ├── campaign-followup-sequences.json # [Pendiente] Secuencias seguimiento
+│   └── campaign-analytics.json        # [Pendiente] Analytics campañas
+│
+├── 🔧 utils/
+│   ├── tenant-config-loader.json      # Cargador configuración por tenant
+│   └── whatsapp-message-validator.json # Validador mensajes WhatsApp
+│
+└── 📋 templates/
+    ├── tenant-onboarding-template.json    # [Pendiente] Template onboarding
+    ├── multi-tenant-base-template.json    # [Pendiente] Template base
+    └── rag-pipeline-template.json         # [Pendiente] Template RAG
 ```
 
-### ✅ **Después - Workflows Modulares (SOLID)**
+## 🏗️ Principios de Arquitectura Implementados
 
-#### **1. WhatsApp Message Validation** (`01_whatsapp_message_validation.json`)
-- **SRP**: Solo validación y parseo de mensajes WhatsApp
-- **Responsabilidades**: 
-  - Validar estructura del webhook
-  - Parsear datos del mensaje
-  - Normalizar formato de salida
-- **Salida**: Mensaje validado y estructurado
+### **🎯 Módulos de Negocio Segregados**
+- ✅ **Leads**: Gestión completa de leads de ventas WhatsApp
+- 📊 **Encuestas**: Post-venta multicanal (QR, WhatsApp, Llamadas)
+- 🎫 **Reclamos**: RAG + IA para clasificación y respuesta automática
+- 🚀 **Campañas**: Automatización marketing y followup
 
-#### **2. Tenant Lookup** (`02_tenant_lookup.json`)
-- **SRP**: Solo identificación y configuración de tenant
-- **Responsabilidades**:
-  - Mapear phone_number_id a tenant_id
-  - Obtener configuración del tenant
-  - Preparar contexto para análisis
-- **Salida**: Configuración completa del tenant
-
-#### **3. Lead Analysis** (`03_lead_analysis.json`)
-- **SRP**: Solo análisis con IA y extracción de insights
-- **Responsabilidades**:
-  - Construir contexto para IA
-  - Analizar mensaje con IA
-  - Procesar y validar respuesta
-  - Determinar siguiente acción
-- **Salida**: Análisis estructurado del lead
-
-#### **4. Lead Management** (`04_lead_management.json`)
-- **SRP**: Solo persistencia y gestión de datos del lead
-- **Responsabilidades**:
-  - Crear o actualizar lead en BD
-  - Registrar auditoría
-  - Determinar flujo siguiente
-- **Salida**: Confirmación de operación y próximo paso
+### **🔧 Componentes Utilitarios Reutilizables**
+- ✅ **Utils**: Funciones comunes multi-tenant
+- 📋 **Templates**: Plantillas para nuevos tenants
 
 ## Principios SOLID Aplicados
 

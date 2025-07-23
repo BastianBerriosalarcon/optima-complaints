@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowUpRight, Check, Car } from "lucide-react";
+import Image from "next/image";
+import { ArrowUpRight, Check } from "lucide-react";
 
 export default function Hero() {
   return (
@@ -15,11 +16,15 @@ export default function Hero() {
       <div className="relative pt-24 pb-32 sm:pt-32 sm:pb-40">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-5xl mx-auto">
-            <div className="flex items-center justify-center gap-3 mb-6">
-              <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center">
-                <Car className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-blue-600 font-semibold text-lg">
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <Image 
+                src="/images/optimacx-logo.png" 
+                alt="Óptima-CX Logo" 
+                width={72} 
+                height={72}
+                className="object-contain"
+              />
+              <span className="text-blue-600 font-semibold text-3xl">
                 Óptima-CX
               </span>
             </div>
@@ -29,11 +34,11 @@ export default function Hero() {
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-blue-800">
                 Experiencia
               </span>{" "}
-              de sus Clientes Automotrices
+              de sus Clientes
             </h1>
 
             <p className="text-xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed">
-              La plataforma que permite a concesionarios gestionar encuestas,
+              La plataforma que permite a concesionarios gestionar encuestas, leads,
               reclamos y mejorar la satisfacción del cliente con análisis NPS en
               tiempo real.
             </p>
@@ -52,10 +57,10 @@ export default function Hero() {
               <div className="flex flex-col items-center gap-2">
                 <Check className="w-6 h-6 text-green-500" />
                 <span className="text-gray-600 font-medium">
-                  30 días gratis
+                  15 días gratis
                 </span>
                 <span className="text-sm text-gray-500">
-                  Sin tarjeta de crédito
+                  
                 </span>
               </div>
               <div className="flex flex-col items-center gap-2">

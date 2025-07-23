@@ -1,0 +1,117 @@
+{
+  "name": "Survey - Notificador Baja Calificación",
+  "description": "Envía notificaciones por email a los responsables cuando una encuesta tiene baja calificación.",
+  "tags": ["survey", "notification", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, nombre, email FROM usuarios WHERE concesionario_id = $1 AND rol IN ('Jefe de Servicio', 'Asesor de Servicio', 'Encargado de Calidad') AND activo = true",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.concesionario_id] }}"
+        }
+      },
+      "id": "get-responsible-users",
+      "name": "Obtener Usuarios Responsables",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepara el email de notificación para cada usuario responsable\nconst surveyData = $('Trigger del Workflow').first().json;\nconst responsibleUsers = $('Obtener Usuarios Responsables').first().json;\n\nif (!responsibleUsers || responsibleUsers.length === 0) {\n  console.log('No se encontraron usuarios responsables para notificar.');\n  return null; // Detiene el flujo si no hay usuarios\n}\n\nconst subject = `ALERTA: Baja Calificación en Encuesta de ${surveyData.cliente_nombre || surveyData.cliente_telefono} (${surveyData.origen})`;\n\nconst emailBody = `\n<h2>🚨 Alerta de Baja Calificación en Encuesta</h2>\n\n<p>Se ha recibido una encuesta con baja calificación (promedio ${surveyData.average_score.toFixed(1)}/10) para el concesionario.</p>\n\n<h3>📋 Detalles de la Encuesta:</h3>\n<ul>\n  <li><strong>Cliente:</strong> ${surveyData.cliente_nombre || surveyData.cliente_telefono}</li>\n  <li><strong>Teléfono:</strong> ${surveyData.cliente_telefono}</li>\n  <li><strong>Origen:</strong> ${surveyData.origen}</li>\n  <li><strong>Fecha:</strong> ${new Date(surveyData.fecha_creacion).toLocaleString('es-CL')}</li>\n</ul>\n\n<h4>Calificaciones:</h4>\n<ul>\n  <li><strong>Recomendación:</strong> ${surveyData.recomendacion}/10</li>\n  <li><strong>Satisfacción General:</strong> ${surveyData.satisfaccion}/10</li>\n  <li><strong>Servicio de Lavado:</strong> ${surveyData.lavado}/10</li>\n  <li><strong>Atención Asesor:</strong> ${surveyData.asesor}/10</li>\n</ul>\n\n${surveyData.comentario ? `<p><strong>Comentarios Adicionales:</strong> ${surveyData.comentario}</p>` : ''}\n\n<p>Por favor, revise esta encuesta y tome las acciones correctivas necesarias.</p>\n\n---\n<p>Sistema Óptima-CX</p>\n`;\n\n// Generar un item por cada usuario para enviar emails individuales\nreturn responsibleUsers.map(user => ({\n  to: user.email,\n  subject: subject,\n  html: emailBody,\n  tenant_id: surveyData.concesionario_id,\n  survey_id: surveyData.id // Si el ID de la encuesta está disponible\n}));"
+      },
+      "id": "prepare-email-notification",
+      "name": "Preparar Email de Notificación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email", // URL genérica para enviar email
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "name": "html",
+              "value": "={{ $json.html }}"
+            },
+            {
+              "name": "tenant_id",
+              "value": "={{ $json.tenant_id }}"
+            },
+            {
+              "name": "survey_id",
+              "value": "={{ $json.survey_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-email-notification",
+      "name": "Enviar Email de Notificación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "Obtener Usuarios Responsables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Usuarios Responsables": {
+      "main": [
+        [
+          {
+            "node": "Preparar Email de Notificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Email de Notificación": {
+      "main": [
+        [
+          {
+            "node": "Enviar Email de Notificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

@@ -1,0 +1,214 @@
+{
+  "name": "Lead - Asignación y Notificaciones",
+  "description": "Asigna un lead a un asesor, y notifica al asesor, al jefe de ventas y al cliente.",
+  "tags": ["assignment", "notification", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, nombre, email, especialidad, carga_actual FROM usuarios WHERE concesionario_id = $1 AND rol = 'asesor_ventas' AND activo = true",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.tenant_config.tenant_id] }}"
+        }
+      },
+      "id": "get-available-advisors",
+      "name": "Obtener Asesores Disponibles",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [420, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, nombre, email FROM usuarios WHERE concesionario_id = $1 AND rol = 'jefe_de_ventas' AND activo = true LIMIT 1",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.tenant_config.tenant_id] }}"
+        }
+      },
+      "id": "get-sales-manager",
+      "name": "Obtener Jefe de Ventas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [420, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Algoritmo de asignación y preparación de datos\nconst leadData = $('Trigger del Workflow').first().json;\nconst advisors = $('Obtener Asesores Disponibles').first().json;\nconst salesManager = $('Obtener Jefe de Ventas').first().json[0];\n\nif (!advisors || advisors.length === 0) {\n  throw new Error(`No hay asesores disponibles para el concesionario: ${leadData.tenant_config.tenant_id}`);\n}\n\n// Lógica de asignación (Round Robin basado en carga actual)\nadvisors.sort((a, b) => (a.carga_actual || 0) - (b.carga_actual || 0));\nconst selectedAdvisor = advisors[0];\n\n// Preparar datos para las notificaciones\nconst notificationPayload = {\n  lead_data: leadData,\n  assigned_advisor: selectedAdvisor,\n  sales_manager: salesManager, // Puede ser undefined si no se encuentra\n  tenant_config: leadData.tenant_config\n};\n\nreturn notificationPayload;"
+      },
+      "id": "assign-advisor-and-prep-data",
+      "name": "Asignar Asesor y Preparar Datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar notificación para el ASESOR\nconst data = $input.first().json;\nconst lead = data.lead_data;\nconst advisor = data.assigned_advisor;\n\nconst subject = `Nuevo Lead Asignado: ${lead.original_message.contact_name || lead.original_message.from}`\nconst body = `Hola ${advisor.nombre},<br><br>Se te ha asignado un nuevo lead:<br><b>Cliente:</b> ${lead.original_message.contact_name || lead.original_message.from}<br><b>Teléfono:</b> ${lead.original_message.from}<br><b>Score:</b> ${lead.lead_score}/100<br><b>Intención:</b> ${lead.intencion}<br><b>Mensaje:</b> \"${lead.original_message.body}\" <br><br>Por favor, haz seguimiento a la brevedad.";\n\nreturn {\n  to: advisor.email,\n  subject: subject,\n  html: body\n};"
+      },
+      "id": "prepare-advisor-notification",
+      "name": "Preparar Email Asesor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar notificación para el JEFE DE VENTAS\nconst data = $input.first().json;\nconst lead = data.lead_data;\nconst advisor = data.assigned_advisor;\nconst manager = data.sales_manager;\n\nif (!manager) {\n  console.log('No se encontró jefe de ventas para notificar.');\n  return null; // Detiene esta rama del flujo\n}\n\nconst subject = `Nuevo Lead para ${data.tenant_config.tenant_name} (Asignado a ${advisor.nombre})`\nconst body = `Hola ${manager.nombre},<br><br>Se ha registrado un nuevo lead y ha sido asignado a <b>${advisor.nombre}</b>.<br><br><b>Cliente:</b> ${lead.original_message.contact_name || lead.original_message.from}<br><b>Score:</b> ${lead.lead_score}/100<br><b>Intención:</b> ${lead.intencion}<br><br>Puedes revisar los detalles en el CRM.";\n\nreturn {\n  to: manager.email,\n  subject: subject,\n  html: body\n};"
+      },
+      "id": "prepare-manager-notification",
+      "name": "Preparar Email Jefe de Ventas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email", // URL genérica para enviar email
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "name": "html",
+              "value": "={{ $json.html }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-advisor-email",
+      "name": "Enviar Email Asesor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1080, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "name": "html",
+              "value": "={{ $json.html }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-manager-email",
+      "name": "Enviar Email Jefe de Ventas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1080, 400]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "Obtener Asesores Disponibles",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Obtener Jefe de Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Asesores Disponibles": {
+      "main": [
+        [
+          {
+            "node": "Asignar Asesor y Preparar Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Jefe de Ventas": {
+      "main": [
+        [
+          {
+            "node": "Asignar Asesor y Preparar Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asignar Asesor y Preparar Datos": {
+      "main": [
+        [
+          {
+            "node": "Preparar Email Asesor",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Preparar Email Jefe de Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Email Asesor": {
+      "main": [
+        [
+          {
+            "node": "Enviar Email Asesor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Email Jefe de Ventas": {
+      "main": [
+        [
+          {
+            "node": "Enviar Email Jefe de Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

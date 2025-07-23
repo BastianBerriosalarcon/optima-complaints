@@ -1,0 +1,247 @@
+{
+  "name": "Tenant - Búsqueda y Configuración con Caché",
+  "description": "Workflow optimizado que identifica un tenant, obtiene su configuración (con caché) y la prepara para el siguiente paso.",
+  "tags": [
+    "tenant",
+    "configuration",
+    "srp",
+    "refactored",
+    "cache"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Cache inteligente para configuraciones de tenant\nconst triggerData = $input.first().json;\nconst phoneNumberId = triggerData.phoneNumberId;\nconst cacheKey = `tenant_config_phone_${phoneNumberId}`;\n\n// Verificar cache en memoria (staticData es un KV store a nivel de workflow)\nconst cacheTimeout = 5 * 60 * 1000; // 5 minutos\nconst now = Date.now();\n\nconst staticData = this.getWorkflowStaticData('global');\nconst cachedData = staticData[cacheKey];\n\nif (cachedData && cachedData.timestamp && (now - cachedData.timestamp) < cacheTimeout) {\n  // Cache hit\n  console.log(`Cache HIT for tenant with phone ID: ${phoneNumberId}`);\n  return {\n    ...triggerData,\n    tenant_config_source: 'cache',\n    tenant_config: cachedData.config\n  };\n} else {\n  // Cache miss\n  console.log(`Cache MISS for tenant with phone ID: ${phoneNumberId}`);\n  return {\n    ...triggerData,\n    tenant_config_source: 'database',\n    cache_key: cacheKey\n  };\n}"
+      },
+      "id": "check-tenant-cache",
+      "name": "Check Tenant Cache",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.tenant_config_source}}",
+              "operation": "equal",
+              "value2": "database"
+            }
+          ]
+        }
+      },
+      "id": "cache-miss-condition",
+      "name": "Cache Miss?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        690,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id as tenant_id, nombre as tenant_name, telefono_principal, configuracion_ai, configuracion_horarios, activo FROM concesionarios WHERE whatsapp_phone_number_id = $1 AND activo = true LIMIT 1",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.phoneNumberId] }}"
+        }
+      },
+      "id": "load-tenant-config-db",
+      "name": "Load Config from DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        910,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Actualizar cache con nueva configuración\nconst cacheData = $('Check Tenant Cache').first().json;\nconst dbResponse = $input.first().json;\nconst cacheKey = cacheData.cache_key;\n\nif (!dbResponse || dbResponse.length === 0) {\n  throw new Error(`Tenant configuration not found for phone ID: ${cacheData.phoneNumberId}`);\n}\n\nconst config = dbResponse[0];\n\n// Guardar en cache\nconst staticData = this.getWorkflowStaticData('global');\nstaticData[cacheKey] = {\n  config: config,\n  timestamp: Date.now()\n};\n\nconsole.log(`Cache UPDATED for tenant with phone ID: ${cacheData.phoneNumberId}`);\n\nreturn {\n  ...cacheData,\n  tenant_config: config\n};"
+      },
+      "id": "update-cache",
+      "name": "Update Cache",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1130,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "mergeByIndex"
+      },
+      "id": "merge-config-paths",
+      "name": "Merge Config Paths",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [
+        1350,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en estructurar la configuración del tenant\n// Principio SRP: Una sola responsabilidad - preparar configuración\n\nconst mergedData = $input.first().json;\nconst tenantData = mergedData.tenant_config;\n\n// Estructura completa para el siguiente workflow\nconst tenantConfig = {\n  // Identificación del tenant\n  tenant_id: tenantData.tenant_id,\n  tenant_name: tenantData.tenant_name,\n  tenant_phone: tenantData.telefono_principal,\n  tenant_active: tenantData.activo,\n  \n  // Configuración de IA\n  ai_config: tenantData.configuracion_ai || {\n    modelo_ia: 'gemini-2.5-pro',\n    temperatura: 0.7,\n    max_tokens: 1000,\n    umbral_intencion: 0.7\n  },\n  \n  // Horarios de negocio\n  business_hours: tenantData.configuracion_horarios || {\n    lunes_a_viernes: { inicio: '09:00', fin: '18:00' },\n    sabados: { inicio: '09:00', fin: '14:00' },\n    domingos: { activo: false },\n    timezone: 'America/Santiago'\n  },\n  \n  // Mensaje original para análisis\n  validated_message: mergedData.validatedMessage,\n  \n  // Metadatos de procesamiento\n  processing: {\n    tenant_lookup_at: new Date().toISOString(),\n    config_retrieved_at: new Date().toISOString(),\n    config_source: mergedData.tenant_config_source,\n    next_step: 'lead_analysis'\n  }\n};\n\nconsole.log('Configuración del tenant preparada:', {\n  tenantId: tenantConfig.tenant_id,\n  tenantName: tenantConfig.tenant_name,\n  source: tenantConfig.processing.config_source\n});\n\nreturn [{ json: tenantConfig }];"
+      },
+      "id": "prepare-tenant-config",
+      "name": "Preparar Configuración",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        1570,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "lead-analysis-workflow",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-lead-analysis",
+      "name": "Iniciar Análisis de Lead",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [
+        1790,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Usar configuración desde cache\nconst cacheData = $input.first().json;\n\nreturn {\n  ...cacheData\n};"
+      },
+      "id": "use-cached-config",
+      "name": "Use Cached Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        910,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "Check Tenant Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Tenant Cache": {
+      "main": [
+        [
+          {
+            "node": "Cache Miss?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cache Miss?": {
+      "main": [
+        [
+          {
+            "node": "Load Config from DB",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Cached Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Config from DB": {
+      "main": [
+        [
+          {
+            "node": "Update Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Cache": {
+      "main": [
+        [
+          {
+            "node": "Merge Config Paths",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Config Paths": {
+      "main": [
+        [
+          {
+            "node": "Preparar Configuración",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Configuración": {
+      "main": [
+        [
+          {
+            "node": "Iniciar Análisis de Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Cached Config": {
+      "main": [
+        [
+          {
+            "node": "Merge Config Paths",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

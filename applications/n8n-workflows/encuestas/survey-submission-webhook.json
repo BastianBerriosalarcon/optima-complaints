@@ -1,0 +1,87 @@
+{
+  "name": "Survey - Submission Webhook",
+  "description": "Webhook universal para recibir todas las encuestas completadas y pasarlas al manejador de respuestas.",
+  "tags": ["survey", "webhook", "entrypoint"],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/survey/submit",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-survey-submit",
+      "name": "Webhook Survey Submit",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "survey-response-handler",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-response-handler",
+      "name": "Disparar Manejador de Respuestas",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Encuesta recibida y en proceso de registro.\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"Error al recibir la encuesta.\",\n  \"error_details\": \"{{ $json.error?.message || 'Error desconocido' }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error-response",
+      "name": "Respuesta de Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [400, 480]
+    }
+  ],
+  "connections": {
+    "Webhook Survey Submit": {
+      "main": [
+        [
+          {
+            "node": "Disparar Manejador de Respuestas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparar Manejador de Respuestas": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

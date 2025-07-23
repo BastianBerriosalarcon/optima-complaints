@@ -1,0 +1,256 @@
+{
+  "name": "Survey Duplicate Filter",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/survey/duplicate-filter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Duplicate Filter Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "survey-duplicate-filter"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/tenant_config",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            }
+          ]
+        },
+        "qs": {
+          "parameters": [
+            {
+              "name": "concesionario_id",
+              "value": "eq.{{ $json.tenant_id }}"
+            },
+            {
+              "name": "select",
+              "value": "*"
+            }
+          ]
+        }
+      },
+      "id": "load-tenant-config",
+      "name": "Load Tenant Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/encuestas",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            }
+          ]
+        },
+        "qs": {
+          "parameters": [
+            {
+              "name": "concesionario_id",
+              "value": "eq.{{ $('Duplicate Filter Trigger').first().json.tenant_id }}"
+            },
+            {
+              "name": "estado",
+              "value": "in.(completado,enviado)"
+            },
+            {
+              "name": "created_at",
+              "value": "gte.{{ new Date(Date.now() - 48*60*60*1000).toISOString() }}"
+            },
+            {
+              "name": "select",
+              "value": "cliente_telefono,origen,estado"
+            }
+          ]
+        }
+      },
+      "id": "get-recent-surveys",
+      "name": "Get Recent Surveys",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "/*** SURVEY DUPLICATE FILTER - SRP: Solo filtrado de duplicados ***/\nconst originalData = $('Duplicate Filter Trigger').first().json;\nconst tenantConfig = $('Load Tenant Config').first().json[0];\nconst recentSurveys = $('Get Recent Surveys').first().json;\n\n// Crear set de teléfonos que ya respondieron (últimas 48 horas)\n// Incluye QR y WhatsApp para evitar duplicados completos\nconst respondedPhones = new Set(\n  recentSurveys.map(survey => survey.cliente_telefono)\n);\n\n// Filtrar clientes que NO han respondido recientemente\nconst clientsToSurvey = originalData.processed_clients.filter(client => {\n  return !respondedPhones.has(client.telefono);\n});\n\n// Estadísticas del filtrado (siguiendo patrón de workflows existentes)\nconst filteringStats = {\n  total_excel: originalData.total_clients,\n  already_responded: originalData.total_clients - clientsToSurvey.length,\n  to_survey: clientsToSurvey.length,\n  filter_efficiency: Math.round((clientsToSurvey.length / originalData.total_clients) * 100),\n  \n  // Breakdown por origen (QR vs WhatsApp vs Llamada)\n  breakdown_by_origin: {\n    qr: recentSurveys.filter(s => s.origen === 'QR').length,\n    whatsapp: recentSurveys.filter(s => s.origen === 'WhatsApp').length,\n    llamada: recentSurveys.filter(s => s.origen === 'Llamada').length\n  }\n};\n\n// Resultado para siguiente workflow\nreturn {\n  tenant_id: originalData.tenant_id,\n  tenant_config: tenantConfig,\n  clients_to_survey: clientsToSurvey,\n  filtering_stats: filteringStats,\n  upload_metadata: originalData.upload_metadata,\n  \n  // Trigger para siguiente workflow\n  next_workflow: 'survey-whatsapp-sender'\n};"
+      },
+      "id": "filter-duplicates",
+      "name": "Filter Duplicates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.clients_to_survey.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        }
+      },
+      "id": "check-clients-available",
+      "name": "Check Clients Available",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "survey-whatsapp-sender",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-whatsapp-sender",
+      "name": "Trigger WhatsApp Sender",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"no_clients\",\n  \"message\": \"No hay clientes para encuestar. Todos ya respondieron recientemente.\",\n  \"filtering_stats\": {{ JSON.stringify($json.filtering_stats) }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "no-clients-response",
+      "name": "No Clients Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 500]
+    }
+  ],
+  "connections": {
+    "Duplicate Filter Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load Tenant Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Tenant Config": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Surveys",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Surveys": {
+      "main": [
+        [
+          {
+            "node": "Filter Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Duplicates": {
+      "main": [
+        [
+          {
+            "node": "Check Clients Available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Clients Available": {
+      "main": [
+        [
+          {
+            "node": "Trigger WhatsApp Sender",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Clients Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "srp",
+      "name": "srp"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "survey",
+      "name": "survey"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "filter",
+      "name": "filter"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "survey-duplicate-filter",
+  "versionId": "1.0.0"
+}

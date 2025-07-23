@@ -1,0 +1,185 @@
+{
+  "name": "Survey Excel Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/survey/excel-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-excel-upload",
+      "name": "Excel Upload Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "survey-excel-upload"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.tenant_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            },
+            {
+              "leftValue": "={{ $json.excel_data }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        }
+      },
+      "id": "validate-upload",
+      "name": "Validate Upload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "/*** SURVEY EXCEL PROCESSOR - SRP: Solo procesamiento de datos Excel ***/\nconst webhookData = $input.first().json;\nconst tenantId = webhookData.tenant_id;\nconst excelData = webhookData.excel_data;\nconst uploadedBy = webhookData.uploaded_by || 'sistema';\n\n// Validar estructura mínima\nif (!Array.isArray(excelData) || excelData.length === 0) {\n  throw new Error('Datos de Excel inválidos o vacíos');\n}\n\n// Normalizar datos según patrones existentes\nconst processedClients = excelData.map((row, index) => {\n  const cliente = {\n    // Campos base (siguiendo estructura de leads existentes)\n    nombre: row.nombre || row.NOMBRE || row['Nombre Cliente'] || 'Cliente',\n    telefono: (row.telefono || row.TELEFONO || row['Teléfono'] || '').toString().replace(/\\D/g, ''),\n    email: row.email || row.EMAIL || row['Email'] || null,\n    rut: row.rut || row.RUT || row['RUT'] || null,\n    sucursal: row.sucursal || row.SUCURSAL || row['Sucursal'] || 'Principal',\n    \n    // Campos específicos de encuesta\n    fecha_atencion: row.fecha_atencion || row['Fecha Atención'] || new Date().toISOString().split('T')[0],\n    tipo_servicio: row.tipo_servicio || row['Tipo Servicio'] || 'Mantención',\n    asesor_servicio: row.asesor || row.ASESOR || row['Asesor'] || 'No especificado',\n    vehiculo_patente: row.patente || row.PATENTE || row['Patente'] || null,\n    row_number: index + 1\n  };\n  \n  // Validaciones críticas\n  if (!cliente.telefono || cliente.telefono.length < 8) {\n    throw new Error(`Fila ${cliente.row_number}: Teléfono inválido (${cliente.telefono})`);\n  }\n  \n  // Formatear teléfono chileno (siguiendo patrón de leads)\n  if (!cliente.telefono.startsWith('569')) {\n    cliente.telefono = '569' + cliente.telefono.replace(/^9/, '');\n  }\n  \n  return cliente;\n});\n\n// Resultado siguiendo patrón de workflows existentes\nreturn {\n  tenant_id: tenantId,\n  processed_clients: processedClients,\n  total_clients: processedClients.length,\n  upload_metadata: {\n    uploaded_by: uploadedBy,\n    upload_timestamp: new Date().toISOString(),\n    source_file: webhookData.filename || 'excel_upload.xlsx'\n  },\n  // Trigger para siguiente workflow\n  next_workflow: 'survey-duplicate-filter'\n};"
+      },
+      "id": "process-excel-data",
+      "name": "Process Excel Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "survey-duplicate-filter",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-duplicate-filter",
+      "name": "Trigger Duplicate Filter",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Excel procesado correctamente. Iniciando filtrado de duplicados.\",\n  \"data\": {\n    \"total_clients\": {{ $('Process Excel Data').first().json.total_clients }},\n    \"uploaded_by\": \"{{ $('Process Excel Data').first().json.upload_metadata.uploaded_by }}\",\n    \"next_step\": \"duplicate_filtering\"\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"Datos de upload inválidos. Verifique el formato del Excel y tenant_id.\",\n  \"error_details\": {\n    \"tenant_id_present\": {{ !!$json.tenant_id }},\n    \"excel_data_present\": {{ !!$json.excel_data }}\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error-response",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [460, 500]
+    }
+  ],
+  "connections": {
+    "Excel Upload Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Upload": {
+      "main": [
+        [
+          {
+            "node": "Process Excel Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Excel Data": {
+      "main": [
+        [
+          {
+            "node": "Trigger Duplicate Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Duplicate Filter": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "srp",
+      "name": "srp"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "survey",
+      "name": "survey"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "excel",
+      "name": "excel"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "survey-excel-processor",
+  "versionId": "1.0.0"
+}

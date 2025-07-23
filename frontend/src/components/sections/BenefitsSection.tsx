@@ -1,4 +1,5 @@
-import { ArrowUpRight, BarChart3, Shield, Star, TrendingUp } from "lucide-react";
+import Image from "next/image";
+import { ArrowUpRight, BarChart3, Shield, TrendingUp } from "lucide-react";
 
 interface Benefit {
   icon: React.ReactNode;
@@ -32,7 +33,7 @@ const benefits: Benefit[] = [
 ];
 
 const trialFeatures: TrialFeature[] = [
-  { text: "30 días completamente gratis" },
+  { text: "15 días completamente gratis" },
   { text: "Configuración e implementación incluida" },
   { text: "Soporte técnico especializado" },
 ];
@@ -62,9 +63,13 @@ export default function BenefitsSection() {
           </div>
           <div className="bg-white p-8 rounded-2xl shadow-lg">
             <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Star className="w-8 h-8 text-white" />
-              </div>
+              <Image 
+                src="/images/optimacx-logo.png" 
+                alt="Óptima-CX Logo" 
+                width={56} 
+                height={56}
+                className="object-contain mx-auto mb-4"
+              />
               <h3 className="text-xl font-bold mb-2">Prueba Gratuita</h3>
               <p className="text-gray-600">
                 Experimente Óptima-CX sin compromiso

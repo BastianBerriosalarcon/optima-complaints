@@ -12,6 +12,12 @@ export const metadata: Metadata = {
   title: "Óptima-CX - Plataforma de Experiencia del Cliente Automotriz",
   description:
     "Plataforma SaaS para concesionarios automotrices que gestiona encuestas, reclamos y experiencia del cliente",
+  icons: {
+    icon: '/favicon.ico',
+    shortcut: '/favicon-16x16.png',
+    apple: '/apple-touch-icon.png',
+  },
+  manifest: '/site.webmanifest',
 };
 
 export default function RootLayout({

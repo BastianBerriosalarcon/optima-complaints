@@ -14,27 +14,27 @@ interface Feature {
 
 const features: Feature[] = [
   {
-    icon: <BarChart3 className="w-6 h-6" />,
+    icon: <BarChart3 className="w-6 h-6" data-testid="feature-icon" />,
     title: "Análisis NPS",
     description: "Mida y mejore su Net Promoter Score en tiempo real",
   },
   {
-    icon: <MessageSquare className="w-6 h-6" />,
+    icon: <MessageSquare className="w-6 h-6" data-testid="feature-icon" />,
     title: "Gestión de Reclamos",
     description: "Centralice y resuelva reclamos de manera eficiente",
   },
   {
-    icon: <Star className="w-6 h-6" />,
+    icon: <Star className="w-6 h-6" data-testid="feature-icon" />,
     title: "Encuestas Inteligentes",
     description: "Capture feedback valioso de sus clientes automáticamente",
   },
   {
-    icon: <Shield className="w-6 h-6" />,
+    icon: <Shield className="w-6 h-6" data-testid="feature-icon" />,
     title: "Seguridad Enterprise",
     description: "Protección de datos con estándares bancarios",
   },
   {
-    icon: <TrendingUp className="w-6 h-6" />,
+    icon: <TrendingUp className="w-6 h-6" data-testid="feature-icon" />,
     title: "Dashboard Ejecutivo",
     description: "KPIs y métricas clave en tiempo real",
   },
@@ -42,7 +42,7 @@ const features: Feature[] = [
 
 export default function FeaturesSection() {
   return (
-    <section className="py-24 bg-white">
+    <section className="py-24 bg-white" aria-label="Transforme la Experiencia de sus Clientes">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl font-bold mb-4">

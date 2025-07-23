@@ -1,0 +1,45 @@
+{
+  "name": "Lead - Scoring de Calidad",
+  "description": "Workflow enfocado en calcular el score de calidad de un lead basado en el análisis de IA.",
+  "tags": ["scoring", "lead", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lógica de negocio para puntuar un lead\nconst aiAnalysis = $input.first().json;\n\n// Calcular score de calidad del lead (1-100)\nlet scoreCalidad = 0;\n\n// Scoring basado en intención\nswitch (aiAnalysis.intencion) {\n  case 'compra':\n    scoreCalidad += 40;\n    break;\n  case 'cotizacion': // Asumiendo que cotización es una intención válida\n    scoreCalidad += 35;\n    break;\n  case 'informacion':\n    scoreCalidad += 20;\n    break;\n  case 'servicio':\n    scoreCalidad += 10;\n    break;\n  default:\n    scoreCalidad += 15;\n}\n\n// Scoring basado en nivel de interés (1-10)\nscoreCalidad += (aiAnalysis.nivel_interes || 5) * 2; // Pondera el nivel de interés\n\n// Bonus por información específica\nif (aiAnalysis.entidades_extraidas?.vehiculo_mencionado) scoreCalidad += 15;\nif (aiAnalysis.entidades_extraidas?.presupuesto) scoreCalidad += 10;\nif (aiAnalysis.entidades_extraidas?.email) scoreCalidad += 5;\n\n// Normalizar el score para que no pase de 100\nconst finalScore = Math.min(100, scoreCalidad);\n\nconsole.log(`Lead Score calculado: ${finalScore}`, {\n  tenantId: aiAnalysis.tenant_config.tenant_id,\n  messageId: aiAnalysis.original_message.whatsapp_message_id,\n  initialScore: scoreCalidad\n});\n\n// Devolver el análisis original enriquecido con el score\nreturn {\n  ...aiAnalysis,\n  lead_score: finalScore\n};"
+      },
+      "id": "calculate-lead-score",
+      "name": "Calculate Lead Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "Calculate Lead Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

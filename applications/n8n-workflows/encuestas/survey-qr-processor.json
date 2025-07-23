@@ -1,0 +1,146 @@
+{
+  "name": "Survey - QR Processor",
+  "description": "Procesa encuestas recibidas vía código QR, valida datos, registra en DB y notifica bajas calificaciones.",
+  "tags": ["survey", "qr", "srp", "notification"],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/survey/qr",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-qr-survey",
+      "name": "Webhook QR Survey",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valida y normaliza los datos de la encuesta QR\nconst surveyData = $input.first().json;\n\n// Campos requeridos\nconst requiredFields = ['tenant_id', 'sucursal_id', 'cliente_telefono', 'recomendacion', 'satisfaccion', 'lavado', 'asesor'];\nfor (const field of requiredFields) {\n  if (!surveyData[field]) {\n    throw new Error(`Campo requerido faltante: ${field}`);\n  }\n}\n\n// Validar que las calificaciones estén en el rango 1-10\nconst scoreFields = ['recomendacion', 'satisfaccion', 'lavado', 'asesor'];\nfor (const field of scoreFields) {\n  const score = surveyData[field];\n  if (typeof score !== 'number' || score < 1 || score > 10) {\n    throw new Error(`Calificación inválida para ${field}: ${score}. Debe ser un número entre 1 y 10.`);\n  }\n}\n\n// Calcular promedio de las calificaciones\nconst totalScore = scoreFields.reduce((sum, field) => sum + surveyData[field], 0);\nconst averageScore = totalScore / scoreFields.length;\n\n// Preparar datos para la base de datos\nconst processedSurvey = {\n  concesionario_id: surveyData.tenant_id,\n  sucursal_id: surveyData.sucursal_id,\n  cliente_nombre: surveyData.cliente_nombre || null,\n  cliente_rut: surveyData.cliente_rut || null,\n  cliente_telefono: surveyData.cliente_telefono,\n  recomendacion: surveyData.recomendacion,\n  satisfaccion: surveyData.satisfaccion,\n  lavado: surveyData.lavado,\n  asesor: surveyData.asesor,\n  comentario: surveyData.comentario || null,\n  origen: 'QR',\n  estado: 'completado', // Siempre completado si llega por QR\n  fecha_creacion: new Date().toISOString(),\n  // Añadir el promedio para facilitar la lógica de notificación\n  average_score: averageScore\n};\n\nreturn [{ json: processedSurvey }];"
+      },
+      "id": "validate-and-process-qr-data",
+      "name": "Validar y Procesar Datos QR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "survey-response-handler",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-response-handler",
+      "name": "Disparar Manejador de Respuestas",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.average_score }}",
+              "operation": "lessThanOrEqual",
+              "value2": 8
+            }
+          ]
+        }
+      },
+      "id": "check-low-score",
+      "name": "¿Calificación Baja (1-8)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "survey-low-score-notifier", // ID del workflow de notificación de baja calificación
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-low-score-notification",
+      "name": "Disparar Notificación Baja Calificación",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1000, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Encuesta QR procesada exitosamente.\",\n  \"survey_id\": \"={{ $('Registrar Encuesta QR en DB').first().json.id }}\",\n  \"average_score\": {{ $('Validar y Procesar Datos QR').first().json.average_score }}\n}"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"Error al procesar la encuesta QR.\",\n  \"error_details\": \"{{ $json.error?.message || 'Error desconocido' }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error-response",
+      "name": "Respuesta de Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [600, 480]
+    }
+  ],
+  "connections": {
+    "Webhook QR Survey": {
+      "main": [
+        [
+          {
+            "node": "Validar y Procesar Datos QR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar y Procesar Datos QR": {
+      "main": [
+        [
+          {
+            "node": "Disparar Manejador de Respuestas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta de Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparar Manejador de Respuestas": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

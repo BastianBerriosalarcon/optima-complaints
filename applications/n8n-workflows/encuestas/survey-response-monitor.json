@@ -1,0 +1,255 @@
+{
+  "name": "Survey Response Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/survey/response-monitor",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Response Monitor Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "survey-response-monitor"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/encuestas",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            }
+          ]
+        },
+        "qs": {
+          "parameters": [
+            {
+              "name": "concesionario_id",
+              "value": "eq.{{ $json.tenant_id }}"
+            },
+            {
+              "name": "origen",
+              "value": "eq.WhatsApp"
+            },
+            {
+              "name": "estado",
+              "value": "in.(enviado,completado)"
+            },
+            {
+              "name": "fecha_envio",
+              "value": "gte.{{ new Date(Date.now() - 8*60*60*1000).toISOString() }}"
+            },
+            {
+              "name": "select",
+              "value": "cliente_telefono,cliente_nombre,sucursal,estado,fecha_envio,fecha_completado"
+            }
+          ]
+        }
+      },
+      "id": "get-whatsapp-surveys",
+      "name": "Get WhatsApp Surveys",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "/*** SURVEY RESPONSE MONITOR - SRP: Solo monitoreo de respuestas ***/\nconst monitorData = $('Response Monitor Trigger').first().json;\nconst whatsappSurveys = $('Get WhatsApp Surveys').first().json;\n\n// Identificar clientes que NO han respondido en las últimas 6 horas\nconst cutoffTime = new Date(Date.now() - 6 * 60 * 60 * 1000);\n\nconst nonResponders = whatsappSurveys.filter(survey => {\n  // Solo los que siguen en estado 'enviado' (no completado)\n  return survey.estado === 'enviado' && \n         new Date(survey.fecha_envio) <= cutoffTime;\n});\n\n// Preparar datos para asignación a contact center\nconst clientsForCallCenter = nonResponders.map(survey => ({\n  cliente_nombre: survey.cliente_nombre,\n  cliente_telefono: survey.cliente_telefono,\n  sucursal: survey.sucursal,\n  fecha_envio_whatsapp: survey.fecha_envio,\n  tiempo_sin_respuesta: Math.round((Date.now() - new Date(survey.fecha_envio)) / (1000 * 60 * 60)) // horas\n}));\n\n// Estadísticas de monitoreo (siguiendo patrón de métricas existentes)\nconst monitoringStats = {\n  total_sent: monitorData.clients_sent || whatsappSurveys.length,\n  total_completed: whatsappSurveys.filter(s => s.estado === 'completado').length,\n  total_pending: whatsappSurveys.filter(s => s.estado === 'enviado').length,\n  non_responders_6h: nonResponders.length,\n  response_rate: Math.round((whatsappSurveys.filter(s => s.estado === 'completado').length / whatsappSurveys.length) * 100)\n};\n\nreturn {\n  tenant_id: monitorData.tenant_id,\n  clients_for_call_center: clientsForCallCenter,\n  monitoring_stats: monitoringStats,\n  campaign_metadata: {\n    campaign_id: monitorData.campaign_id,\n    original_upload: monitorData.upload_metadata,\n    batch_reports: monitorData.batch_reports\n  },\n  next_workflow: 'survey-call-center-assignment'\n};"
+      },
+      "id": "analyze-responses",
+      "name": "Analyze Responses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "", 
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.clients_for_call_center.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        }
+      },
+      "id": "check-pending-clients",
+      "name": "Check Pending Clients",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "survey-call-center-assignment",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-call-center",
+      "name": "Trigger Call Center Assignment",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar reporte final de campaña (siguiendo patrón de reports)\nconst analysisData = $('Analyze Responses').first().json;\n\nconst finalReport = {\n  campaign_id: analysisData.campaign_metadata.campaign_id,\n  tenant_id: analysisData.tenant_id,\n  campaign_status: 'monitoring_completed',\n  \n  // Métricas finales\n  final_metrics: analysisData.monitoring_stats,\n  \n  // Decisión tomada\n  action_taken: analysisData.clients_for_call_center.length > 0 \n    ? 'assigned_to_call_center' \n    : 'campaign_completed_no_followup',\n  \n  // Detalles\n  clients_for_followup: analysisData.clients_for_call_center.length,\n  completion_timestamp: new Date().toISOString(),\n  \n  // Metadatos originales\n  original_campaign: analysisData.campaign_metadata\n};\n\nreturn finalReport;"
+      },
+      "id": "generate-final-report",
+      "name": "Generate Final Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Monitoreo de respuestas completado. Clientes sin respuesta asignados a contact center.\",\n  \"monitoring_data\": {\n    \"clients_assigned_call_center\": {{ $('Analyze Responses').first().json.clients_for_call_center.length }},\n    \"response_metrics\": {{ JSON.stringify($('Analyze Responses').first().json.monitoring_stats) }}\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"completed\",\n  \"message\": \"Todos los clientes han respondido la encuesta. No se requiere seguimiento adicional.\",\n  \"final_report\": {{ JSON.stringify($json) }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "campaign-completed",
+      "name": "Campaign Completed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 500]
+    }
+  ],
+  "connections": {
+    "Response Monitor Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get WhatsApp Surveys",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get WhatsApp Surveys": {
+      "main": [
+        [
+          {
+            "node": "Analyze Responses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Responses": {
+      "main": [
+        [
+          {
+            "node": "Check Pending Clients", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Pending Clients": {
+      "main": [
+        [
+          {
+            "node": "Trigger Call Center Assignment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Final Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Call Center Assignment": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Final Report": {
+      "main": [
+        [
+          {
+            "node": "Campaign Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "srp",
+      "name": "srp"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z", 
+      "id": "survey",
+      "name": "survey"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "monitor",
+      "name": "monitor"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "survey-response-monitor",
+  "versionId": "1.0.0"
+}

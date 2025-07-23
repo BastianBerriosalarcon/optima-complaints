@@ -71,6 +71,19 @@
     },
     {
       "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "lead-scoring-workflow", // ID del nuevo workflow de scoring
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-lead-scoring",
+      "name": "Calcular Score de Lead",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
         "conditions": {
           "boolean": [
             {
@@ -178,6 +191,17 @@
       ]
     },
     "Procesar Respuesta IA": {
+      "main": [
+        [
+          {
+            "node": "Calcular Score de Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Score de Lead": {
       "main": [
         [
           {
