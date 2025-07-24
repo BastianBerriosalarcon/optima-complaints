@@ -1,0 +1,200 @@
+{
+  "name": "Sales Survey - WhatsApp Bulk Sender",
+  "description": "Envía encuestas de ventas masivamente por WhatsApp después de carga de Excel",
+  "tags": ["sales", "survey", "whatsapp", "bulk", "ventas", "masivo"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "sales-survey-bulk-trigger",
+      "name": "Trigger de Encuestas Masivas Ventas",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función para procesar lote de encuestas de ventas para envío masivo\n// Principio SRP: Una sola responsabilidad - procesar batch de encuestas ventas\n\nconst bulkSalesData = $input.first().json;\n\n// Validar estructura del lote\nif (!bulkSalesData.concesionario_id || !bulkSalesData.surveys || !Array.isArray(bulkSalesData.surveys)) {\n  throw new Error('Estructura de datos inválida para encuestas masivas de ventas');\n}\n\n// Validar que todas las encuestas sean de ventas\nconst validSalesSurveys = bulkSalesData.surveys.filter(survey => {\n  return survey.cliente_nombre && \n         survey.cliente_telefono && \n         survey.asesor_ventas_id && \n         survey.vehiculo_modelo && \n         survey.fecha_venta;\n});\n\nif (validSalesSurveys.length === 0) {\n  throw new Error('No se encontraron encuestas válidas de ventas en el lote');\n}\n\nconsole.log(`Procesando ${validSalesSurveys.length} encuestas de ventas para envío masivo WhatsApp`);\n\n// Crear estructura para envío masivo específico de VENTAS\nconst processedSalesSurveys = validSalesSurveys.map((survey, index) => ({\n  // Datos del cliente\n  cliente_nombre: survey.cliente_nombre,\n  cliente_telefono: survey.cliente_telefono,\n  cliente_rut: survey.cliente_rut || null,\n  \n  // Datos específicos de la VENTA\n  asesor_ventas_id: survey.asesor_ventas_id,\n  vehiculo_modelo: survey.vehiculo_modelo,\n  vehiculo_vin: survey.vehiculo_vin || null,\n  fecha_venta: survey.fecha_venta,\n  \n  // Configuración de envío\n  concesionario_id: bulkSalesData.concesionario_id,\n  sucursal_id: survey.sucursal_id || null,\n  origen: 'WhatsApp_VENTAS',\n  estado: 'pendiente',\n  \n  // Metadatos para tracking\n  batch_id: `sales_batch_${Date.now()}`,\n  batch_index: index,\n  survey_type: 'VENTAS',\n  department: 'VENTAS'\n}));\n\nreturn processedSalesSurveys.map(survey => ({ json: survey }));"
+      },
+      "id": "process-sales-bulk-data",
+      "name": "Procesar Lote Encuestas Ventas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT wc.whatsapp_token, wc.phone_number_id, wc.business_name, c.nombre as concesionario_nombre FROM tenant_configurations tc JOIN concesionarios c ON tc.tenant_id = c.id WHERE tc.tenant_id = $1",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.concesionario_id] }}"
+        }
+      },
+      "id": "get-whatsapp-config-sales",
+      "name": "Obtener Config WhatsApp Ventas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función para generar mensaje personalizado de encuesta de VENTAS\n// Principio SRP: Una sola responsabilidad - generar mensaje WhatsApp ventas\n\nconst salesSurvey = $('Procesar Lote Encuestas Ventas').first().json;\nconst whatsappConfig = $('Obtener Config WhatsApp Ventas').first().json[0];\n\nif (!whatsappConfig) {\n  throw new Error(`No se encontró configuración de WhatsApp para concesionario ${salesSurvey.concesionario_id}`);\n}\n\n// Generar mensaje personalizado específico para VENTAS\nconst salesSurveyMessage = {\n  // Configuración WhatsApp\n  phone_number_id: whatsappConfig.phone_number_id,\n  access_token: whatsappConfig.whatsapp_token,\n  business_name: whatsappConfig.business_name,\n  concesionario_nombre: whatsappConfig.concesionario_nombre,\n  \n  // Datos del destinatario\n  to_phone: salesSurvey.cliente_telefono.replace('+', ''),\n  customer_name: salesSurvey.cliente_nombre,\n  \n  // Datos específicos de la VENTA\n  vehiculo_modelo: salesSurvey.vehiculo_modelo,\n  fecha_venta: new Date(salesSurvey.fecha_venta).toLocaleDateString('es-CL'),\n  \n  // Mensaje personalizado para VENTAS (diferente al post-venta)\n  message_text: `¡Hola ${salesSurvey.cliente_nombre}! 👋\\n\\n` +\n    `Esperamos que esté disfrutando su nuevo ${salesSurvey.vehiculo_modelo} adquirido el ${new Date(salesSurvey.fecha_venta).toLocaleDateString('es-CL')}.\\n\\n` +\n    `En ${whatsappConfig.concesionario_nombre} nos importa su experiencia de compra. ¿Podría ayudarnos con una breve encuesta de satisfacción?\\n\\n` +\n    `Solo tomará 2 minutos y nos ayudará a mejorar nuestro servicio de ventas.\\n\\n` +\n    `👆 Haga clic en el link para responder: [SURVEY_LINK]\\n\\n` +\n    `¡Muchas gracias por elegirnos! 🚗✨`,\n  \n  // Metadatos específicos de VENTAS\n  survey_id: `${salesSurvey.concesionario_id}_${salesSurvey.cliente_telefono}_ventas_${Date.now()}`,\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  batch_info: {\n    batch_id: salesSurvey.batch_id,\n    batch_index: salesSurvey.batch_index\n  }\n};\n\nconsole.log('Mensaje de encuesta de VENTAS generado para:', {\n  cliente: salesSurveyMessage.customer_name,\n  telefono: salesSurveyMessage.to_phone,\n  vehiculo: salesSurveyMessage.vehiculo_modelo,\n  concesionario: salesSurveyMessage.concesionario_nombre,\n  tipo: 'VENTAS'\n});\n\nreturn [{ json: salesSurveyMessage }];"
+      },
+      "id": "generate-sales-whatsapp-message",
+      "name": "Generar Mensaje WhatsApp Ventas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v18.0/{{ $json.phone_number_id }}/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "messaging_product",
+              "value": "whatsapp"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.to_phone }}"
+            },
+            {
+              "name": "type",
+              "value": "text"
+            },
+            {
+              "name": "text",
+              "value": "={{ { object: $json.message_text } }}"
+            }
+          ]
+        }
+      },
+      "id": "send-whatsapp-sales-survey",
+      "name": "Enviar WhatsApp Encuesta Ventas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE encuestas_ventas SET estado = 'enviado_whatsapp', fecha_ultimo_contacto = NOW(), intentos_contacto = 1 WHERE concesionario_id = $1 AND cliente_telefono = $2 AND vehiculo_modelo = $3 AND fecha_venta = $4",
+        "additionalFields": {
+          "queryParameters": "={{ [$('Procesar Lote Encuestas Ventas').first().json.concesionario_id, $('Procesar Lote Encuestas Ventas').first().json.cliente_telefono, $('Procesar Lote Encuestas Ventas').first().json.vehiculo_modelo, $('Procesar Lote Encuestas Ventas').first().json.fecha_venta] }}"
+        }
+      },
+      "id": "update-sales-survey-status",
+      "name": "Actualizar Estado Encuesta Ventas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función para generar respuesta final del envío masivo de VENTAS\n// Principio SRP: Una sola responsabilidad - generar reporte de envío ventas\n\nconst salesSurvey = $('Procesar Lote Encuestas Ventas').first().json;\nconst whatsappResponse = $('Enviar WhatsApp Encuesta Ventas').first().json;\nconst updateResult = $('Actualizar Estado Encuesta Ventas').first().json;\n\n// Generar reporte de envío específico para VENTAS\nconst salesBulkReport = {\n  status: 'success',\n  message: 'Encuesta de VENTAS enviada exitosamente por WhatsApp.',\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  \n  customer_info: {\n    nombre: salesSurvey.cliente_nombre,\n    telefono: salesSurvey.cliente_telefono,\n    vehiculo: salesSurvey.vehiculo_modelo,\n    fecha_venta: salesSurvey.fecha_venta\n  },\n  \n  whatsapp_info: {\n    message_id: whatsappResponse.messages?.[0]?.id || 'unknown',\n    phone_number_id: whatsappResponse.messaging_product || 'whatsapp',\n    status: whatsappResponse.messages?.[0]?.message_status || 'sent'\n  },\n  \n  batch_info: {\n    batch_id: salesSurvey.batch_id,\n    batch_index: salesSurvey.batch_index,\n    concesionario_id: salesSurvey.concesionario_id\n  },\n  \n  next_steps: {\n    wait_period: '6 horas',\n    if_no_response: 'Asignar automáticamente a Contact Center para llamada',\n    notification_trigger: 'Si calificación 1-8, notificar a Jefe de Ventas y Encargado de Calidad'\n  },\n  \n  processed_at: new Date().toISOString()\n};\n\nconsole.log('Encuesta de VENTAS enviada por WhatsApp:', {\n  cliente: salesBulkReport.customer_info.nombre,\n  vehiculo: salesBulkReport.customer_info.vehiculo,\n  batchId: salesBulkReport.batch_info.batch_id,\n  messageId: salesBulkReport.whatsapp_info.message_id,\n  tipo: 'VENTAS'\n});\n\nreturn [{ json: salesBulkReport }];"
+      },
+      "id": "generate-sales-bulk-report",
+      "name": "Generar Reporte Envío Ventas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Trigger de Encuestas Masivas Ventas": {
+      "main": [
+        [
+          {
+            "node": "Procesar Lote Encuestas Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Lote Encuestas Ventas": {
+      "main": [
+        [
+          {
+            "node": "Obtener Config WhatsApp Ventas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generar Mensaje WhatsApp Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Config WhatsApp Ventas": {
+      "main": [
+        [
+          {
+            "node": "Generar Mensaje WhatsApp Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Mensaje WhatsApp Ventas": {
+      "main": [
+        [
+          {
+            "node": "Enviar WhatsApp Encuesta Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar WhatsApp Encuesta Ventas": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Estado Encuesta Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar Estado Encuesta Ventas": {
+      "main": [
+        [
+          {
+            "node": "Generar Reporte Envío Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

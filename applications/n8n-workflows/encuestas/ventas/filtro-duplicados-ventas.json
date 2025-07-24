@@ -1,0 +1,278 @@
+{
+  "name": "Sales Survey Duplicate Filter",
+  "description": "Filtro de duplicados para encuestas de VENTAS. Elimina clientes que ya respondieron por QR antes del envío WhatsApp. Principio SRP: Una sola responsabilidad - filtrado de duplicados ventas.",
+  "tags": ["sales", "survey", "filter", "duplicates", "ventas", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/sales-survey/duplicate-filter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger-ventas",
+      "name": "Trigger Filtro Duplicados Ventas",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "sales-survey-duplicate-filter"
+    },
+    {
+      "parameters": {
+        "jsCode": "// SALES SURVEY DUPLICATE FILTER - SRP: Solo filtrar duplicados en VENTAS\n// Principio SRP: Una sola responsabilidad - validar entrada y preparar consulta\n\nconst filterRequest = $input.first().json;\n\n// Validar estructura de entrada específica para VENTAS\nif (!filterRequest.tenant_id) {\n  throw new Error('tenant_id es requerido para filtro de duplicados VENTAS');\n}\n\nif (!filterRequest.sales_clients_excel || !Array.isArray(filterRequest.sales_clients_excel)) {\n  throw new Error('sales_clients_excel debe ser un array de clientes de ventas');\n}\n\nif (filterRequest.sales_clients_excel.length === 0) {\n  throw new Error('No hay clientes de VENTAS para procesar en el filtro');\n}\n\n// Validar que cada cliente tenga los campos mínimos requeridos para VENTAS\nconst invalidClients = filterRequest.sales_clients_excel.filter(client => \n  !client.cliente_telefono || \n  !client.vehiculo_modelo || \n  !client.fecha_venta\n);\n\nif (invalidClients.length > 0) {\n  throw new Error(`${invalidClients.length} clientes de VENTAS tienen datos incompletos (teléfono, vehículo o fecha de venta faltante)`);\n}\n\n// Extraer teléfonos únicos para consulta eficiente\nconst uniquePhones = [...new Set(\n  filterRequest.sales_clients_excel.map(client => \n    client.cliente_telefono.replace(/[^0-9+]/g, '') // Normalizar formato\n  )\n)];\n\nconsole.log('Iniciando filtro de duplicados VENTAS:', {\n  tenantId: filterRequest.tenant_id,\n  totalClientesExcel: filterRequest.sales_clients_excel.length,\n  telefonosUnicos: uniquePhones.length,\n  tipo: 'VENTAS'\n});\n\nreturn {\n  tenant_id: filterRequest.tenant_id,\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  original_sales_clients: filterRequest.sales_clients_excel,\n  unique_phones: uniquePhones,\n  total_clients_to_check: filterRequest.sales_clients_excel.length,\n  filter_metadata: {\n    excel_upload_timestamp: filterRequest.upload_timestamp,\n    uploaded_by: filterRequest.uploaded_by,\n    campaign_id: filterRequest.campaign_id || `sales_campaign_${Date.now()}`\n  }\n};"
+      },
+      "id": "validate-sales-filter-input",
+      "name": "Validar Entrada Filtro Ventas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/encuestas_ventas",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            }
+          ]
+        },
+        "qs": {
+          "parameters": [
+            {
+              "name": "concesionario_id",
+              "value": "eq.{{ $json.tenant_id }}"
+            },
+            {
+              "name": "cliente_telefono",
+              "value": "in.({{ $json.unique_phones.join(',') }})"
+            },
+            {
+              "name": "estado",
+              "value": "eq.completado"
+            },
+            {
+              "name": "select",
+              "value": "cliente_telefono,vehiculo_modelo,fecha_venta,origen,created_at"
+            }
+          ]
+        }
+      },
+      "id": "check-existing-sales-surveys",
+      "name": "Consultar Encuestas Ventas Existentes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// SALES SURVEY DUPLICATE DETECTION - SRP: Solo detectar duplicados específicos VENTAS\n// Principio SRP: Una sola responsabilidad - identificar duplicados basado en teléfono + vehículo + fecha\n\nconst filterData = $('Validar Entrada Filtro Ventas').first().json;\nconst existingSalesSurveys = $('Consultar Encuestas Ventas Existentes').first().json;\n\n// Crear mapa de encuestas existentes con clave compuesta específica para VENTAS\n// Clave: teléfono + vehículo + fecha_venta (más específico que solo teléfono)\nconst existingSalesMap = new Map();\n\nexistingSalesSurveys.forEach(survey => {\n  const normalizedPhone = survey.cliente_telefono.replace(/[^0-9+]/g, '');\n  const surveyDate = new Date(survey.fecha_venta).toDateString();\n  const compositeKey = `${normalizedPhone}_${survey.vehiculo_modelo}_${surveyDate}`;\n  \n  existingSalesMap.set(compositeKey, {\n    telefono: survey.cliente_telefono,\n    vehiculo: survey.vehiculo_modelo,\n    fecha_venta: survey.fecha_venta,\n    origen: survey.origen,\n    fecha_respuesta: survey.created_at\n  });\n});\n\n// Filtrar clientes de VENTAS, eliminando duplicados\nconst filteredSalesClients = [];\nconst duplicatesFound = [];\n\nfilterData.original_sales_clients.forEach(client => {\n  const normalizedPhone = client.cliente_telefono.replace(/[^0-9+]/g, '');\n  const clientDate = new Date(client.fecha_venta).toDateString();\n  const compositeKey = `${normalizedPhone}_${client.vehiculo_modelo}_${clientDate}`;\n  \n  if (existingSalesMap.has(compositeKey)) {\n    // Duplicado encontrado - cliente ya respondió encuesta de VENTAS\n    const existingSurvey = existingSalesMap.get(compositeKey);\n    duplicatesFound.push({\n      cliente_excel: client,\n      encuesta_existente: existingSurvey,\n      razon_duplicado: 'Ya respondió encuesta de VENTAS para este vehículo y fecha',\n      tipo_duplicado: 'VENTAS_EXACTO'\n    });\n  } else {\n    // Cliente único - puede recibir encuesta de VENTAS\n    filteredSalesClients.push({\n      ...client,\n      normalized_phone: normalizedPhone,\n      composite_key: compositeKey\n    });\n  }\n});\n\n// Generar estadísticas específicas de VENTAS\nconst filterStats = {\n  input_sales_clients: filterData.original_sales_clients.length,\n  existing_sales_surveys: existingSalesSurveys.length,\n  duplicates_found: duplicatesFound.length,\n  filtered_sales_clients: filteredSalesClients.length,\n  filter_efficiency: Math.round((duplicatesFound.length / filterData.original_sales_clients.length) * 100),\n  processing_timestamp: new Date().toISOString()\n};\n\nconsole.log('Filtro de duplicados VENTAS completado:', {\n  tenantId: filterData.tenant_id,\n  tipo: 'VENTAS',\n  clientesOriginales: filterStats.input_sales_clients,\n  duplicadosEncontrados: filterStats.duplicates_found,\n  clientesFiltrados: filterStats.filtered_sales_clients,\n  eficienciaFiltro: `${filterStats.filter_efficiency}%`\n});\n\nreturn {\n  tenant_id: filterData.tenant_id,\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  filter_results: {\n    filtered_sales_clients: filteredSalesClients,\n    duplicates_found: duplicatesFound,\n    filter_stats: filterStats\n  },\n  campaign_metadata: filterData.filter_metadata\n};"
+      },
+      "id": "detect-sales-duplicates",
+      "name": "Detectar Duplicados Ventas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-valid-clients",
+              "leftValue": "={{ $json.filter_results.filtered_sales_clients.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-has-sales-clients",
+      "name": "¿Hay Clientes Ventas Válidos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar reporte detallado de filtrado VENTAS con duplicados\n// Principio SRP: Una sola responsabilidad - generar reporte completo\n\nconst filterResults = $input.first().json;\n\n// Reporte completo específico para VENTAS\nconst salesFilterReport = {\n  status: 'success',\n  message: 'Filtro de duplicados VENTAS completado exitosamente',\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  tenant_id: filterResults.tenant_id,\n  \n  summary: {\n    clientes_excel_originales: filterResults.filter_results.filter_stats.input_sales_clients,\n    encuestas_existentes_encontradas: filterResults.filter_results.filter_stats.existing_sales_surveys,\n    duplicados_eliminados: filterResults.filter_results.filter_stats.duplicates_found,\n    clientes_listos_whatsapp: filterResults.filter_results.filter_stats.filtered_sales_clients,\n    eficiencia_filtro_porcentaje: filterResults.filter_results.filter_stats.filter_efficiency\n  },\n  \n  ready_for_whatsapp: {\n    clients_count: filterResults.filter_results.filtered_sales_clients.length,\n    estimated_sending_time: `${Math.ceil(filterResults.filter_results.filtered_sales_clients.length / 10)} minutos`,\n    next_step: 'Envío masivo por WhatsApp'\n  },\n  \n  duplicates_details: filterResults.filter_results.duplicates_found.map(dup => ({\n    cliente_nombre: dup.cliente_excel.cliente_nombre,\n    telefono: dup.cliente_excel.cliente_telefono,\n    vehiculo: dup.cliente_excel.vehiculo_modelo,\n    fecha_venta: dup.cliente_excel.fecha_venta,\n    razon: dup.razon_duplicado,\n    fecha_respuesta_previa: dup.encuesta_existente.fecha_respuesta,\n    origen_respuesta_previa: dup.encuesta_existente.origen\n  })),\n  \n  campaign_info: filterResults.campaign_metadata,\n  processed_at: new Date().toISOString()\n};\n\nconsole.log('Reporte de filtro VENTAS generado:', {\n  tenantId: salesFilterReport.tenant_id,\n  tipo: 'VENTAS',\n  clientesListos: salesFilterReport.ready_for_whatsapp.clients_count,\n  duplicadosEliminados: salesFilterReport.summary.duplicados_eliminados\n});\n\nreturn salesFilterReport;"
+      },
+      "id": "generate-sales-filter-report",
+      "name": "Generar Reporte Filtro Ventas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar respuesta para caso sin clientes válidos VENTAS\n// Principio SRP: Una sola responsabilidad - manejar caso sin clientes\n\nconst filterResults = $input.first().json;\n\nconst noClientsSalesReport = {\n  status: 'warning',\n  message: 'Todos los clientes de VENTAS ya respondieron la encuesta - no hay envíos necesarios',\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  tenant_id: filterResults.tenant_id,\n  \n  summary: {\n    clientes_excel_originales: filterResults.filter_results.filter_stats.input_sales_clients,\n    todos_ya_respondieron: true,\n    duplicados_eliminados: filterResults.filter_results.filter_stats.duplicates_found,\n    clientes_listos_whatsapp: 0\n  },\n  \n  duplicates_details: filterResults.filter_results.duplicates_found.map(dup => ({\n    cliente_nombre: dup.cliente_excel.cliente_nombre,\n    telefono: dup.cliente_excel.cliente_telefono,\n    vehiculo: dup.cliente_excel.vehiculo_modelo,\n    razon: dup.razon_duplicado,\n    origen_respuesta_previa: dup.encuesta_existente.origen\n  })),\n  \n  recommendation: 'Revisar si hay nuevos clientes de ventas para encuestar o ajustar criterios de filtrado',\n  processed_at: new Date().toISOString()\n};\n\nconsole.log('Reporte VENTAS sin clientes válidos:', {\n  tenantId: noClientsSalesReport.tenant_id,\n  tipo: 'VENTAS',\n  todosYaRespondieron: true,\n  duplicados: noClientsSalesReport.summary.duplicados_eliminados\n});\n\nreturn noClientsSalesReport;"
+      },
+      "id": "generate-no-clients-report",
+      "name": "Generar Reporte Sin Clientes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "success-response-ventas",
+      "name": "Respuesta Éxito Ventas",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "warning-response-ventas",
+      "name": "Respuesta Advertencia Ventas",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 400]
+    }
+  ],
+  "connections": {
+    "Trigger Filtro Duplicados Ventas": {
+      "main": [
+        [
+          {
+            "node": "Validar Entrada Filtro Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Entrada Filtro Ventas": {
+      "main": [
+        [
+          {
+            "node": "Consultar Encuestas Ventas Existentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Encuestas Ventas Existentes": {
+      "main": [
+        [
+          {
+            "node": "Detectar Duplicados Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detectar Duplicados Ventas": {
+      "main": [
+        [
+          {
+            "node": "¿Hay Clientes Ventas Válidos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay Clientes Ventas Válidos?": {
+      "main": [
+        [
+          {
+            "node": "Generar Reporte Filtro Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generar Reporte Sin Clientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Reporte Filtro Ventas": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Éxito Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Reporte Sin Clientes": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Advertencia Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "srp",
+      "name": "srp"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "sales",
+      "name": "sales"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "ventas",
+      "name": "ventas"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "filter",
+      "name": "filter"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "sales-survey-duplicate-filter",
+  "versionId": "1.0.0"
+}

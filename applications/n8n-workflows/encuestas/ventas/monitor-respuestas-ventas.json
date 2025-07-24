@@ -1,0 +1,298 @@
+{
+  "name": "Sales Survey Response Monitor",
+  "description": "Monitoreo de respuestas de encuestas de VENTAS. Principio SRP: Una sola responsabilidad - monitorear respuestas de encuestas de ventas.",
+  "tags": ["sales", "survey", "monitor", "responses", "ventas", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/sales-survey/response-monitor",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger-ventas",
+      "name": "Trigger Monitor Respuestas Ventas",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "sales-survey-response-monitor"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/encuestas_ventas",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            }
+          ]
+        },
+        "qs": {
+          "parameters": [
+            {
+              "name": "concesionario_id",
+              "value": "eq.{{ $json.tenant_id }}"
+            },
+            {
+              "name": "origen",
+              "value": "eq.WhatsApp_VENTAS"
+            },
+            {
+              "name": "estado",
+              "value": "in.(enviado_whatsapp,completado)"
+            },
+            {
+              "name": "fecha_ultimo_contacto",
+              "value": "gte.{{ new Date(Date.now() - 8*60*60*1000).toISOString() }}"
+            },
+            {
+              "name": "select",
+              "value": "cliente_telefono,cliente_nombre,vehiculo_modelo,fecha_venta,asesor_ventas_id,sucursal,estado,fecha_ultimo_contacto,fecha_completado"
+            }
+          ]
+        }
+      },
+      "id": "get-whatsapp-sales-surveys",
+      "name": "Obtener Encuestas WhatsApp Ventas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// SALES SURVEY RESPONSE MONITOR - SRP: Solo monitoreo de respuestas de VENTAS\n// Principio SRP: Una sola responsabilidad - monitorear respuestas de encuestas post-compra\n\nconst monitorData = $('Trigger Monitor Respuestas Ventas').first().json;\nconst whatsappSalesSurveys = $('Obtener Encuestas WhatsApp Ventas').first().json;\n\n// Validar datos de entrada específicos para VENTAS\nif (!monitorData.tenant_id) {\n  throw new Error('tenant_id es requerido para monitoreo de encuestas VENTAS');\n}\n\nif (!whatsappSalesSurveys || whatsappSalesSurveys.length === 0) {\n  console.log('No hay encuestas de VENTAS por WhatsApp para monitorear');\n  return {\n    tenant_id: monitorData.tenant_id,\n    survey_type: 'VENTAS',\n    department: 'VENTAS',\n    sales_clients_for_call_center: [],\n    monitoring_stats: {\n      total_sent: 0,\n      total_completed: 0,\n      total_pending: 0,\n      non_responders_6h: 0,\n      response_rate: 0\n    },\n    campaign_metadata: monitorData.campaign_metadata || {},\n    next_workflow: null\n  };\n}\n\n// Identificar clientes de VENTAS que NO han respondido en las últimas 6 horas\nconst cutoffTime = new Date(Date.now() - 6 * 60 * 60 * 1000);\n\nconst salesNonResponders = whatsappSalesSurveys.filter(survey => {\n  // Solo los que siguen en estado 'enviado_whatsapp' (no completado) de VENTAS\n  return survey.estado === 'enviado_whatsapp' && \n         new Date(survey.fecha_ultimo_contacto) <= cutoffTime;\n});\n\n// Preparar datos específicos de VENTAS para asignación a contact center\nconst salesClientsForCallCenter = salesNonResponders.map(survey => ({\n  cliente_nombre: survey.cliente_nombre,\n  cliente_telefono: survey.cliente_telefono,\n  vehiculo_modelo: survey.vehiculo_modelo,\n  fecha_venta: survey.fecha_venta,\n  asesor_ventas_id: survey.asesor_ventas_id,\n  sucursal: survey.sucursal,\n  fecha_envio_whatsapp: survey.fecha_ultimo_contacto,\n  tiempo_sin_respuesta: Math.round((Date.now() - new Date(survey.fecha_ultimo_contacto)) / (1000 * 60 * 60)) // horas\n}));\n\n// Estadísticas de monitoreo específicas para VENTAS\nconst salesMonitoringStats = {\n  total_sent: monitorData.sales_clients_sent || whatsappSalesSurveys.length,\n  total_completed: whatsappSalesSurveys.filter(s => s.estado === 'completado').length,\n  total_pending: whatsappSalesSurveys.filter(s => s.estado === 'enviado_whatsapp').length,\n  non_responders_6h: salesNonResponders.length,\n  response_rate: whatsappSalesSurveys.length > 0 ? \n    Math.round((whatsappSalesSurveys.filter(s => s.estado === 'completado').length / whatsappSalesSurveys.length) * 100) : 0,\n  monitoring_timestamp: new Date().toISOString()\n};\n\nconsole.log('Monitoreo de respuestas VENTAS completado:', {\n  tenantId: monitorData.tenant_id,\n  tipo: 'VENTAS',\n  totalEnviadas: salesMonitoringStats.total_sent,\n  completadas: salesMonitoringStats.total_completed,\n  sinRespuesta6h: salesMonitoringStats.non_responders_6h,\n  tasaRespuesta: `${salesMonitoringStats.response_rate}%`\n});\n\nreturn {\n  tenant_id: monitorData.tenant_id,\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  sales_clients_for_call_center: salesClientsForCallCenter,\n  monitoring_stats: salesMonitoringStats,\n  campaign_metadata: {\n    campaign_id: monitorData.campaign_id,\n    original_upload: monitorData.upload_metadata,\n    batch_reports: monitorData.batch_reports,\n    survey_type: 'VENTAS'\n  },\n  next_workflow: salesClientsForCallCenter.length > 0 ? 'asignacion-contact-center-ventas' : null\n};"
+      },
+      "id": "analyze-sales-responses",
+      "name": "Analizar Respuestas Ventas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-pending-sales-clients",
+              "leftValue": "={{ $json.sales_clients_for_call_center.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-pending-sales-clients",
+      "name": "¿Hay Clientes Ventas Pendientes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/sales-survey/call-center-assignment",
+        "headers": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.N8N_WEBHOOK_AUTH_TOKEN }}"
+            }
+          ]
+        },
+        "body": {
+          "parameters": [
+            {
+              "name": "tenant_id",
+              "value": "={{ $json.tenant_id }}"
+            },
+            {
+              "name": "sales_clients_for_call_center",
+              "value": "={{ JSON.stringify($json.sales_clients_for_call_center) }}"
+            },
+            {
+              "name": "survey_type",
+              "value": "VENTAS"
+            },
+            {
+              "name": "department",
+              "value": "VENTAS"
+            },
+            {
+              "name": "campaign_metadata",
+              "value": "={{ JSON.stringify($json.campaign_metadata) }}"
+            }
+          ]
+        }
+      },
+      "id": "trigger-sales-call-center",
+      "name": "Disparar Asignación Contact Center Ventas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar reporte final de campaña VENTAS\n// Principio SRP: Una sola responsabilidad - generar reporte final de monitoreo\n\nconst analysisData = $('Analizar Respuestas Ventas').first().json;\n\nconst finalSalesReport = {\n  campaign_id: analysisData.campaign_metadata.campaign_id,\n  tenant_id: analysisData.tenant_id,\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  campaign_status: 'monitoring_completed',\n  \n  // Métricas finales específicas de VENTAS\n  final_sales_metrics: analysisData.monitoring_stats,\n  \n  // Decisión tomada específica para VENTAS\n  action_taken: analysisData.sales_clients_for_call_center.length > 0 \n    ? 'assigned_to_call_center_ventas' \n    : 'sales_campaign_completed_no_followup',\n  \n  // Detalles específicos de VENTAS\n  sales_clients_for_followup: analysisData.sales_clients_for_call_center.length,\n  completion_timestamp: new Date().toISOString(),\n  \n  // Metadatos originales de la campaña VENTAS\n  original_sales_campaign: analysisData.campaign_metadata,\n  \n  // Recomendaciones específicas para VENTAS\n  sales_recommendations: {\n    improve_whatsapp_messaging: analysisData.monitoring_stats.response_rate < 50,\n    review_sales_process: analysisData.monitoring_stats.non_responders_6h > 10,\n    follow_up_needed: analysisData.sales_clients_for_call_center.length > 0\n  }\n};\n\nconsole.log('Reporte final de monitoreo VENTAS:', {\n  tenantId: finalSalesReport.tenant_id,\n  tipo: 'VENTAS',\n  status: finalSalesReport.campaign_status,\n  clientesSeguimiento: finalSalesReport.sales_clients_for_followup\n});\n\nreturn finalSalesReport;"
+      },
+      "id": "generate-sales-final-report", 
+      "name": "Generar Reporte Final Ventas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Monitoreo de respuestas VENTAS completado. Clientes sin respuesta asignados a contact center.\",\n  \"survey_type\": \"VENTAS\",\n  \"department\": \"VENTAS\",\n  \"monitoring_data\": {\n    \"sales_clients_assigned_call_center\": {{ $('Analizar Respuestas Ventas').first().json.sales_clients_for_call_center.length }},\n    \"sales_response_metrics\": {{ JSON.stringify($('Analizar Respuestas Ventas').first().json.monitoring_stats) }}\n  },\n  \"next_steps\": {\n    \"action\": \"Contact Center seguirá con clientes que no respondieron\",\n    \"timeline\": \"Asignación inmediata para llamadas telefónicas\"\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response-ventas",
+      "name": "Respuesta Éxito Ventas",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"completed\",\n  \"message\": \"Todos los clientes de VENTAS han respondido la encuesta. No se requiere seguimiento adicional.\",\n  \"survey_type\": \"VENTAS\",\n  \"department\": \"VENTAS\",\n  \"final_sales_report\": {{ JSON.stringify($json) }},\n  \"success_metrics\": {\n    \"response_rate\": \"{{ $json.final_sales_metrics.response_rate }}%\",\n    \"total_completed\": {{ $json.final_sales_metrics.total_completed }},\n    \"campaign_success\": true\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "campaign-completed-ventas",
+      "name": "Campaña Ventas Completada",
+      "type": "n8n-nodes-base.respondToWebhook", 
+      "typeVersion": 1,
+      "position": [1340, 400]
+    }
+  ],
+  "connections": {
+    "Trigger Monitor Respuestas Ventas": {
+      "main": [
+        [
+          {
+            "node": "Obtener Encuestas WhatsApp Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Encuestas WhatsApp Ventas": {
+      "main": [
+        [
+          {
+            "node": "Analizar Respuestas Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analizar Respuestas Ventas": {
+      "main": [
+        [
+          {
+            "node": "¿Hay Clientes Ventas Pendientes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay Clientes Ventas Pendientes?": {
+      "main": [
+        [
+          {
+            "node": "Disparar Asignación Contact Center Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generar Reporte Final Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparar Asignación Contact Center Ventas": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Éxito Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Reporte Final Ventas": {
+      "main": [
+        [
+          {
+            "node": "Campaña Ventas Completada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "srp",
+      "name": "srp"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "sales",
+      "name": "sales"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "ventas",
+      "name": "ventas"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "monitor",
+      "name": "monitor"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "sales-survey-response-monitor",
+  "versionId": "1.0.0"
+}

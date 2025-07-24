@@ -26,9 +26,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO sales_surveys (concesionario_id, sucursal_id, cliente_nombre, cliente_rut, cliente_telefono, asesor_ventas_id, vehiculo_modelo, fecha_venta, recomendacion, atencion_asesor, proceso_entrega, satisfaccion_general, comentario, origen, estado, average_score, survey_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *",
+        "query": "INSERT INTO encuestas_ventas (concesionario_id, sucursal_id, cliente_nombre, cliente_rut, cliente_telefono, asesor_ventas_id, vehiculo_modelo, fecha_venta, recomendacion, atencion_asesor, proceso_entrega, satisfaccion_general, comentario, origen, estado, average_score) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *",
         "additionalFields": {
-          "queryParameters": "={{ [$json.concesionario_id, $json.sucursal_id, $json.cliente_nombre, $json.cliente_rut, $json.cliente_telefono, $json.asesor_ventas_id, $json.vehiculo_modelo, $json.fecha_venta, $json.recomendacion, $json.atencion_asesor, $json.proceso_entrega, $json.satisfaccion_general, $json.comentario, $json.origen, $json.estado, $json.average_score, $json.survey_type] }}"
+          "queryParameters": "={{ [$json.concesionario_id, $json.sucursal_id, $json.cliente_nombre, $json.cliente_rut, $json.cliente_telefono, $json.asesor_ventas_id, $json.vehiculo_modelo, $json.fecha_venta, $json.recomendacion, $json.atencion_asesor, $json.proceso_entrega, $json.satisfaccion_general, $json.comentario, $json.origen, $json.estado, $json.average_score] }}"
         }
       },
       "id": "insert-sales-survey-response",

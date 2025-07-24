@@ -111,3 +111,26 @@ coverage/
 # Build outputs
 dist/
 build/frontend/
+
+# Archivos y directorios de entorno específicos de Cloud Shell y herramientas
+.nvm/
+.bash_history
+.bashrc
+.gitconfig
+.profile
+.sudo_as_admin_successful
+.wget-hsts
+README-cloudshell.txt
+
+# Archivos y directorios de Claude
+.claude.json
+.claude/
+
+# Archivos y directorios de CodeOSS (VS Code en Cloud Shell)
+.codeoss/
+
+# Archivos de configuración general de usuario
+.config/
+
+# Archivos temporales o específicos de tu entorno
+supabase/.temp/

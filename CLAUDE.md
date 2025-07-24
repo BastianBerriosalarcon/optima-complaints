@@ -22,16 +22,13 @@ Se busca automatizar la comunicación (correos, WhatsApp) y la gestión de datos
 
 ## 2. Principios y Prioridades Clave
 
-* **Aislamiento Multitenant:** La máxima prioridad es garantizar la segregación total de datos y operaciones entre concesionarios. Cualquier funcionalidad, desde el almacenamiento de datos hasta las automatizaciones de n8n, debe diseñarse para operar de forma independiente por cada concesionario.
-* **Automatización Inteligente:** Fomentar el uso de automatizaciones para reducir la carga de trabajo manual, mejorar la eficiencia en la respuesta al cliente y asegurar la consisten# Guías para Claude Code en el Proyecto Óptima-CX
+* **Aislamiento Multitenant con Supabase RLS:** La máxima prioridad es garantizar la segregación total de datos y operaciones entre concesionarios. Utilizamos Row Level Security (RLS) en Supabase para asegurar que cada consulta esté automáticamente filtrada por `concesionario_id`.
 
-## 1. Contexto General del Proyecto
+* **Automatización Inteligente con IA:** Fomentar el uso de automatizaciones para reducir la carga de trabajo manual, mejorar la eficiencia en la respuesta al cliente y asegurar la consistencia. La IA (Gemini) se utiliza para análisis de leads y clasificación de reclamos.
 
-**Nombre del Proyecto:** Óptima-CX
-La plataforma maneja distintos roles de usuario con permisos y vistas de datos específicos:
+* **Arquitectura Serverless-First:** Priorizar soluciones serverless (Supabase, Cloud Run, Edge Functions) para reducir costos operativos y mejorar escalabilidad automática.
 
-* **Super Usuario:** Administra el sistema completo y puede ver todos los concesionarios (siempre separados por concesionario).
-* **Roles por Concesionario:** Gerencia, Jefe de Servicio, Asesor de Servicio, Contact Center, Encargado de Calidad, Jefa de Contact Center, **Jefe de Ventas**, **Asesor de Ventas**, Staff. Estos roles solo acceden a la información de su concesionario y/o sucursal asignada.
+* **Desarrollo Moderno:** Utilizar tecnologías modernas (Next.js, TypeScript, Tailwind) que permiten desarrollo rápido, mantenimiento sencillo y experiencia de usuario superior.
 
 ## 3. Módulos de la Plataforma
 
@@ -126,16 +123,6 @@ La plataforma maneja distintos roles de usuario con permisos y vistas de datos e
 * **Dashboard:** Vista operativa con sus leads y métricas personales
 * **Notificaciones:** Alertas inmediatas de nuevos leads asignados
 * **Integración:** Conexión directa con workflows de encuestas de ventas
-
-## 2. Principios y Prioridades Clave
-
-* **Aislamiento Multitenant con Supabase RLS:** La máxima prioridad es garantizar la segregación total de datos y operaciones entre concesionarios. Utilizamos Row Level Security (RLS) en Supabase para asegurar que cada consulta esté automáticamente filtrada por `concesionario_id`.
-
-* **Automatización Inteligente con IA:** Fomentar el uso de automatizaciones para reducir la carga de trabajo manual, mejorar la eficiencia en la respuesta al cliente y asegurar la consistencia. La IA (Gemini) se utiliza para análisis de leads y clasificación de reclamos.
-
-* **Arquitectura Serverless-First:** Priorizar soluciones serverless (Supabase, Cloud Run, Edge Functions) para reducir costos operativos y mejorar escalabilidad automática.
-
-* **Desarrollo Moderno:** Utilizar tecnologías modernas (Next.js, TypeScript, Tailwind) que permiten desarrollo rápido, mantenimiento sencillo y experiencia de usuario superior.
 
 ### 3.2. Módulo de Encuestas Post-Venta (Implementado)
 
@@ -311,9 +298,9 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Métricas de Reclamos:** Se deben crear dashboards para visualizar métricas de reclamos, tales como: número de reclamos por sucursal, por tipo, por estado, y tiempo promedio de resolución.
 * **Optimización de Consultas:** Al generar código para dashboards, prioriza la eficiencia de las consultas a la base de datos para manejar grandes volúmenes de datos por concesionario de forma rápida.
 
-## 5. Arquitectura Cloud Run y Despliegue en GCP
+## 4. Arquitectura Cloud Run y Despliegue en GCP
 
-### 5.1. Arquitectura Actual Implementada
+### 4.1. Arquitectura Actual Implementada
 
 **Óptima-CX utiliza una arquitectura moderna basada en Supabase + Next.js + N8N + Chatwoot** que optimiza costos, escalabilidad y mantenimiento para un SaaS multi-tenant.
 
@@ -462,7 +449,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
     ├── custom_messages: {"welcome": "...", "followup": "..."}
     └── business_hours: {"start": "09:00", "end": "18:00"}
 ```
-### 6.3. Comunicación Entre Services
+### 4.3. Comunicación Entre Services
 
 #### **Flujo de Comunicación Multi-tenant con RAG:**
 ```
@@ -494,7 +481,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Escalabilidad:** Hasta 100+ concesionarios sin cambios arquitectónicos
 * **Ahorro operacional:** 80% reducción en tiempo de configuración nuevos tenants
 
-### 6.5. Versionado y CI/CD para n8nWorkflows
+### 4.5. Versionado y CI/CD para n8nWorkflows
 
 #### **Pipeline de Deployment:**
 1. **Developer** modifica template workflow
@@ -505,7 +492,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 6. **Validation** de workflows deployados
 7. **Rollback automático** si falla validación
 
-### 6.6. Monitoreo y Observabilidad Avanzada
+### 4.6. Monitoreo y Observabilidad Avanzada
 
 #### **Métricas Clave por Service:**
 **optima-cx-saas:**
@@ -525,7 +512,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **API Rate Limits:** Aproximación a límites de WhatsApp/IA
 * **Cross-Service Communication:** Latencia > 2s entre services
 
-### 6.7. Seguridad y Compliance Multi-tenant
+### 4.7. Seguridad y Compliance Multi-tenant
 
 #### **Aislamiento de Datos Estricto:**
 * **Tenant Filtering:** Filtros automáticos por tenant_id en todas las consultas
@@ -546,9 +533,9 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Tenant onboarding:** Proceso automatizado de 10 minutos
 * **Legacy support:** Compatibilidad con configuraciones existentes
 
-## 7. Infraestructura como Código con Terraform
+## 5. Infraestructura como Código con Terraform
 
-### 7.1. Estrategia de Despliegue con Terraform
+### 5.1. Estrategia de Despliegue con Terraform
 
 **Óptima-CX utiliza Terraform para el manejo completo de la infraestructura en GCP**, garantizando reproducibilidad, versionado y gestión consistente de recursos cloud para el entorno multitenant.
 
@@ -571,7 +558,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Staging:** Configuración similar a producción con menor capacidad
 * **Producción:** Alta disponibilidad, auto-scaling, backups extendidos, always-on para n8n
 
-### 7.2. CI/CD con Terraform
+### 5.2. CI/CD con Terraform
 
 #### **Pipeline de Infraestructura:**
 * **Validación:** terraform fmt, validate y plan automáticos en cada PR
@@ -585,7 +572,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Versionado:** Historial completo de cambios de infraestructura
 * **Backup:** Respaldos automatizados del estado de Terraform
 
-### 7.3. Provisión Automatizada de Nuevos Tenants
+### 5.3. Provisión Automatizada de Nuevos Tenants
 
 #### **Onboarding de Concesionarios:**
 * **Automatización Completa:** Script que crea base de datos, usuario, secrets y workflows n8n
@@ -593,7 +580,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Validación:** Tests automatizados post-provisión para verificar conectividad
 * **Rollback:** Capacidad de deshacer onboarding en caso de errores
 
-### 7.4. Mejores Prácticas Implementadas
+### 5.4. Mejores Prácticas Implementadas
 
 #### **Seguridad:**
 * Estado remoto cifrado con KMS
@@ -637,9 +624,9 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 3. Optimización de performance
 4. Documentación técnica completa
 
-## 8. Especificaciones Técnicas RAG para Agente de Reclamos
+## 7. Especificaciones Técnicas RAG para Agente de Reclamos
 
-### 9.1. Arquitectura RAG Multi-tenant
+### 7.1. Arquitectura RAG Multi-tenant
 
 #### **Base de Datos Vectorial:**
 * **Tecnología:** Supabase (extensión pgvector)
@@ -674,7 +661,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 }
 ```
 
-### 9.2. Flujo RAG Integrado con n8n
+### 7.2. Flujo RAG Integrado con n8n
 
 #### **Procesamiento de Reclamo con RAG (Pipeline Mejorado con Cohere):**
 ```
@@ -719,7 +706,7 @@ FORMATO DE RESPUESTA JSON:
 }
 ```
 
-### 9.3. Gestión de Conocimiento por Concesionario
+### 7.3. Gestión de Conocimiento por Concesionario
 
 #### **Portal de Administración de Conocimiento:**
 * **Carga de Documentos:** Interface drag-and-drop para subir documentos
@@ -736,7 +723,7 @@ FORMATO DE RESPUESTA JSON:
 * **Casos Resueltos:** Historial de resoluciones exitosas anonimizadas
 * **Normativas:** Regulaciones específicas del país/región
 
-### 9.4. Optimización y Monitoreo RAG
+### 7.4. Optimización y Monitoreo RAG
 
 #### **Métricas de Calidad RAG:**
 * **Precision@K:** Relevancia de documentos recuperados
@@ -770,7 +757,7 @@ FORMATO DE RESPUESTA JSON:
   ]
 }
 ```
-### 9.6. Seguridad y Compliance RAG
+### 7.6. Seguridad y Compliance RAG
 
 #### **Aislamiento de Datos:**
 * **Tenant Filtering:** Todos los queries incluyen filtro tenant_id obligatorio
