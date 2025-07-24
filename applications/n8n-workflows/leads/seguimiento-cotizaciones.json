@@ -1,0 +1,349 @@
+{
+  "name": "Seguimiento Automático de Cotizaciones",
+  "description": "Workflow que monitorea cotizaciones generadas y ejecuta seguimiento automático con recordatorios escalonados hasta lograr la conversión o identificar pérdida del lead.",
+  "tags": [
+    "cotizaciones",
+    "seguimiento", 
+    "conversion",
+    "automatizacion",
+    "ventas",
+    "critico"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Ejecutar cada 4 horas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Buscar cotizaciones que requieren seguimiento automático\nSELECT \n  l.id,\n  l.concesionario_id,\n  l.telefono_cliente,\n  l.nombre_cliente,\n  l.email_cliente,\n  l.mensaje_original,\n  l.modelo_interes,\n  l.score_calidad,\n  l.nivel_interes,\n  l.asesor_asignado_id,\n  l.estado,\n  l.fecha_creacion,\n  l.fecha_cotizacion,\n  l.monto_cotizacion,\n  \n  -- Información del asesor y jefe de ventas\n  asesor.nombre as asesor_nombre,\n  asesor.email as asesor_email,\n  asesor.telefono as asesor_telefono,\n  \n  jefe.id as jefe_ventas_id,\n  jefe.nombre as jefe_ventas_nombre,\n  jefe.email as jefe_ventas_email,\n  \n  -- Información del concesionario\n  c.nombre as concesionario_nombre,\n  c.configuracion_seguimiento,\n  c.configuracion_whatsapp,\n  \n  -- Cálculos de tiempo desde cotización\n  EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/3600 as horas_desde_cotizacion,\n  EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/86400 as dias_desde_cotizacion,\n  \n  -- Determinar tipo de seguimiento según tiempo transcurrido\n  CASE \n    WHEN EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/3600 BETWEEN 4 AND 24 THEN 'seguimiento_4h'\n    WHEN EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/86400 BETWEEN 1 AND 3 THEN 'seguimiento_1_3d'\n    WHEN EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/86400 BETWEEN 4 AND 7 THEN 'seguimiento_4_7d'\n    WHEN EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/86400 BETWEEN 8 AND 15 THEN 'seguimiento_8_15d'\n    WHEN EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/86400 BETWEEN 16 AND 30 THEN 'seguimiento_16_30d'\n    WHEN EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/86400 > 30 THEN 'perdido_definitivo'\n    ELSE 'no_seguimiento'\n  END as tipo_seguimiento,\n  \n  -- Prioridad basada en score y monto\n  CASE \n    WHEN l.score_calidad >= 80 AND l.monto_cotizacion >= 20000000 THEN 'muy_alta'\n    WHEN l.score_calidad >= 70 AND l.monto_cotizacion >= 15000000 THEN 'alta'\n    WHEN l.score_calidad >= 60 AND l.monto_cotizacion >= 10000000 THEN 'media'\n    ELSE 'baja'\n  END as prioridad_seguimiento,\n  \n  -- Contar seguimientos previos\n  COALESCE((SELECT COUNT(*) FROM seguimientos_cotizaciones sc WHERE sc.lead_id = l.id), 0) as seguimientos_realizados\n  \nFROM leads l\nINNER JOIN usuarios asesor ON l.asesor_asignado_id = asesor.id\nINNER JOIN usuarios jefe ON asesor.concesionario_id = jefe.concesionario_id AND jefe.rol = 'jefe_ventas'\nINNER JOIN concesionarios c ON l.concesionario_id = c.id\nWHERE \n  l.estado = 'cotizado'  -- Solo leads con cotización generada\n  AND l.fecha_cotizacion IS NOT NULL\n  AND l.monto_cotizacion IS NOT NULL\n  AND l.monto_cotizacion > 0\n  AND c.activo = true\n  AND asesor.activo = true\n  AND jefe.activo = true\n  -- Filtrar por tiempo mínimo (4 horas después de cotización)\n  AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/3600 >= 4\n  -- No seguir cotizaciones muy antiguas (más de 30 días)\n  AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_cotizacion))/86400 <= 30\n  -- Evitar seguimientos duplicados en las últimas 2 horas\n  AND NOT EXISTS (\n    SELECT 1 FROM seguimientos_cotizaciones sc \n    WHERE sc.lead_id = l.id \n    AND sc.created_at > CURRENT_TIMESTAMP - INTERVAL '2 hours'\n  )\nORDER BY \n  prioridad_seguimiento DESC,\n  l.score_calidad DESC,\n  l.monto_cotizacion DESC,\n  l.fecha_cotizacion ASC;",
+        "additionalFields": {}
+      },
+      "id": "query-quotations-for-followup",
+      "name": "Consultar Cotizaciones para Seguimiento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-has-quotations",
+      "name": "¿Hay Cotizaciones para Seguimiento?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar y clasificar cotizaciones para seguimiento\nconst quotationData = $input.all();\n\nif (!quotationData || quotationData.length === 0) {\n  return [];\n}\n\n// Agrupar por tipo de seguimiento y prioridad\nconst processedQuotations = quotationData.map(item => {\n  const quotation = item.json;\n  \n  // Skip si no necesita seguimiento\n  if (quotation.tipo_seguimiento === 'no_seguimiento') {\n    return null;\n  }\n  \n  // Determinar estrategia de contacto\n  let contactStrategy = [];\n  let messageTemplate = '';\n  let urgencyLevel = 'normal';\n  \n  switch (quotation.tipo_seguimiento) {\n    case 'seguimiento_4h':\n      contactStrategy = ['whatsapp', 'email'];\n      messageTemplate = 'initial_followup';\n      urgencyLevel = 'alta';\n      break;\n      \n    case 'seguimiento_1_3d':\n      contactStrategy = ['whatsapp', 'call'];\n      messageTemplate = 'early_followup';\n      urgencyLevel = 'alta';\n      break;\n      \n    case 'seguimiento_4_7d':\n      contactStrategy = ['call', 'whatsapp'];\n      messageTemplate = 'persistent_followup';\n      urgencyLevel = 'media';\n      break;\n      \n    case 'seguimiento_8_15d':\n      contactStrategy = ['email', 'whatsapp'];\n      messageTemplate = 'retention_attempt';\n      urgencyLevel = 'media';\n      break;\n      \n    case 'seguimiento_16_30d':\n      contactStrategy = ['call'];\n      messageTemplate = 'final_attempt';\n      urgencyLevel = 'baja';\n      break;\n      \n    case 'perdido_definitivo':\n      contactStrategy = [];\n      messageTemplate = 'mark_as_lost';\n      urgencyLevel = 'archivado';\n      break;\n      \n    default:\n      return null;\n  }\n  \n  // Personalizar mensaje según contexto\n  const contextualData = {\n    cliente_nombre: quotation.nombre_cliente,\n    modelo_interes: quotation.modelo_interes,\n    monto_cotizacion: new Intl.NumberFormat('es-CL', {\n      style: 'currency',\n      currency: 'CLP'\n    }).format(quotation.monto_cotizacion),\n    dias_transcurridos: Math.floor(quotation.dias_desde_cotizacion),\n    asesor_nombre: quotation.asesor_nombre,\n    concesionario_nombre: quotation.concesionario_nombre\n  };\n  \n  return {\n    json: {\n      ...quotation,\n      contact_strategy: contactStrategy,\n      message_template: messageTemplate,\n      urgency_level: urgencyLevel,\n      contextual_data: contextualData,\n      follow_up_id: `${quotation.concesionario_id}_${quotation.id}_${Date.now()}`,\n      should_notify_supervisor: quotation.prioridad_seguimiento === 'muy_alta' && quotation.seguimientos_realizados >= 2\n    }\n  };\n}).filter(item => item !== null);\n\nconsole.log('Cotizaciones procesadas para seguimiento:', {\n  total_cotizaciones: processedQuotations.length,\n  por_tipo: processedQuotations.reduce((acc, item) => {\n    const tipo = item.json.tipo_seguimiento;\n    acc[tipo] = (acc[tipo] || 0) + 1;\n    return acc;\n  }, {}),\n  alta_prioridad: processedQuotations.filter(item => item.json.prioridad_seguimiento === 'muy_alta').length\n});\n\nreturn processedQuotations;"
+      },
+      "id": "process-quotations",
+      "name": "Procesar Cotizaciones",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.urgency_level }}",
+              "operation": "notEqual",
+              "value2": "archivado"
+            }
+          ]
+        }
+      },
+      "id": "check-requires-contact",
+      "name": "¿Requiere Contacto?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar mensaje personalizado según template y contexto\nconst quotationData = $input.first().json;\nconst { message_template, contextual_data, tipo_seguimiento } = quotationData;\n\n// Templates de mensajes por tipo de seguimiento\nconst messageTemplates = {\n  initial_followup: {\n    whatsapp: `Hola ${contextual_data.cliente_nombre} 👋\\n\\nSoy ${contextual_data.asesor_nombre} de ${contextual_data.concesionario_nombre}.\\n\\nTe enviamos la cotización del ${contextual_data.modelo_interes} por ${contextual_data.monto_cotizacion}.\\n\\n¿Tuviste oportunidad de revisarla? ¿Tienes alguna consulta?\\n\\n¡Estamos aquí para ayudarte! 🚗`,\n    \n    email: {\n      subject: `Seguimiento Cotización ${contextual_data.modelo_interes} - ${contextual_data.concesionario_nombre}`,\n      body: `Estimado/a ${contextual_data.cliente_nombre},\\n\\nEspero que se encuentre muy bien.\\n\\nLe escribo para hacer seguimiento a la cotización del ${contextual_data.modelo_interes} que le enviamos por ${contextual_data.monto_cotizacion}.\\n\\n¿Ha tenido oportunidad de revisar la propuesta? ¿Hay algún aspecto que le gustaría conversar o aclarar?\\n\\nQuedo atento a sus comentarios y disponible para coordinar una reunión cuando guste.\\n\\nSaludos cordiales,\\n${contextual_data.asesor_nombre}\\n${contextual_data.concesionario_nombre}`\n    }\n  },\n  \n  early_followup: {\n    whatsapp: `Hola ${contextual_data.cliente_nombre} 🙋‍♂️\\n\\nHan pasado ${contextual_data.dias_transcurridos} días desde que te cotizamos el ${contextual_data.modelo_interes}.\\n\\n¿Cómo vas con la decisión? ¿Hay algo específico que te esté frenando?\\n\\nPodemos revisar la cotización juntos y ver si hay algún ajuste que podamos hacer 💪\\n\\n¿Te parece si conversamos hoy?`,\n    \n    call_script: `Buenos días/tardes ${contextual_data.cliente_nombre}, habla ${contextual_data.asesor_nombre} de ${contextual_data.concesionario_nombre}. Le llamo para hacer seguimiento a la cotización del ${contextual_data.modelo_interes} que le envié hace ${contextual_data.dias_transcurridos} días. ¿Ha podido revisarla? ¿Hay alguna duda que pueda aclararle?`\n  },\n  \n  persistent_followup: {\n    whatsapp: `${contextual_data.cliente_nombre}, ¡espero que esté muy bien! 😊\\n\\nVeo que aún no hemos podido concretar lo del ${contextual_data.modelo_interes}.\\n\\n¿Hay algo que no le haya quedado claro de la propuesta?\\n\\nRecuerde que tenemos facilidades de financiamiento y podemos revisar las condiciones.\\n\\n¿Le parece si hablamos por teléfono esta semana?`,\n    \n    call_script: `${contextual_data.cliente_nombre}, soy ${contextual_data.asesor_nombre}. Quería saber cómo va su proceso de decisión sobre el ${contextual_data.modelo_interes}. Han pasado ${contextual_data.dias_transcurridos} días y me gustaría saber si hay algo más que pueda hacer para ayudarle. ¿Podríamos agendar una cita para conversar en persona?`\n  },\n  \n  retention_attempt: {\n    email: {\n      subject: `¡No queremos perderte! - Última oportunidad ${contextual_data.modelo_interes}`,\n      body: `Estimado/a ${contextual_data.cliente_nombre},\\n\\nNotamos que aún no hemos podido concretar la compra del ${contextual_data.modelo_interes}.\\n\\nComo valoramos mucho su interés, queremos ofrecerle condiciones especiales:\\n\\n• Revisión de financiamiento\\n• Descuentos adicionales disponibles\\n• Facilidades de pago\\n\\nEsta oferta es válida por tiempo limitado.\\n\\n¿Le interesa que conversemos una vez más?\\n\\nQuedo a su disposición,\\n${contextual_data.asesor_nombre}`\n    },\n    \n    whatsapp: `${contextual_data.cliente_nombre}, no queremos que se nos escape 😅\\n\\nSé que han pasado ${contextual_data.dias_transcurridos} días desde la cotización del ${contextual_data.modelo_interes}.\\n\\n¿Qué tal si le ofrezco condiciones especiales? Podemos revisar:\\n\\n✅ Mejor precio\\n✅ Facilidades de pago\\n✅ Descuentos adicionales\\n\\n¿Le parece que conversemos mañana?`\n  },\n  \n  final_attempt: {\n    call_script: `${contextual_data.cliente_nombre}, soy ${contextual_data.asesor_nombre} de ${contextual_data.concesionario_nombre}. Esta será mi última llamada sobre el ${contextual_data.modelo_interes}. Han pasado ${contextual_data.dias_transcurridos} días y entiendo que quizás ya no esté interesado. Si aún le interesa, me gustaría hacer una última propuesta. Si no, respeto completamente su decisión.`\n  }\n};\n\n// Seleccionar mensajes según template\nconst selectedMessages = messageTemplates[message_template] || {};\n\n// Preparar output con mensajes personalizados\nconst messageOutput = {\n  ...quotationData,\n  personalized_messages: selectedMessages,\n  generated_at: new Date().toISOString()\n};\n\nconsole.log('Mensajes generados para seguimiento:', {\n  lead_id: quotationData.id,\n  template: message_template,\n  strategies: quotationData.contact_strategy,\n  urgency: quotationData.urgency_level\n});\n\nreturn messageOutput;"
+      },
+      "id": "generate-personalized-messages",
+      "name": "Generar Mensajes Personalizados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1350, 120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "stringArray": [
+            {
+              "value1": "{{ $json.contact_strategy }}",
+              "operation": "contains",
+              "value2": "whatsapp"
+            }
+          ]
+        }
+      },
+      "id": "check-whatsapp-strategy",
+      "name": "¿Incluye WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1570, 120]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "={{ $json.configuracion_whatsapp.webhook_url }}/send-message",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.configuracion_whatsapp.access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.telefono_cliente }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.personalized_messages.whatsapp }}\"\n  },\n  \"context\": {\n    \"tenant_id\": \"{{ $json.concesionario_id }}\",\n    \"lead_id\": \"{{ $json.id }}\",\n    \"follow_up_type\": \"quotation_followup\",\n    \"follow_up_id\": \"{{ $json.follow_up_id }}\"\n  }\n}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 2
+          }
+        }
+      },
+      "id": "send-whatsapp-followup",
+      "name": "Enviar WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1790, 60]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "stringArray": [
+            {
+              "value1": "{{ $json.contact_strategy }}",
+              "operation": "contains",
+              "value2": "email"
+            }
+          ]
+        }
+      },
+      "id": "check-email-strategy",
+      "name": "¿Incluye Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1570, 200]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "emailSmtp",
+        "fromEmail": "ventas@{{ $json.concesionario_nombre.toLowerCase().replace(/[^a-z0-9]/g, '') }}.cl",
+        "toEmail": "={{ $json.email_cliente }}",
+        "ccEmail": "={{ $json.asesor_email }}",  
+        "subject": "={{ $json.personalized_messages.email ? $json.personalized_messages.email.subject : 'Seguimiento Cotización' }}",
+        "text": "={{ $json.personalized_messages.email ? $json.personalized_messages.email.body : 'Seguimiento de su cotización.' }}",
+        "options": {}
+      },
+      "id": "send-email-followup", 
+      "name": "Enviar Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1790, 180]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Registrar seguimiento realizado\nINSERT INTO seguimientos_cotizaciones (\n  lead_id,\n  concesionario_id,\n  asesor_id,\n  jefe_ventas_id,\n  tipo_seguimiento,\n  estrategias_contacto,\n  mensaje_enviado,\n  urgencia_nivel,\n  dias_desde_cotizacion,\n  seguimiento_numero,\n  metadata,\n  created_at\n) VALUES (\n  $1,\n  $2,\n  $3,\n  $4,\n  $5,\n  $6,\n  $7,\n  $8,\n  $9,\n  $10,\n  $11::jsonb,\n  CURRENT_TIMESTAMP\n) RETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.id,\n  $json.concesionario_id,\n  $json.asesor_asignado_id,\n  $json.jefe_ventas_id,\n  $json.tipo_seguimiento,\n  JSON.stringify($json.contact_strategy),\n  JSON.stringify($json.personalized_messages),\n  $json.urgency_level,\n  Math.floor($json.dias_desde_cotizacion),\n  $json.seguimientos_realizados + 1,\n  JSON.stringify({\n    follow_up_id: $json.follow_up_id,\n    prioridad: $json.prioridad_seguimiento,\n    monto_cotizacion: $json.monto_cotizacion,\n    modelo_interes: $json.modelo_interes,\n    score_calidad: $json.score_calidad\n  })\n]"
+        }
+      },
+      "id": "log-followup-attempt",
+      "name": "Registrar Seguimiento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [2010, 120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.should_notify_supervisor }}",
+              "operation": "equal", 
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-notify-supervisor",
+      "name": "¿Notificar Supervisor?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2230, 120]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "emailSmtp",
+        "fromEmail": "ventas@optimacx.com",
+        "toEmail": "={{ $json.jefe_ventas_email }}",
+        "ccEmail": "={{ $json.asesor_email }}",
+        "subject": "🚨 SUPERVISIÓN: Cotización de alto valor requiere intervención - {{ $json.nombre_cliente }}",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        .container { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; }\n        .header { background: #dc3545; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }\n        .content { padding: 20px; border: 1px solid #ddd; border-top: 0; }\n        .highlight { background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; }\n        .stats { background: #f8f9fa; padding: 15px; border-radius: 5px; }\n        .cta { background: #007bff; color: white; padding: 15px; text-align: center; margin: 20px 0; border-radius: 5px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h2>🚨 INTERVENCIÓN REQUERIDA</h2>\n            <p>Cotización de Alto Valor</p>\n        </div>\n        \n        <div class=\"content\">\n            <p><strong>{{ $json.jefe_ventas_nombre }}</strong>,</p>\n            \n            <div class=\"highlight\">\n                <h3>📋 Detalles de la Cotización</h3>\n                <ul>\n                    <li><strong>Cliente:</strong> {{ $json.nombre_cliente }}</li>\n                    <li><strong>Teléfono:</strong> {{ $json.telefono_cliente }}</li>\n                    <li><strong>Modelo:</strong> {{ $json.modelo_interes }}</li>\n                    <li><strong>Monto:</strong> {{ $json.contextual_data.monto_cotizacion }}</li>\n                    <li><strong>Score:</strong> {{ $json.score_calidad }}/100</li>\n                    <li><strong>Asesor:</strong> {{ $json.asesor_nombre }}</li>\n                </ul>\n            </div>\n            \n            <div class=\"stats\">\n                <h4>📊 Estadísticas de Seguimiento</h4>\n                <ul>\n                    <li><strong>Días desde cotización:</strong> {{ $json.contextual_data.dias_transcurridos }}</li>\n                    <li><strong>Seguimientos realizados:</strong> {{ $json.seguimientos_realizados + 1 }}</li>\n                    <li><strong>Prioridad:</strong> {{ $json.prioridad_seguimiento.toUpperCase() }}</li>\n                    <li><strong>Tipo actual:</strong> {{ $json.tipo_seguimiento }}</li>\n                </ul>\n            </div>\n            \n            <div class=\"cta\">\n                <strong>⚡ ACCIÓN REQUERIDA:</strong><br>\n                Esta cotización de alto valor necesita intervención directa del supervisor.<br>\n                Se recomienda contacto personal inmediato.\n            </div>\n            \n            <p><strong>Próximos Pasos Sugeridos:</strong></p>\n            <ol>\n                <li>Contactar personalmente al cliente</li>\n                <li>Revisar objeciones con el asesor</li>\n                <li>Evaluar descuentos adicionales</li>\n                <li>Programar visita presencial</li>\n                <li>Escalar a gerencia si es necesario</li>\n            </ol>\n            \n            <p>💻 <strong>Acceder al sistema:</strong> <a href=\"https://app.optimacx.com/leads/{{ $json.id }}\">Ver Lead Completo</a></p>\n            \n            <hr style=\"margin: 30px 0;\">\n            <p style=\"font-size: 0.9em; color: #6c757d;\">\n                <strong>Óptima-CX - Sistema de Seguimiento Automático</strong><br>\n                Notificación generada: {{ new Date().toLocaleString('es-CL') }}\n            </p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "notify-supervisor-intervention",
+      "name": "Notificar Supervisor",
+      "type": "n8n-nodes-base.emailSend", 
+      "typeVersion": 1,
+      "position": [2450, 60]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Marcar lead como perdido definitivamente\nUPDATE leads \nSET \n  estado = 'perdido',\n  fecha_cierre = CURRENT_TIMESTAMP,\n  motivo_perdida = 'Sin respuesta después de 30 días de seguimiento',\n  updated_at = CURRENT_TIMESTAMP\nWHERE id = $1 AND concesionario_id = $2\nRETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[$json.id, $json.concesionario_id]"
+        }
+      },
+      "id": "mark-quotation-as-lost",
+      "name": "Marcar como Perdido",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1350, 280]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar métricas de seguimientos procesados\nconst processedData = $input.all();\n\nconst summary = {\n  total_seguimientos_realizados: processedData.length,\n  por_tipo: processedData.reduce((acc, item) => {\n    const tipo = item.json.tipo_seguimiento;\n    acc[tipo] = (acc[tipo] || 0) + 1;\n    return acc;\n  }, {}),\n  por_prioridad: processedData.reduce((acc, item) => {\n    const prioridad = item.json.prioridad_seguimiento;\n    acc[prioridad] = (acc[prioridad] || 0) + 1;\n    return acc;\n  }, {}),\n  supervisores_notificados: processedData.filter(item => \n    item.json.should_notify_supervisor\n  ).length,\n  cotizaciones_perdidas: processedData.filter(item => \n    item.json.urgency_level === 'archivado'\n  ).length,\n  valor_total_seguimiento: processedData.reduce((sum, item) => \n    sum + (item.json.monto_cotizacion || 0), 0\n  ),\n  timestamp: new Date().toISOString(),\n  execution_success: true\n};\n\nconsole.log('Seguimientos procesados:', summary);\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-followup-summary",
+      "name": "Generar Resumen Seguimientos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2670, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No hay cotizaciones que requieran seguimiento\nconsole.log('No hay cotizaciones que requieran seguimiento en este momento');\n\nreturn [{\n  json: {\n    message: 'No hay cotizaciones pendientes de seguimiento',\n    timestamp: new Date().toISOString(),\n    execution_success: true,\n    quotations_found: 0\n  }\n}];"
+      },
+      "id": "no-quotations-response",
+      "name": "Sin Cotizaciones Pendientes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 400]
+    }
+  ],
+  "connections": {
+    "Ejecutar cada 4 horas": {
+      "main": [["Consultar Cotizaciones para Seguimiento", "type": "main", "index": 0]]
+    },
+    "Consultar Cotizaciones para Seguimiento": {
+      "main": [["¿Hay Cotizaciones para Seguimiento?", "type": "main", "index": 0]]
+    },
+    "¿Hay Cotizaciones para Seguimiento?": {
+      "main": [
+        [{"node": "Procesar Cotizaciones", "type": "main", "index": 0}],
+        [{"node": "Sin Cotizaciones Pendientes", "type": "main", "index": 0}]
+      ]
+    },
+    "Procesar Cotizaciones": {
+      "main": [["¿Requiere Contacto?", "type": "main", "index": 0]]
+    },
+    "¿Requiere Contacto?": {
+      "main": [
+        [{"node": "Generar Mensajes Personalizados", "type": "main", "index": 0}],
+        [{"node": "Marcar como Perdido", "type": "main", "index": 0}]
+      ]
+    },
+    "Generar Mensajes Personalizados": {
+      "main": [
+        [{"node": "¿Incluye WhatsApp?", "type": "main", "index": 0}],
+        [{"node": "¿Incluye Email?", "type": "main", "index": 0}]
+      ]
+    },
+    "¿Incluye WhatsApp?": {
+      "main": [
+        [{"node": "Enviar WhatsApp", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "¿Incluye Email?": {
+      "main": [
+        [{"node": "Enviar Email", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Enviar WhatsApp": {
+      "main": [["Registrar Seguimiento", "type": "main", "index": 0]]
+    },
+    "Enviar Email": {
+      "main": [["Registrar Seguimiento", "type": "main", "index": 0]]
+    },
+    "Registrar Seguimiento": {
+      "main": [["¿Notificar Supervisor?", "type": "main", "index": 0]]
+    },
+    "¿Notificar Supervisor?": {
+      "main": [
+        [{"node": "Notificar Supervisor", "type": "main", "index": 0}],
+        [{"node": "Generar Resumen Seguimientos", "type": "main", "index": 0}]
+      ]
+    },
+    "Notificar Supervisor": {
+      "main": [["Generar Resumen Seguimientos", "type": "main", "index": 0]]
+    },
+    "Marcar como Perdido": {
+      "main": [["Generar Resumen Seguimientos", "type": "main", "index": 0]]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "manejador-errores"
+  },
+  "staticData": {},
+  "variables": {
+    "FOLLOWUP_VERSION": "1.0.0",
+    "INITIAL_FOLLOWUP_HOURS": 4,
+    "EARLY_FOLLOWUP_DAYS": 3,
+    "PERSISTENT_FOLLOWUP_DAYS": 7,
+    "RETENTION_FOLLOWUP_DAYS": 15,
+    "FINAL_ATTEMPT_DAYS": 30,
+    "HIGH_VALUE_THRESHOLD": 20000000,
+    "SUPERVISOR_NOTIFICATION_ATTEMPTS": 2
+  }
+}

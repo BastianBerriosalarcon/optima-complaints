@@ -1,0 +1,239 @@
+{
+  "name": "Monitor de Telemetría Avanzada",
+  "description": "Sistema de observabilidad profunda que recopila métricas críticas por tenant, latencias de APIs, trazabilidad distribuida y alertas proactivas para SaaS empresarial.",
+  "tags": [
+    "observabilidad",
+    "telemetria", 
+    "metricas",
+    "latencia",
+    "trazabilidad",
+    "critico"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "telemetry-trigger",
+      "name": "Ejecutar cada 5 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/webhook/telemetry-event",
+        "options": {
+          "responseData": "firstEntryJson"
+        }
+      },
+      "id": "telemetry-webhook",
+      "name": "Webhook Eventos Telemetría",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 450]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Recopilar métricas críticas por tenant en tiempo real\nWITH tenant_activity AS (\n  SELECT \n    c.id as tenant_id,\n    c.nombre as tenant_name,\n    c.activo,\n    \n    -- Métricas de leads (última hora)\n    COALESCE((SELECT COUNT(*) FROM leads l WHERE l.concesionario_id = c.id AND l.fecha_creacion > CURRENT_TIMESTAMP - INTERVAL '1 hour'), 0) as leads_ultima_hora,\n    COALESCE((SELECT COUNT(*) FROM leads l WHERE l.concesionario_id = c.id AND l.estado = 'vendido' AND l.fecha_cierre > CURRENT_TIMESTAMP - INTERVAL '1 hour'), 0) as ventas_ultima_hora,\n    \n    -- Métricas de encuestas (última hora)\n    COALESCE((SELECT COUNT(*) FROM encuestas_postventa ep WHERE ep.concesionario_id = c.id AND ep.fecha_completado > CURRENT_TIMESTAMP - INTERVAL '1 hour'), 0) as encuestas_postventa_ultima_hora,\n    COALESCE((SELECT COUNT(*) FROM encuestas_ventas ev WHERE ev.concesionario_id = c.id AND ev.fecha_completado > CURRENT_TIMESTAMP - INTERVAL '1 hour'), 0) as encuestas_ventas_ultima_hora,\n    \n    -- Métricas de reclamos (última hora)\n    COALESCE((SELECT COUNT(*) FROM reclamos r WHERE r.concesionario_id = c.id AND r.fecha_creacion > CURRENT_TIMESTAMP - INTERVAL '1 hour'), 0) as reclamos_ultima_hora,\n    COALESCE((SELECT COUNT(*) FROM reclamos r WHERE r.concesionario_id = c.id AND r.black_alert = true AND r.fecha_creacion > CURRENT_TIMESTAMP - INTERVAL '1 hour'), 0) as black_alerts_ultima_hora,\n    \n    -- Métricas de usuarios activos\n    COALESCE((SELECT COUNT(*) FROM usuarios u WHERE u.concesionario_id = c.id AND u.activo = true), 0) as usuarios_activos,\n    COALESCE((SELECT COUNT(*) FROM usuarios u WHERE u.concesionario_id = c.id AND u.ultimo_acceso > CURRENT_TIMESTAMP - INTERVAL '24 hours'), 0) as usuarios_activos_24h,\n    \n    -- Métricas de Chatwoot (conversaciones)\n    COALESCE((SELECT COUNT(*) FROM contactos_chatwoot cc WHERE cc.tenant_id = c.id AND cc.created_at > CURRENT_TIMESTAMP - INTERVAL '1 hour'), 0) as conversaciones_chatwoot_ultima_hora,\n    \n    -- Estado de workflows críticos (verificar si están ejecutándose)\n    CASE \n      WHEN EXISTS (SELECT 1 FROM workflow_executions we WHERE we.tenant_id = c.id AND we.created_at > CURRENT_TIMESTAMP - INTERVAL '30 minutes') \n      THEN 'healthy' \n      ELSE 'inactive' \n    END as workflow_health_status\n    \n  FROM concesionarios c\n  WHERE c.activo = true\n),\napi_performance AS (\n  -- Métricas de rendimiento de APIs (última hora)\n  SELECT \n    tenant_id,\n    \n    -- Latencias Gemini AI\n    AVG(CASE WHEN api_endpoint = 'gemini' THEN response_time_ms END) as avg_gemini_latency_ms,\n    COUNT(CASE WHEN api_endpoint = 'gemini' AND response_time_ms > 5000 THEN 1 END) as gemini_slow_requests,\n    COUNT(CASE WHEN api_endpoint = 'gemini' AND status_code != 200 THEN 1 END) as gemini_error_requests,\n    \n    -- Latencias Cohere Rerank\n    AVG(CASE WHEN api_endpoint = 'cohere_rerank' THEN response_time_ms END) as avg_cohere_latency_ms,\n    COUNT(CASE WHEN api_endpoint = 'cohere_rerank' AND response_time_ms > 2000 THEN 1 END) as cohere_slow_requests,\n    COUNT(CASE WHEN api_endpoint = 'cohere_rerank' AND status_code != 200 THEN 1 END) as cohere_error_requests,\n    \n    -- Latencias WhatsApp API\n    AVG(CASE WHEN api_endpoint = 'whatsapp' THEN response_time_ms END) as avg_whatsapp_latency_ms,\n    COUNT(CASE WHEN api_endpoint = 'whatsapp' AND status_code != 200 THEN 1 END) as whatsapp_error_requests,\n    \n    -- Latencias Base de Datos\n    AVG(CASE WHEN api_endpoint = 'supabase' THEN response_time_ms END) as avg_db_latency_ms,\n    COUNT(CASE WHEN api_endpoint = 'supabase' AND response_time_ms > 1000 THEN 1 END) as db_slow_queries\n    \n  FROM api_calls_log\n  WHERE created_at > CURRENT_TIMESTAMP - INTERVAL '1 hour'\n  GROUP BY tenant_id\n),\nerror_tracking AS (\n  -- Tracking de errores críticos por tenant\n  SELECT \n    tenant_id,\n    COUNT(*) as total_errors_ultima_hora,\n    COUNT(CASE WHEN error_level = 'critical' THEN 1 END) as critical_errors,\n    COUNT(CASE WHEN error_level = 'error' THEN 1 END) as standard_errors,\n    \n    -- Tipos de errores más comunes\n    string_agg(DISTINCT error_type, ', ') as error_types,\n    \n    -- Último error crítico\n    MAX(CASE WHEN error_level = 'critical' THEN created_at END) as last_critical_error_at\n    \n  FROM error_logs\n  WHERE created_at > CURRENT_TIMESTAMP - INTERVAL '1 hour'\n  GROUP BY tenant_id\n)\nSELECT \n  ta.*,\n  \n  -- Performance metrics\n  ap.avg_gemini_latency_ms,\n  ap.gemini_slow_requests,\n  ap.gemini_error_requests,\n  ap.avg_cohere_latency_ms,\n  ap.cohere_slow_requests,\n  ap.cohere_error_requests,\n  ap.avg_whatsapp_latency_ms,\n  ap.whatsapp_error_requests,\n  ap.avg_db_latency_ms,\n  ap.db_slow_queries,\n  \n  -- Error tracking\n  COALESCE(et.total_errors_ultima_hora, 0) as total_errors_ultima_hora,\n  COALESCE(et.critical_errors, 0) as critical_errors,\n  COALESCE(et.standard_errors, 0) as standard_errors,\n  et.error_types,\n  et.last_critical_error_at,\n  \n  -- Health score calculation (0-100)\n  CASE \n    WHEN ta.workflow_health_status = 'inactive' THEN 0\n    WHEN COALESCE(et.critical_errors, 0) > 0 THEN 25\n    WHEN COALESCE(ap.gemini_error_requests, 0) > 5 OR COALESCE(ap.cohere_error_requests, 0) > 3 THEN 40\n    WHEN COALESCE(ap.avg_gemini_latency_ms, 0) > 8000 OR COALESCE(ap.avg_db_latency_ms, 0) > 2000 THEN 60\n    WHEN COALESCE(ap.gemini_slow_requests, 0) > 10 OR COALESCE(ap.db_slow_queries, 0) > 20 THEN 75\n    ELSE 100\n  END as health_score,\n  \n  -- Alert level determination\n  CASE \n    WHEN ta.workflow_health_status = 'inactive' OR COALESCE(et.critical_errors, 0) > 0 THEN 'critical'\n    WHEN COALESCE(ap.gemini_error_requests, 0) > 5 OR COALESCE(ap.avg_gemini_latency_ms, 0) > 10000 THEN 'high'\n    WHEN COALESCE(ap.gemini_slow_requests, 0) > 10 OR COALESCE(ap.db_slow_queries, 0) > 20 THEN 'medium'\n    ELSE 'low'\n  END as alert_level,\n  \n  -- Timestamp\n  CURRENT_TIMESTAMP as metrics_timestamp\n  \nFROM tenant_activity ta\nLEFT JOIN api_performance ap ON ta.tenant_id = ap.tenant_id\nLEFT JOIN error_tracking et ON ta.tenant_id = et.tenant_id\nORDER BY \n  health_score ASC,\n  total_errors_ultima_hora DESC,\n  leads_ultima_hora DESC;",
+        "additionalFields": {}
+      },
+      "id": "collect-telemetry-metrics",
+      "name": "Recopilar Métricas Telemetría",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar y enriquecer métricas de telemetría\nconst telemetryData = $input.all();\n\nif (!telemetryData || telemetryData.length === 0) {\n  return [];\n}\n\n// Procesamiento de métricas por tenant\nconst processedMetrics = telemetryData.map(item => {\n  const metrics = item.json;\n  \n  // Calcular métricas derivadas\n  const totalActivity = (metrics.leads_ultima_hora || 0) + \n                       (metrics.encuestas_postventa_ultima_hora || 0) + \n                       (metrics.encuestas_ventas_ultima_hora || 0) + \n                       (metrics.reclamos_ultima_hora || 0);\n  \n  const conversionRate = metrics.leads_ultima_hora > 0 \n    ? Math.round((metrics.ventas_ultima_hora / metrics.leads_ultima_hora) * 10000) / 100\n    : 0;\n  \n  const userEngagement = metrics.usuarios_activos > 0\n    ? Math.round((metrics.usuarios_activos_24h / metrics.usuarios_activos) * 10000) / 100\n    : 0;\n  \n  // Detectar anomalías\n  const anomalies = [];\n  \n  if (metrics.health_score < 50) {\n    anomalies.push({\n      type: 'health_critical',\n      message: `Health score crítico: ${metrics.health_score}/100`,\n      severity: 'critical'\n    });\n  }\n  \n  if (metrics.avg_gemini_latency_ms > 8000) {\n    anomalies.push({\n      type: 'high_ai_latency',\n      message: `Latencia Gemini alta: ${Math.round(metrics.avg_gemini_latency_ms)}ms`,\n      severity: 'high'\n    });\n  }\n  \n  if (metrics.black_alerts_ultima_hora > 0) {\n    anomalies.push({\n      type: 'black_alerts',\n      message: `${metrics.black_alerts_ultima_hora} Black Alerts detectadas`,\n      severity: 'critical'\n    });\n  }\n  \n  if (metrics.workflow_health_status === 'inactive') {\n    anomalies.push({\n      type: 'workflow_inactive',\n      message: 'Workflows inactivos por más de 30 minutos',\n      severity: 'critical'\n    });\n  }\n  \n  // SLA compliance check\n  const slaCompliant = {\n    ai_response_time: (metrics.avg_gemini_latency_ms || 0) < 5000,\n    db_response_time: (metrics.avg_db_latency_ms || 0) < 1000,\n    error_rate: (metrics.total_errors_ultima_hora || 0) < 10,\n    uptime: metrics.workflow_health_status === 'healthy'\n  };\n  \n  const slaScore = Object.values(slaCompliant).filter(Boolean).length / Object.keys(slaCompliant).length * 100;\n  \n  return {\n    json: {\n      // Información del tenant\n      tenant_id: metrics.tenant_id,\n      tenant_name: metrics.tenant_name,\n      \n      // Métricas de actividad\n      activity_metrics: {\n        total_activity_ultima_hora: totalActivity,\n        leads_ultima_hora: metrics.leads_ultima_hora,\n        ventas_ultima_hora: metrics.ventas_ultima_hora,\n        conversion_rate_ultima_hora: conversionRate,\n        encuestas_completadas: (metrics.encuestas_postventa_ultima_hora || 0) + (metrics.encuestas_ventas_ultima_hora || 0),\n        reclamos_ultima_hora: metrics.reclamos_ultima_hora,\n        black_alerts: metrics.black_alerts_ultima_hora,\n        conversaciones_chatwoot: metrics.conversaciones_chatwoot_ultima_hora\n      },\n      \n      // Métricas de usuarios\n      user_metrics: {\n        usuarios_activos: metrics.usuarios_activos,\n        usuarios_activos_24h: metrics.usuarios_activos_24h,\n        engagement_rate: userEngagement\n      },\n      \n      // Métricas de performance\n      performance_metrics: {\n        gemini_latency_ms: Math.round(metrics.avg_gemini_latency_ms || 0),\n        cohere_latency_ms: Math.round(metrics.avg_cohere_latency_ms || 0),\n        whatsapp_latency_ms: Math.round(metrics.avg_whatsapp_latency_ms || 0),\n        db_latency_ms: Math.round(metrics.avg_db_latency_ms || 0),\n        \n        slow_requests: {\n          gemini: metrics.gemini_slow_requests || 0,\n          cohere: metrics.cohere_slow_requests || 0,\n          db: metrics.db_slow_queries || 0\n        },\n        \n        error_requests: {\n          gemini: metrics.gemini_error_requests || 0,\n          cohere: metrics.cohere_error_requests || 0,\n          whatsapp: metrics.whatsapp_error_requests || 0\n        }\n      },\n      \n      // Health & SLA\n      health_status: {\n        health_score: metrics.health_score,\n        workflow_status: metrics.workflow_health_status,\n        alert_level: metrics.alert_level,\n        sla_compliant: slaCompliant,\n        sla_score: Math.round(slaScore),\n        anomalies: anomalies\n      },\n      \n      // Errores\n      error_summary: {\n        total_errors: metrics.total_errors_ultima_hora || 0,\n        critical_errors: metrics.critical_errors || 0,\n        error_types: metrics.error_types,\n        last_critical_error: metrics.last_critical_error_at\n      },\n      \n      // Metadata\n      collected_at: metrics.metrics_timestamp,\n      requires_immediate_attention: metrics.alert_level === 'critical',\n      requires_monitoring: anomalies.length > 0\n    }\n  };\n});\n\n// Calcular estadísticas globales\nconst globalStats = {\n  total_tenants: processedMetrics.length,\n  healthy_tenants: processedMetrics.filter(m => m.json.health_status.health_score >= 80).length,\n  critical_tenants: processedMetrics.filter(m => m.json.health_status.alert_level === 'critical').length,\n  average_health_score: processedMetrics.length > 0 \n    ? Math.round(processedMetrics.reduce((sum, m) => sum + m.json.health_status.health_score, 0) / processedMetrics.length)\n    : 0,\n  total_activity: processedMetrics.reduce((sum, m) => sum + m.json.activity_metrics.total_activity_ultima_hora, 0),\n  total_errors: processedMetrics.reduce((sum, m) => sum + m.json.error_summary.total_errors, 0)\n};\n\nconsole.log('Telemetría procesada:', {\n  tenants_monitored: processedMetrics.length,\n  critical_alerts: processedMetrics.filter(m => m.json.requires_immediate_attention).length,\n  global_health: globalStats.average_health_score,\n  total_activity: globalStats.total_activity\n});\n\n// Agregar estadísticas globales al primer elemento\nif (processedMetrics.length > 0) {\n  processedMetrics[0].json.global_stats = globalStats;\n}\n\nreturn processedMetrics;"
+      },
+      "id": "process-telemetry-data",
+      "name": "Procesar Datos Telemetría",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Almacenar métricas de telemetría para análisis histórico\nINSERT INTO telemetria_metricas (\n  tenant_id,\n  health_score,\n  alert_level,\n  total_activity_ultima_hora,\n  conversion_rate,\n  usuarios_activos_24h,\n  gemini_latency_ms,\n  cohere_latency_ms,\n  db_latency_ms,\n  total_errors,\n  critical_errors,\n  sla_score,\n  anomalies_detected,\n  performance_metrics,\n  activity_metrics,\n  error_summary,\n  collected_at,\n  created_at\n) VALUES (\n  $1,\n  $2,\n  $3,\n  $4,\n  $5,\n  $6,\n  $7,\n  $8,\n  $9,\n  $10,\n  $11,\n  $12,\n  $13::jsonb,\n  $14::jsonb,\n  $15::jsonb,\n  $16::jsonb,\n  $17::timestamp,\n  CURRENT_TIMESTAMP\n) \nON CONFLICT (tenant_id, DATE(collected_at), EXTRACT(HOUR FROM collected_at), EXTRACT(MINUTE FROM collected_at) DIV 5) \nDO UPDATE SET\n  health_score = EXCLUDED.health_score,\n  alert_level = EXCLUDED.alert_level,\n  total_activity_ultima_hora = EXCLUDED.total_activity_ultima_hora,\n  conversion_rate = EXCLUDED.conversion_rate,\n  usuarios_activos_24h = EXCLUDED.usuarios_activos_24h,\n  gemini_latency_ms = EXCLUDED.gemini_latency_ms,\n  cohere_latency_ms = EXCLUDED.cohere_latency_ms,\n  db_latency_ms = EXCLUDED.db_latency_ms,\n  total_errors = EXCLUDED.total_errors,\n  critical_errors = EXCLUDED.critical_errors,\n  sla_score = EXCLUDED.sla_score,\n  anomalies_detected = EXCLUDED.anomalies_detected,\n  performance_metrics = EXCLUDED.performance_metrics,\n  activity_metrics = EXCLUDED.activity_metrics,\n  error_summary = EXCLUDED.error_summary,\n  updated_at = CURRENT_TIMESTAMP\nRETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.tenant_id,\n  $json.health_status.health_score,\n  $json.health_status.alert_level,\n  $json.activity_metrics.total_activity_ultima_hora,\n  $json.activity_metrics.conversion_rate_ultima_hora,\n  $json.user_metrics.usuarios_activos_24h,\n  $json.performance_metrics.gemini_latency_ms,\n  $json.performance_metrics.cohere_latency_ms,\n  $json.performance_metrics.db_latency_ms,\n  $json.error_summary.total_errors,\n  $json.error_summary.critical_errors,\n  $json.health_status.sla_score,\n  JSON.stringify($json.health_status.anomalies),\n  JSON.stringify($json.performance_metrics),\n  JSON.stringify($json.activity_metrics),\n  JSON.stringify($json.error_summary),\n  $json.collected_at\n]"
+        }
+      },
+      "id": "store-telemetry-metrics",
+      "name": "Almacenar Métricas Telemetría",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.requires_immediate_attention }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-critical-alerts",
+      "name": "¿Alertas Críticas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "emailSmtp",
+        "fromEmail": "alerts@optimacx.com",
+        "toEmail": "ops@optimacx.com,cto@optimacx.com",
+        "subject": "🚨 ALERTA CRÍTICA TELEMETRÍA - {{ $json.tenant_name }} (Health: {{ $json.health_status.health_score }}/100)",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        .container { font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; }\n        .header { background: #8B0000; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }\n        .critical { background: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; border-radius: 5px; margin: 15px 0; }\n        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }\n        .metric-card { background: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #007bff; }\n        .anomaly { background: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin: 5px 0; border-radius: 3px; }\n        .severe-anomaly { background: #f8d7da; border-left-color: #dc3545; }\n        .performance-table { width: 100%; border-collapse: collapse; margin: 15px 0; }\n        .performance-table th, .performance-table td { padding: 8px; text-align: left; border-bottom: 1px solid #dee2e6; }\n        .performance-table th { background-color: #f8f9fa; }\n        .cta { background: #dc3545; color: white; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h2>🚨 ALERTA CRÍTICA DE TELEMETRÍA</h2>\n            <p><strong>{{ $json.tenant_name }}</strong> (ID: {{ $json.tenant_id }})</p>\n            <p>Health Score: <strong>{{ $json.health_status.health_score }}/100</strong></p>\n            <p>{{ new Date($json.collected_at).toLocaleString('es-CL') }}</p>\n        </div>\n        \n        <div style=\"padding: 20px;\">\n            <div class=\"critical\">\n                <h3>⚠️ SITUACIÓN CRÍTICA DETECTADA</h3>\n                <p><strong>Nivel de Alerta:</strong> {{ $json.health_status.alert_level.toUpperCase() }}</p>\n                <p><strong>SLA Score:</strong> {{ $json.health_status.sla_score }}/100</p>\n                <p><strong>Estado Workflows:</strong> {{ $json.health_status.workflow_status.toUpperCase() }}</p>\n            </div>\n            \n            {{ $json.health_status.anomalies.length > 0 ? `\n            <h3>🔍 Anomalías Detectadas (${$json.health_status.anomalies.length})</h3>\n            ${$json.health_status.anomalies.map(anomaly => `\n            <div class=\"anomaly ${anomaly.severity === 'critical' ? 'severe-anomaly' : ''}\">\n                <strong>${anomaly.type.replace('_', ' ').toUpperCase()}:</strong> ${anomaly.message}\n                <br><small>Severidad: ${anomaly.severity.toUpperCase()}</small>\n            </div>\n            `).join('')}\n            ` : '' }}\n            \n            <div class=\"metrics-grid\">\n                <div class=\"metric-card\">\n                    <h4>📊 Actividad (Última Hora)</h4>\n                    <ul>\n                        <li>Leads: {{ $json.activity_metrics.leads_ultima_hora }}</li>\n                        <li>Ventas: {{ $json.activity_metrics.ventas_ultima_hora }}</li>\n                        <li>Conversión: {{ $json.activity_metrics.conversion_rate_ultima_hora }}%</li>\n                        <li>Reclamos: {{ $json.activity_metrics.reclamos_ultima_hora }}</li>\n                        <li>Black Alerts: {{ $json.activity_metrics.black_alerts }}</li>\n                    </ul>\n                </div>\n                \n                <div class=\"metric-card\">\n                    <h4>⚡ Performance APIs</h4>\n                    <ul>\n                        <li>Gemini: {{ $json.performance_metrics.gemini_latency_ms }}ms</li>\n                        <li>Cohere: {{ $json.performance_metrics.cohere_latency_ms }}ms</li>\n                        <li>WhatsApp: {{ $json.performance_metrics.whatsapp_latency_ms }}ms</li>\n                        <li>Base Datos: {{ $json.performance_metrics.db_latency_ms }}ms</li>\n                    </ul>\n                </div>\n            </div>\n            \n            <h3>🚫 Errores Detectados</h3>\n            <table class=\"performance-table\">\n                <tr>\n                    <th>Métrica</th>\n                    <th>Valor</th>\n                    <th>Estado</th>\n                </tr>\n                <tr>\n                    <td>Total Errores</td>\n                    <td>{{ $json.error_summary.total_errors }}</td>\n                    <td>{{ $json.error_summary.total_errors > 10 ? '❌ Alto' : $json.error_summary.total_errors > 5 ? '⚠️ Medio' : '✅ Normal' }}</td>\n                </tr>\n                <tr>\n                    <td>Errores Críticos</td>\n                    <td>{{ $json.error_summary.critical_errors }}</td>\n                    <td>{{ $json.error_summary.critical_errors > 0 ? '🚨 Crítico' : '✅ OK' }}</td>\n                </tr>\n                <tr>\n                    <td>Errores Gemini</td>\n                    <td>{{ $json.performance_metrics.error_requests.gemini }}</td>\n                    <td>{{ $json.performance_metrics.error_requests.gemini > 5 ? '❌ Alto' : '✅ Normal' }}</td>\n                </tr>\n                <tr>\n                    <td>Errores WhatsApp</td>\n                    <td>{{ $json.performance_metrics.error_requests.whatsapp }}</td>\n                    <td>{{ $json.performance_metrics.error_requests.whatsapp > 3 ? '❌ Alto' : '✅ Normal' }}</td>\n                </tr>\n            </table>\n            \n            {{ $json.error_summary.error_types ? `\n            <div style=\"background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;\">\n                <h4>🔍 Tipos de Errores Detectados:</h4>\n                <p>${$json.error_summary.error_types}</p>\n                ${$json.error_summary.last_critical_error ? `<p><strong>Último Error Crítico:</strong> ${new Date($json.error_summary.last_critical_error).toLocaleString('es-CL')}</p>` : ''}\n            </div>\n            ` : '' }}\n            \n            <div class=\"cta\">\n                <strong>🚨 ACCIÓN INMEDIATA REQUERIDA</strong><br>\n                {{ $json.health_status.workflow_status === 'inactive' ? 'Los workflows están inactivos. Verificar N8N y servicios de Cloud Run.' : 'Múltiples problemas críticos detectados. Revisar logs y servicios inmediatamente.' }}\n            </div>\n            \n            <div style=\"background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;\">\n                <h4>📋 Plan de Acción Inmediato:</h4>\n                <ol>\n                    {{ $json.health_status.workflow_status === 'inactive' ? '<li><strong>Verificar servicios Cloud Run</strong> - N8N, Frontend, Chatwoot</li>' : '' }}\n                    {{ $json.error_summary.critical_errors > 0 ? '<li><strong>Revisar logs críticos</strong> - Identificar causa raíz</li>' : '' }}\n                    {{ $json.performance_metrics.gemini_latency_ms > 8000 ? '<li><strong>Verificar API Gemini</strong> - Latencia excesiva</li>' : '' }}\n                    {{ $json.activity_metrics.black_alerts > 0 ? '<li><strong>Atender Black Alerts</strong> - Reclamos críticos de clientes</li>' : '' }}\n                    <li><strong>Monitorear métricas</strong> - Verificar mejoras en 15 minutos</li>\n                    <li><strong>Comunicar al equipo</strong> - Escalar si es necesario</li>\n                </ol>\n            </div>\n            \n            <p>💻 <strong>Dashboards:</strong></p>\n            <ul>\n                <li><a href=\"https://console.cloud.google.com/run\">Cloud Run Services</a></li>\n                <li><a href=\"https://console.cloud.google.com/monitoring\">Cloud Monitoring</a></li>\n                <li><a href=\"https://app.optimacx.com/admin/telemetry\">Dashboard Telemetría</a></li>\n            </ul>\n            \n            <hr style=\"margin: 30px 0;\">\n            <p style=\"font-size: 0.9em; color: #6c757d;\">\n                <strong>Sistema de Telemetría Avanzada - Óptima-CX</strong><br>\n                Alerta automática generada por degradación crítica del sistema.<br>\n                Tenant: {{ $json.tenant_name }} | Health: {{ $json.health_status.health_score }}/100 | SLA: {{ $json.health_status.sla_score }}/100\n            </p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "send-critical-alert",
+      "name": "Enviar Alerta Crítica",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1350, 200]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"text\": \"🚨 ALERTA CRÍTICA TELEMETRÍA\",\n  \"attachments\": [\n    {\n      \"color\": \"danger\",\n      \"fields\": [\n        {\n          \"title\": \"Tenant\",\n          \"value\": \"{{ $json.tenant_name }}\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Health Score\",\n          \"value\": \"{{ $json.health_status.health_score }}/100\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Errores Críticos\",\n          \"value\": \"{{ $json.error_summary.critical_errors }}\",\n          \"short\": true\n        },\n        {\n          \"title\": \"Latencia Gemini\",\n          \"value\": \"{{ $json.performance_metrics.gemini_latency_ms }}ms\",\n          \"short\": true\n        }\n      ],\n      \"footer\": \"Óptima-CX Telemetría\",\n      \"ts\": {{ Math.floor(Date.now() / 1000) }}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "send-slack-alert",
+      "name": "Enviar Alerta Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1570, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar resumen ejecutivo de telemetría\nconst processedData = $input.all();\n\nif (!processedData || processedData.length === 0) {\n  return [{\n    json: {\n      message: 'No hay datos de telemetría para procesar',\n      timestamp: new Date().toISOString(),\n      execution_success: true\n    }\n  }];\n}\n\n// Extraer estadísticas globales del primer elemento\nconst globalStats = processedData[0]?.json?.global_stats || {\n  total_tenants: processedData.length,\n  healthy_tenants: 0,\n  critical_tenants: 0,\n  average_health_score: 0,\n  total_activity: 0,\n  total_errors: 0\n};\n\n// Generar resumen ejecutivo\nconst executiveSummary = {\n  // Overview general\n  platform_health: {\n    total_tenants_monitored: globalStats.total_tenants,\n    healthy_tenants: globalStats.healthy_tenants,\n    critical_tenants: globalStats.critical_tenants,\n    average_health_score: globalStats.average_health_score,\n    platform_status: globalStats.critical_tenants === 0 ? 'healthy' : globalStats.critical_tenants > globalStats.total_tenants * 0.2 ? 'critical' : 'degraded'\n  },\n  \n  // Actividad agregada\n  activity_summary: {\n    total_activity_ultima_hora: globalStats.total_activity,\n    total_errors_plataforma: globalStats.total_errors,\n    tenants_with_activity: processedData.filter(item => \n      item.json.activity_metrics.total_activity_ultima_hora > 0\n    ).length,\n    \n    // Top tenants por actividad\n    top_active_tenants: processedData\n      .sort((a, b) => b.json.activity_metrics.total_activity_ultima_hora - a.json.activity_metrics.total_activity_ultima_hora)\n      .slice(0, 5)\n      .map(item => ({\n        name: item.json.tenant_name,\n        activity: item.json.activity_metrics.total_activity_ultima_hora,\n        health: item.json.health_status.health_score\n      }))\n  },\n  \n  // Performance agregada\n  performance_summary: {\n    avg_gemini_latency: processedData.length > 0 \n      ? Math.round(processedData.reduce((sum, item) => \n          sum + (item.json.performance_metrics.gemini_latency_ms || 0), 0) / processedData.length)\n      : 0,\n    \n    avg_db_latency: processedData.length > 0\n      ? Math.round(processedData.reduce((sum, item) => \n          sum + (item.json.performance_metrics.db_latency_ms || 0), 0) / processedData.length)\n      : 0,\n    \n    total_slow_requests: processedData.reduce((sum, item) => {\n      const slow = item.json.performance_metrics.slow_requests;\n      return sum + (slow.gemini || 0) + (slow.cohere || 0) + (slow.db || 0);\n    }, 0),\n    \n    sla_compliance_rate: processedData.length > 0\n      ? Math.round(processedData.reduce((sum, item) => \n          sum + item.json.health_status.sla_score, 0) / processedData.length)\n      : 0\n  },\n  \n  // Alertas y anomalías\n  alerts_summary: {\n    critical_alerts_sent: processedData.filter(item => \n      item.json.requires_immediate_attention\n    ).length,\n    \n    total_anomalies: processedData.reduce((sum, item) => \n      sum + item.json.health_status.anomalies.length, 0\n    ),\n    \n    tenants_needing_attention: processedData.filter(item => \n      item.json.requires_monitoring\n    ).length\n  },\n  \n  // Recomendaciones\n  recommendations: [],\n  \n  // Metadata\n  generated_at: new Date().toISOString(),\n  collection_period: '5_minutes',\n  next_collection: new Date(Date.now() + 5 * 60 * 1000).toISOString()\n};\n\n// Generar recomendaciones basadas en los datos\nif (executiveSummary.platform_health.critical_tenants > 0) {\n  executiveSummary.recommendations.push({\n    priority: 'critical',\n    action: 'Atender inmediatamente tenants críticos',\n    description: `${executiveSummary.platform_health.critical_tenants} tenants requieren atención crítica`\n  });\n}\n\nif (executiveSummary.performance_summary.avg_gemini_latency > 5000) {\n  executiveSummary.recommendations.push({\n    priority: 'high',\n    action: 'Optimizar latencia de IA',\n    description: `Latencia promedio Gemini: ${executiveSummary.performance_summary.avg_gemini_latency}ms (objetivo: <5000ms)`\n  });\n}\n\nif (executiveSummary.performance_summary.sla_compliance_rate < 90) {\n  executiveSummary.recommendations.push({\n    priority: 'medium',\n    action: 'Mejorar cumplimiento SLA',\n    description: `SLA compliance: ${executiveSummary.performance_summary.sla_compliance_rate}% (objetivo: >90%)`\n  });\n}\n\nconsole.log('Resumen ejecutivo de telemetría generado:', {\n  platform_status: executiveSummary.platform_health.platform_status,\n  critical_tenants: executiveSummary.platform_health.critical_tenants,\n  avg_health: executiveSummary.platform_health.average_health_score,\n  recommendations: executiveSummary.recommendations.length\n});\n\nreturn [{ json: executiveSummary }];"
+      },
+      "id": "generate-executive-summary",
+      "name": "Generar Resumen Ejecutivo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1790, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar evento individual de telemetría desde webhook\nconst inputData = $input.first().json;\n\n// Validar entrada del webhook\nif (!inputData.event_type || !inputData.tenant_id) {\n  throw new Error('Webhook de telemetría inválido: falta event_type o tenant_id');\n}\n\n// Procesar diferentes tipos de eventos\nlet telemetryEvent = {\n  tenant_id: inputData.tenant_id,\n  event_type: inputData.event_type,\n  timestamp: new Date().toISOString(),\n  metadata: {}\n};\n\nswitch (inputData.event_type) {\n  case 'api_call':\n    telemetryEvent.metadata = {\n      endpoint: inputData.api_endpoint,\n      method: inputData.http_method,\n      status_code: inputData.status_code,\n      response_time_ms: inputData.response_time_ms,\n      error_message: inputData.error_message\n    };\n    break;\n    \n  case 'workflow_execution':\n    telemetryEvent.metadata = {\n      workflow_name: inputData.workflow_name,\n      execution_status: inputData.execution_status,\n      duration_ms: inputData.duration_ms,\n      error_details: inputData.error_details\n    };\n    break;\n    \n  case 'user_action':\n    telemetryEvent.metadata = {\n      user_id: inputData.user_id,\n      action: inputData.action,\n      resource: inputData.resource,\n      success: inputData.success\n    };\n    break;\n    \n  case 'system_error':\n    telemetryEvent.metadata = {\n      error_level: inputData.error_level,\n      error_type: inputData.error_type,\n      error_message: inputData.error_message,\n      stack_trace: inputData.stack_trace,\n      affected_service: inputData.affected_service\n    };\n    break;\n    \n  default:\n    telemetryEvent.metadata = inputData.metadata || {};\n}\n\nconsole.log('Evento de telemetría procesado:', {\n  tenant_id: telemetryEvent.tenant_id,\n  event_type: telemetryEvent.event_type,\n  timestamp: telemetryEvent.timestamp\n});\n\nreturn telemetryEvent;"
+      },
+      "id": "process-telemetry-event",
+      "name": "Procesar Evento Individual",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 450]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Almacenar evento individual de telemetría\nINSERT INTO telemetria_eventos (\n  tenant_id,\n  event_type,\n  metadata,\n  timestamp,\n  created_at\n) VALUES (\n  $1,\n  $2,\n  $3::jsonb,\n  $4::timestamp,\n  CURRENT_TIMESTAMP\n) RETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.tenant_id,\n  $json.event_type,\n  JSON.stringify($json.metadata),\n  $json.timestamp\n]"
+        }
+      },
+      "id": "store-telemetry-event",
+      "name": "Almacenar Evento Individual",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [690, 450]
+    },
+    {
+      "parameters": {
+        "respondWithOptions": "responseData",
+        "responseData": "={\n  \"success\": true,\n  \"message\": \"Evento de telemetría registrado exitosamente\",\n  \"event_id\": {{ $('Almacenar Evento Individual').first().json.id }},\n  \"tenant_id\": \"{{ $json.tenant_id }}\",\n  \"event_type\": \"{{ $json.event_type }}\",\n  \"timestamp\": \"{{ $json.timestamp }}\"\n}"
+      },
+      "id": "respond-telemetry-event",
+      "name": "Respuesta Evento Telemetría",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [910, 450]
+    }
+  ],
+  "connections": {
+    "Ejecutar cada 5 minutos": {
+      "main": [["Recopilar Métricas Telemetría", "type": "main", "index": 0]]
+    },
+    "Webhook Eventos Telemetría": {
+      "main": [["Procesar Evento Individual", "type": "main", "index": 0]]
+    },
+    "Recopilar Métricas Telemetría": {
+      "main": [["Procesar Datos Telemetría", "type": "main", "index": 0]]
+    },
+    "Procesar Datos Telemetría": {
+      "main": [["Almacenar Métricas Telemetría", "type": "main", "index": 0]]
+    },
+    "Almacenar Métricas Telemetría": {
+      "main": [["¿Alertas Críticas?", "type": "main", "index": 0]]
+    },
+    "¿Alertas Críticas?": {
+      "main": [
+        [{"node": "Enviar Alerta Crítica", "type": "main", "index": 0}],
+        [{"node": "Generar Resumen Ejecutivo", "type": "main", "index": 0}]
+      ]
+    },
+    "Enviar Alerta Crítica": {
+      "main": [["Enviar Alerta Slack", "type": "main", "index": 0]]
+    },
+    "Enviar Alerta Slack": {
+      "main": [["Generar Resumen Ejecutivo", "type": "main", "index": 0]]
+    },
+    "Procesar Evento Individual": {
+      "main": [["Almacenar Evento Individual", "type": "main", "index": 0]]
+    },
+    "Almacenar Evento Individual": {
+      "main": [["Respuesta Evento Telemetría", "type": "main", "index": 0]]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "manejador-errores"
+  },
+  "staticData": {},
+  "variables": {
+    "TELEMETRY_VERSION": "1.0.0",
+    "COLLECTION_INTERVAL_MINUTES": 5,
+    "WEBHOOK_PATH": "/webhook/telemetry-event",
+    "HEALTH_CRITICAL_THRESHOLD": 50,
+    "LATENCY_THRESHOLD_MS": 5000,
+    "ERROR_THRESHOLD_HOURLY": 10,
+    "SLA_TARGET_PERCENT": 90,
+    "ALERT_RECIPIENTS": ["ops@optimacx.com", "cto@optimacx.com"]
+  }
+}

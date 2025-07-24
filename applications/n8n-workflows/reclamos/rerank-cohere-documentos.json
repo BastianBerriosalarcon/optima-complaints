@@ -1,0 +1,191 @@
+{
+  "name": "ReRank Cohere - Refinamiento de Documentos RAG",
+  "description": "Workflow que utiliza la API de Cohere Rerank para mejorar significativamente la precisión de documentos recuperados en el pipeline RAG, proporcionando contexto de alta calidad al LLM.",
+  "tags": [
+    "rag",
+    "cohere", 
+    "rerank",
+    "documentos",
+    "precision",
+    "critico"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger ReRank",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validar entrada para proceso de reranking\nconst inputData = $input.first().json;\n\n// Campos requeridos para reranking\nconst requiredFields = ['query', 'documents', 'tenant_id'];\n\nfor (const field of requiredFields) {\n  if (!inputData[field]) {\n    throw new Error(`Campo requerido faltante para reranking: ${field}`);\n  }\n}\n\n// Validar que documents sea un array\nif (!Array.isArray(inputData.documents)) {\n  throw new Error('El campo documents debe ser un array');\n}\n\n// Validar mínimo de documentos\nif (inputData.documents.length === 0) {\n  throw new Error('Se requiere al menos 1 documento para reranking');\n}\n\n// Validar máximo de documentos (Cohere tiene límite)\nif (inputData.documents.length > 100) {\n  console.warn(`Documentos exceden límite de Cohere (100). Tomando los primeros 100.`);\n  inputData.documents = inputData.documents.slice(0, 100);\n}\n\n// Preparar datos para Cohere Rerank\nconst cohereInput = {\n  query: inputData.query.trim(),\n  documents: inputData.documents.map((doc, index) => ({\n    text: doc.content || doc.text || doc.chunk_content,\n    metadata: {\n      original_index: index,\n      document_id: doc.document_id || doc.id,\n      chunk_id: doc.chunk_id || doc.chunk_index,\n      similarity_score: doc.similarity_score || doc.score,\n      category: doc.category,\n      tenant_id: doc.tenant_id || inputData.tenant_id\n    }\n  })),\n  tenant_id: inputData.tenant_id,\n  model: inputData.rerank_model || 'rerank-multilingual-v3.0', // Mejor para español\n  top_k: inputData.top_k || 5, // Top documentos a retornar\n  return_documents: true\n};\n\nconsole.log('Entrada validada para Cohere Rerank:', {\n  query_length: cohereInput.query.length,\n  documents_count: cohereInput.documents.length,\n  tenant_id: cohereInput.tenant_id,\n  top_k: cohereInput.top_k\n});\n\nreturn cohereInput;"
+      },
+      "id": "validate-rerank-input",
+      "name": "Validar Entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Obtener configuración de Cohere para el tenant\nSELECT \n  configuracion_ai->>'cohere_api_key' as cohere_api_key,\n  configuracion_ai->>'cohere_model' as cohere_model,\n  configuracion_ai->>'rerank_top_k' as rerank_top_k,\n  configuracion_ai->>'rerank_threshold' as rerank_threshold\nFROM concesionarios \nWHERE id = $1 AND activo = true\nLIMIT 1;",
+        "additionalFields": {
+          "queryParameters": "=[$json.tenant_id]"
+        }
+      },
+      "id": "get-cohere-config",
+      "name": "Obtener Config Cohere",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar llamada a Cohere Rerank API\nconst cohereData = $('Validar Entrada').first().json;\nconst configData = $input.first().json;\n\n// Usar configuración del tenant o defaults\nconst cohereConfig = {\n  api_key: configData.cohere_api_key || process.env.COHERE_API_KEY,\n  model: configData.cohere_model || cohereData.model,\n  top_k: parseInt(configData.rerank_top_k) || cohereData.top_k,\n  threshold: parseFloat(configData.rerank_threshold) || 0.3\n};\n\nif (!cohereConfig.api_key) {\n  throw new Error('API key de Cohere no configurada para el tenant');\n}\n\n// Estructura para llamada HTTP\nconst cohereRequest = {\n  query: cohereData.query,\n  documents: cohereData.documents.map(doc => doc.text),\n  model: cohereConfig.model,\n  top_k: cohereConfig.top_k,\n  return_documents: true\n};\n\nconsole.log('Configuración Cohere preparada:', {\n  model: cohereConfig.model,\n  top_k: cohereConfig.top_k,\n  threshold: cohereConfig.threshold,\n  documents_to_rerank: cohereRequest.documents.length\n});\n\nreturn {\n  cohere_request: cohereRequest,\n  cohere_config: cohereConfig,\n  original_documents: cohereData.documents,\n  tenant_id: cohereData.tenant_id\n};"
+      },
+      "id": "prepare-cohere-request",
+      "name": "Preparar Request Cohere",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://api.cohere.ai/v1/rerank",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.cohere_config.api_key }}"
+            },
+            {
+              "name": "Content-Type", 
+              "value": "application/json"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ JSON.stringify($json.cohere_request) }}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 2
+          },
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "call-cohere-rerank",
+      "name": "Llamar Cohere Rerank",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar respuesta de Cohere y enriquecer documentos re-rankeados\nconst requestData = $('Preparar Request Cohere').first().json;\nconst cohereResponse = $input.first().json;\n\nif (!cohereResponse.results || !Array.isArray(cohereResponse.results)) {\n  throw new Error('Respuesta inválida de Cohere Rerank API');\n}\n\n// Enriquecer documentos con scores de Cohere\nconst rerankedDocuments = cohereResponse.results.map((result, newIndex) => {\n  const originalDoc = requestData.original_documents[result.index];\n  \n  return {\n    // Información del documento original\n    document_id: originalDoc.metadata.document_id,\n    chunk_id: originalDoc.metadata.chunk_id,\n    content: result.document?.text || originalDoc.text,\n    category: originalDoc.metadata.category,\n    tenant_id: originalDoc.metadata.tenant_id,\n    \n    // Scores y ranking\n    original_similarity_score: originalDoc.metadata.similarity_score,\n    cohere_relevance_score: result.relevance_score,\n    original_rank: result.index + 1, // Posición original\n    new_rank: newIndex + 1, // Nueva posición después de rerank\n    rank_improvement: (result.index + 1) - (newIndex + 1), // Mejora en ranking\n    \n    // Metadata adicional\n    reranked_at: new Date().toISOString(),\n    rerank_model: requestData.cohere_config.model,\n    meets_threshold: result.relevance_score >= requestData.cohere_config.threshold\n  };\n});\n\n// Filtrar por threshold si se especifica\nconst filteredDocuments = rerankedDocuments.filter(doc => \n  doc.meets_threshold || requestData.cohere_config.threshold <= 0\n);\n\n// Estadísticas del reranking\nconst rerankStats = {\n  original_count: requestData.original_documents.length,\n  reranked_count: rerankedDocuments.length,\n  filtered_count: filteredDocuments.length,\n  threshold_used: requestData.cohere_config.threshold,\n  average_relevance_score: rerankedDocuments.reduce((sum, doc) => \n    sum + doc.cohere_relevance_score, 0) / rerankedDocuments.length,\n  top_score: Math.max(...rerankedDocuments.map(doc => doc.cohere_relevance_score)),\n  significant_improvements: rerankedDocuments.filter(doc => doc.rank_improvement > 2).length\n};\n\nconsole.log('Documentos re-rankeados por Cohere:', {\n  tenant_id: requestData.tenant_id,\n  ...rerankStats\n});\n\nreturn {\n  reranked_documents: filteredDocuments,\n  rerank_stats: rerankStats,\n  tenant_id: requestData.tenant_id,\n  query: requestData.cohere_request.query,\n  processing_completed_at: new Date().toISOString()\n};"
+      },
+      "id": "process-rerank-results",
+      "name": "Procesar Resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Registrar métricas de reranking para análisis posterior\nINSERT INTO rag_rerank_metrics (\n  tenant_id,\n  query_hash,\n  original_documents_count,\n  reranked_documents_count,\n  filtered_documents_count,\n  threshold_used,\n  average_relevance_score,\n  top_relevance_score,\n  significant_improvements_count,\n  model_used,\n  processing_time_ms,\n  created_at\n) VALUES (\n  $1,\n  encode(sha256($2::bytea), 'hex'),\n  $3,\n  $4, \n  $5,\n  $6,\n  $7,\n  $8,\n  $9,\n  $10,\n  $11,\n  CURRENT_TIMESTAMP\n) \nON CONFLICT (tenant_id, query_hash) DO UPDATE SET\n  reranked_documents_count = EXCLUDED.reranked_documents_count,\n  filtered_documents_count = EXCLUDED.filtered_documents_count,\n  average_relevance_score = EXCLUDED.average_relevance_score,\n  updated_at = CURRENT_TIMESTAMP\nRETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.tenant_id,\n  $json.query,\n  $json.rerank_stats.original_count,\n  $json.rerank_stats.reranked_count,\n  $json.rerank_stats.filtered_count,\n  $json.rerank_stats.threshold_used,\n  $json.rerank_stats.average_relevance_score,\n  $json.rerank_stats.top_score,\n  $json.rerank_stats.significant_improvements,\n  'rerank-multilingual-v3.0',\n  Math.round((new Date() - new Date($json.processing_completed_at)) / 1000 * 1000)\n]"
+        }
+      },
+      "id": "log-rerank-metrics",
+      "name": "Registrar Métricas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1570, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar contexto enriquecido para el LLM final\nconst rerankData = $('Procesar Resultados').first().json;\n\n// Construir contexto de alta calidad para el prompt\nconst enrichedContext = {\n  // Documentos re-rankeados y filtrados\n  high_quality_documents: rerankData.reranked_documents.map((doc, index) => ({\n    rank: index + 1,\n    relevance_score: Math.round(doc.cohere_relevance_score * 100) / 100,\n    content: doc.content,\n    source: {\n      document_id: doc.document_id,\n      category: doc.category,\n      chunk_id: doc.chunk_id\n    },\n    quality_indicators: {\n      original_rank: doc.original_rank,\n      rank_improvement: doc.rank_improvement,\n      meets_threshold: doc.meets_threshold\n    }\n  })),\n  \n  // Metadata del contexto\n  context_metadata: {\n    total_documents: rerankData.reranked_documents.length,\n    average_relevance: Math.round(rerankData.rerank_stats.average_relevance_score * 100) / 100,\n    top_relevance: Math.round(rerankData.rerank_stats.top_score * 100) / 100,\n    context_quality: rerankData.rerank_stats.top_score >= 0.8 ? 'alta' : rerankData.rerank_stats.top_score >= 0.5 ? 'media' : 'baja',\n    processing_method: 'cohere_rerank_v3'\n  },\n  \n  // Query original para referencia\n  original_query: rerankData.query,\n  tenant_id: rerankData.tenant_id,\n  \n  // Instrucciones para el LLM\n  usage_instructions: {\n    priority: 'Usa los documentos con mayor relevance_score primero',\n    quality_threshold: 'Documentos con score >= 0.5 son de alta confianza',\n    source_citation: 'Incluye referencias a document_id cuando sea relevante',\n    context_completeness: rerankData.reranked_documents.length >= 3 ? 'completo' : 'limitado'\n  }\n};\n\nconsole.log('Contexto enriquecido preparado:', {\n  tenant_id: enrichedContext.tenant_id,\n  documents_count: enrichedContext.high_quality_documents.length,\n  context_quality: enrichedContext.context_metadata.context_quality,\n  avg_relevance: enrichedContext.context_metadata.average_relevance\n});\n\nreturn enrichedContext;"
+      },
+      "id": "prepare-enriched-context",
+      "name": "Preparar Contexto Enriquecido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1790, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution", 
+        "workflowId": "procesador-rag-reclamos",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-llm-generation",
+      "name": "Activar Generación LLM",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [2010, 300]
+    }
+  ],
+  "connections": {
+    "Trigger ReRank": {
+      "main": [[{"node": "Validar Entrada", "type": "main", "index": 0}]]
+    },
+    "Validar Entrada": {
+      "main": [[{"node": "Obtener Config Cohere", "type": "main", "index": 0}]]
+    },
+    "Obtener Config Cohere": {
+      "main": [[{"node": "Preparar Request Cohere", "type": "main", "index": 0}]]
+    },
+    "Preparar Request Cohere": {
+      "main": [[{"node": "Llamar Cohere Rerank", "type": "main", "index": 0}]]
+    },
+    "Llamar Cohere Rerank": {
+      "main": [[{"node": "Procesar Resultados", "type": "main", "index": 0}]]
+    },
+    "Procesar Resultados": {
+      "main": [[{"node": "Registrar Métricas", "type": "main", "index": 0}]]
+    },
+    "Registrar Métricas": {
+      "main": [[{"node": "Preparar Contexto Enriquecido", "type": "main", "index": 0}]]
+    },
+    "Preparar Contexto Enriquecido": {
+      "main": [[{"node": "Activar Generación LLM", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "manejador-errores"
+  },
+  "staticData": {},
+  "variables": {
+    "RERANK_VERSION": "1.0.0",
+    "DEFAULT_MODEL": "rerank-multilingual-v3.0",
+    "DEFAULT_TOP_K": 5,
+    "DEFAULT_THRESHOLD": 0.3,
+    "MAX_DOCUMENTS": 100
+  }
+}

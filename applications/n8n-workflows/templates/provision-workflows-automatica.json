@@ -1,0 +1,240 @@
+{
+  "name": "Provisión Automática de Workflows por Tenant",
+  "description": "Workflow maestro que automatiza la creación y configuración de todos los workflows necesarios para un nuevo concesionario, incluyendo personalización de variables, credenciales y configuración RAG.",
+  "tags": [
+    "provision",
+    "automation", 
+    "multitenant",
+    "workflows",
+    "critico"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/webhook/provision-tenant-workflows",
+        "options": {
+          "responseData": "firstEntryJson"
+        }
+      },
+      "id": "webhook-provision-trigger",
+      "name": "Webhook Provisión Workflows",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validar datos de entrada para provisión de workflows\nconst inputData = $input.first().json;\n\n// Campos obligatorios para provisión\nconst requiredFields = [\n  'tenant_id',\n  'tenant_name',\n  'whatsapp_config',\n  'email_config', \n  'ai_config',\n  'workflows_to_provision'\n];\n\n// Validar campos obligatorios\nfor (const field of requiredFields) {\n  if (!inputData[field]) {\n    throw new Error(`Campo requerido faltante para provisión: ${field}`);\n  }\n}\n\n// Definir todos los workflows template disponibles por módulo\nconst availableWorkflows = {\n  leads: [\n    'procesador-whatsapp-leads',\n    'analisis-ia-leads',\n    'puntuacion-ia-leads', \n    'asignacion-asesores',\n    'notificaciones-leads',\n    'recordatorios-leads'\n  ],\n  encuestas_postventa: [\n    'procesador-qr',\n    'procesador-excel',\n    'filtro-duplicados',\n    'enviador-whatsapp',\n    'monitor-respuestas',\n    'asignacion-contact-center',\n    'manejador-respuestas',\n    'notificador-notas-bajas',\n    'exportador-excel',\n    'webhook-envio-encuestas'\n  ],\n  encuestas_ventas: [\n    'procesador-qr-ventas',\n    'procesador-excel-ventas',\n    'filtro-duplicados-ventas',\n    'enviador-whatsapp-ventas',\n    'enviador-masivo-whatsapp-ventas',\n    'monitor-respuestas-ventas',\n    'asignacion-contact-center-ventas',\n    'manejador-respuestas-ventas',\n    'notificador-notas-bajas-ventas',\n    'exportador-excel-ventas',\n    'webhook-envio-encuestas-ventas'\n  ],\n  reclamos: [\n    'procesador-rag-reclamos',\n    'rerank-cohere-documentos',\n    'asignacion-automatica-reclamos',\n    'notificaciones-reclamos',\n    'alerta-black-alert',\n    'ingesta-conocimiento',\n    'fragmentacion-conocimiento',\n    'generador-embeddings',\n    'almacenamiento-conocimiento'\n  ],\n  utils: [\n    'cargador-config-tenant',\n    'validador-mensajes-whatsapp',\n    'manejador-errores',\n    'notificador-escalacion'\n  ]\n};\n\n// Determinar workflows a provisionar\nlet workflowsToProvision = [];\nif (inputData.workflows_to_provision === 'all') {\n  // Provisionar todos los workflows disponibles\n  workflowsToProvision = Object.values(availableWorkflows).flat();\n} else if (Array.isArray(inputData.workflows_to_provision)) {\n  // Provisionar workflows específicos\n  workflowsToProvision = inputData.workflows_to_provision;\n} else {\n  throw new Error('workflows_to_provision debe ser \"all\" o un array de nombres de workflows');\n}\n\n// Validar que todos los workflows solicitados existen\nconst allAvailableWorkflows = Object.values(availableWorkflows).flat();\nfor (const workflow of workflowsToProvision) {\n  if (!allAvailableWorkflows.includes(workflow)) {\n    console.warn(`Workflow no encontrado: ${workflow}. Será omitido.`);\n  }\n}\n\n// Filtrar solo workflows existentes\nworkflowsToProvision = workflowsToProvision.filter(w => allAvailableWorkflows.includes(w));\n\n// Estructura de provisión\nconst provisionConfig = {\n  tenant_id: inputData.tenant_id,\n  tenant_name: inputData.tenant_name,\n  \n  // Configuraciones del tenant\n  tenant_config: {\n    whatsapp: inputData.whatsapp_config,\n    email: inputData.email_config,\n    ai: inputData.ai_config,\n    business_hours: inputData.business_hours || {\n      lunes_a_viernes: { inicio: '09:00', fin: '18:00' },\n      sabados: { inicio: '09:00', fin: '14:00' },\n      domingos: { activo: false },\n      timezone: 'America/Santiago'\n    }\n  },\n  \n  // Workflows a provisionar\n  workflows_to_provision: workflowsToProvision,\n  total_workflows: workflowsToProvision.length,\n  \n  // Variables globales para todos los workflows\n  global_variables: {\n    TENANT_ID: inputData.tenant_id,\n    TENANT_NAME: inputData.tenant_name,\n    WEBHOOK_BASE_URL: `https://n8n-optimacx.run.app/webhook/${inputData.tenant_id}`,\n    SUPABASE_PROJECT_URL: process.env.SUPABASE_PROJECT_URL,\n    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,\n    GEMINI_API_KEY: inputData.ai_config.gemini_api_key,\n    COHERE_API_KEY: inputData.ai_config.cohere_api_key || process.env.COHERE_API_KEY,\n    WHATSAPP_VERIFY_TOKEN: inputData.whatsapp_config.verify_token,\n    WHATSAPP_ACCESS_TOKEN: inputData.whatsapp_config.business_token,\n    SMTP_CONFIG: JSON.stringify(inputData.email_config)\n  },\n  \n  // Metadatos de provisión\n  provision_metadata: {\n    requested_at: new Date().toISOString(),\n    provision_mode: inputData.workflows_to_provision === 'all' ? 'complete' : 'selective',\n    estimated_duration_minutes: Math.ceil(workflowsToProvision.length * 0.5), // 30 segundos por workflow\n    version: '1.0.0'\n  }\n};\n\nconsole.log('Configuración de provisión preparada:', {\n  tenant_id: provisionConfig.tenant_id,\n  workflows_count: provisionConfig.total_workflows,\n  provision_mode: provisionConfig.provision_metadata.provision_mode\n});\n\nreturn provisionConfig;"
+      },
+      "id": "validate-provision-config",
+      "name": "Validar Configuración",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Verificar que el tenant existe y está activo\nSELECT \n  id,\n  nombre,\n  activo,\n  configuracion_ai,\n  fecha_creacion\nFROM concesionarios \nWHERE id = $1 AND activo = true\nLIMIT 1;",
+        "additionalFields": {
+          "queryParameters": "=[$json.tenant_id]"
+        }
+      },
+      "id": "verify-tenant-exists",
+      "name": "Verificar Tenant Existe",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar configuración específica para cada workflow\nconst provisionData = $('Validar Configuración').first().json;\nconst tenantData = $input.first().json;\n\nif (!tenantData || tenantData.length === 0) {\n  throw new Error(`Tenant ${provisionData.tenant_id} no encontrado o inactivo`);\n}\n\nconst tenant = tenantData[0];\n\n// Crear configuración específica para cada workflow\nconst workflowConfigs = [];\n\nfor (const workflowName of provisionData.workflows_to_provision) {\n  // Configuración base común para todos los workflows\n  const baseConfig = {\n    workflow_name: workflowName,\n    tenant_id: provisionData.tenant_id,\n    tenant_name: provisionData.tenant_name,\n    \n    // Variables específicas por workflow\n    workflow_variables: {\n      ...provisionData.global_variables,\n      WORKFLOW_NAME: workflowName,\n      WEBHOOK_URL: `${provisionData.global_variables.WEBHOOK_BASE_URL}/${workflowName}`\n    },\n    \n    // Configuración específica según el tipo de workflow\n    specific_config: {}\n  };\n  \n  // Configuraciones específicas por tipo de workflow\n  if (workflowName.includes('whatsapp')) {\n    baseConfig.specific_config = {\n      whatsapp_webhook_url: `${provisionData.global_variables.WEBHOOK_BASE_URL}/whatsapp`,\n      phone_number_id: provisionData.tenant_config.whatsapp.phone_number_id,\n      verify_token: provisionData.tenant_config.whatsapp.verify_token\n    };\n  }\n  \n  if (workflowName.includes('email') || workflowName.includes('notific')) {\n    baseConfig.specific_config = {\n      smtp_host: provisionData.tenant_config.email.smtp_host,\n      smtp_port: provisionData.tenant_config.email.smtp_port || 587,\n      from_email: provisionData.tenant_config.email.from_email,\n      from_name: provisionData.tenant_config.email.from_name || provisionData.tenant_name\n    };\n  }\n  \n  if (workflowName.includes('ia') || workflowName.includes('rag') || workflowName.includes('cohere')) {\n    baseConfig.specific_config = {\n      gemini_model: provisionData.tenant_config.ai.model || 'gemini-2.5-pro',\n      embedding_model: provisionData.tenant_config.ai.embedding_model || 'gemini-embedding-001',\n      temperature: provisionData.tenant_config.ai.temperature || 0.7,\n      max_tokens: provisionData.tenant_config.ai.max_tokens || 1000,\n      rag_threshold: provisionData.tenant_config.ai.rag_threshold || 0.7,\n      cohere_model: 'rerank-multilingual-v3.0'\n    };\n  }\n  \n  if (workflowName.includes('escalacion')) {\n    baseConfig.specific_config = {\n      escalation_mode: 'IMMEDIATE',\n      lead_escalation_minutes: 2,\n      complaint_escalation_minutes: 1\n    };\n  }\n  \n  workflowConfigs.push(baseConfig);\n}\n\nconsole.log('Configuraciones de workflows preparadas:', {\n  tenant_id: provisionData.tenant_id,\n  workflows_configured: workflowConfigs.length\n});\n\nreturn {\n  ...provisionData,\n  tenant_verified: tenant,\n  workflow_configs: workflowConfigs\n};"
+      },
+      "id": "prepare-workflow-configs",
+      "name": "Preparar Configs Workflows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Iterar sobre cada configuración de workflow para provisionar\nconst provisionData = $input.first().json;\nconst workflowConfigs = provisionData.workflow_configs;\n\n// Crear un item por cada workflow a provisionar\nconst provisionItems = workflowConfigs.map((config, index) => ({\n  json: {\n    ...config,\n    provision_index: index + 1,\n    total_workflows: workflowConfigs.length,\n    provision_id: `${provisionData.tenant_id}_${config.workflow_name}_${Date.now()}`\n  }\n}));\n\nconsole.log('Items de provisión creados:', {\n  total_items: provisionItems.length,\n  tenant_id: provisionData.tenant_id\n});\n\nreturn provisionItems;"
+      },
+      "id": "create-provision-items",
+      "name": "Crear Items Provisión",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "http://n8n-service:5678/api/v1/workflows",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ process.env.N8N_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"name\": \"{{ $json.tenant_id }}_{{ $json.workflow_name }}\",\n  \"nodes\": {{ JSON.stringify($json.workflow_template_nodes) }},\n  \"connections\": {{ JSON.stringify($json.workflow_template_connections) }},\n  \"settings\": {\n    \"saveExecutionProgress\": true,\n    \"saveManualExecutions\": true,\n    \"callerPolicy\": \"workflowsFromSameOwner\",\n    \"errorWorkflow\": \"{{ $json.tenant_id }}_manejador-errores\"\n  },\n  \"staticData\": {},\n  \"variables\": {{ JSON.stringify($json.workflow_variables) }},\n  \"tags\": [\n    \"{{ $json.tenant_id }}\",\n    \"{{ $json.tenant_name }}\",\n    \"auto-provisioned\",\n    \"{{ $json.workflow_name }}\"\n  ],\n  \"active\": false\n}",
+        "options": {
+          "timeout": 30000,
+          "retry": {
+            "enabled": true,
+            "maxRetries": 3
+          }
+        }
+      },
+      "id": "create-workflow-via-api",
+      "name": "Crear Workflow via API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Registrar workflow provisionado en tabla de auditoría\nINSERT INTO workflows_provisionados (\n  tenant_id,\n  tenant_name,\n  workflow_name,\n  workflow_id,\n  n8n_workflow_id,\n  provision_id,\n  configuracion,\n  estado,\n  created_at\n) VALUES (\n  $1,\n  $2,\n  $3,\n  $4,\n  $5,\n  $6,\n  $7::jsonb,\n  'created',\n  CURRENT_TIMESTAMP\n) \nON CONFLICT (tenant_id, workflow_name) DO UPDATE SET\n  n8n_workflow_id = EXCLUDED.n8n_workflow_id,\n  configuracion = EXCLUDED.configuracion,\n  estado = 'updated',\n  updated_at = CURRENT_TIMESTAMP\nRETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.tenant_id,\n  $json.tenant_name,\n  $json.workflow_name,\n  `${$json.tenant_id}_${$json.workflow_name}`,\n  $('Crear Workflow via API').first().json.id,\n  $json.provision_id,\n  JSON.stringify({\n    workflow_variables: $json.workflow_variables,\n    specific_config: $json.specific_config,\n    provision_index: $json.provision_index\n  })\n]"
+        }
+      },
+      "id": "register-provisioned-workflow",
+      "name": "Registrar Workflow",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1570, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "=http://n8n-service:5678/api/v1/workflows/{{ $('Crear Workflow via API').first().json.id }}/activate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ process.env.N8N_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "activate-workflow",
+      "name": "Activar Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1790, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar resultado de la provisión individual\nconst workflowData = $('Crear Items Provisión').first().json;\nconst apiResponse = $('Crear Workflow via API').first().json;\nconst registrationResponse = $('Registrar Workflow').first().json;\nconst activationResponse = $input.first().json;\n\nconst provisionResult = {\n  tenant_id: workflowData.tenant_id,\n  workflow_name: workflowData.workflow_name,\n  provision_index: workflowData.provision_index,\n  total_workflows: workflowData.total_workflows,\n  \n  // Resultados de la provisión\n  results: {\n    n8n_workflow_id: apiResponse.id,\n    workflow_created: !!apiResponse.id,\n    workflow_registered: !!registrationResponse.id,\n    workflow_activated: activationResponse.active || false,\n    provision_status: 'success'\n  },\n  \n  // URLs y referencias\n  references: {\n    workflow_url: `http://n8n-service:5678/workflow/${apiResponse.id}`,\n    webhook_url: workflowData.workflow_variables.WEBHOOK_URL,\n    edit_url: `http://n8n-service:5678/workflow/${apiResponse.id}/edit`\n  },\n  \n  // Timestamps\n  provisioned_at: new Date().toISOString(),\n  provision_duration_seconds: Math.round((Date.now() - new Date(workflowData.provision_id.split('_').pop()).getTime()) / 1000)\n};\n\nconsole.log('Workflow provisionado:', {\n  tenant_id: provisionResult.tenant_id,\n  workflow_name: provisionResult.workflow_name,\n  n8n_id: provisionResult.results.n8n_workflow_id,\n  status: provisionResult.results.provision_status\n});\n\nreturn provisionResult;"
+      },
+      "id": "process-provision-result",
+      "name": "Procesar Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2010, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Agregar todos los resultados de provisión y generar resumen final\nconst allResults = $input.all();\n\nconst summary = {\n  tenant_id: allResults[0].json.tenant_id,\n  tenant_name: allResults[0].json.tenant_name || 'Unknown',\n  \n  // Estadísticas de provisión\n  provision_stats: {\n    total_workflows_requested: allResults.length,\n    successful_provisions: allResults.filter(r => r.json.results.provision_status === 'success').length,\n    failed_provisions: allResults.filter(r => r.json.results.provision_status !== 'success').length,\n    activated_workflows: allResults.filter(r => r.json.results.workflow_activated).length\n  },\n  \n  // Lista detallada de workflows provisionados\n  provisioned_workflows: allResults.map(r => ({\n    name: r.json.workflow_name,\n    n8n_id: r.json.results.n8n_workflow_id,\n    status: r.json.results.provision_status,\n    activated: r.json.results.workflow_activated,\n    webhook_url: r.json.references.webhook_url,\n    edit_url: r.json.references.edit_url\n  })),\n  \n  // Workflows fallidos (si los hay)\n  failed_workflows: allResults\n    .filter(r => r.json.results.provision_status !== 'success')\n    .map(r => ({\n      name: r.json.workflow_name,\n      error: r.json.results.error || 'Unknown error'\n    })),\n  \n  // Métricas de tiempo\n  timing: {\n    provision_started_at: Math.min(...allResults.map(r => new Date(r.json.provisioned_at).getTime())),\n    provision_completed_at: new Date().toISOString(),\n    total_duration_seconds: Math.max(...allResults.map(r => r.json.provision_duration_seconds)),\n    average_duration_per_workflow: Math.round(\n      allResults.reduce((sum, r) => sum + r.json.provision_duration_seconds, 0) / allResults.length\n    )\n  },\n  \n  // URLs importantes para el tenant\n  important_urls: {\n    main_webhook_base: `https://n8n-optimacx.run.app/webhook/${allResults[0].json.tenant_id}`,\n    whatsapp_webhook: `https://n8n-optimacx.run.app/webhook/${allResults[0].json.tenant_id}/whatsapp`,\n    leads_webhook: `https://n8n-optimacx.run.app/webhook/${allResults[0].json.tenant_id}/leads`,\n    surveys_webhook: `https://n8n-optimacx.run.app/webhook/${allResults[0].json.tenant_id}/surveys`,\n    complaints_webhook: `https://n8n-optimacx.run.app/webhook/${allResults[0].json.tenant_id}/complaints`\n  },\n  \n  // Estado final\n  provision_status: allResults.every(r => r.json.results.provision_status === 'success') ? 'completed' : 'partial',\n  provision_success_rate: Math.round(\n    (allResults.filter(r => r.json.results.provision_status === 'success').length / allResults.length) * 100\n  )\n};\n\nconsole.log('Provisión completada:', {\n  tenant_id: summary.tenant_id,\n  success_rate: summary.provision_success_rate,\n  total_workflows: summary.provision_stats.total_workflows_requested,\n  successful: summary.provision_stats.successful_provisions\n});\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-provision-summary",
+      "name": "Generar Resumen Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2230, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Actualizar estado de provisión del tenant\nUPDATE concesionarios \nSET \n  workflows_provisionados = true,\n  fecha_provision_workflows = CURRENT_TIMESTAMP,\n  configuracion_workflows = $2::jsonb,\n  estado_provision = $3\nWHERE id = $1\nRETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.tenant_id,\n  JSON.stringify({\n    provision_summary: $json.provision_stats,\n    provisioned_workflows: $json.provisioned_workflows,\n    provision_completed_at: $json.timing.provision_completed_at,\n    webhook_urls: $json.important_urls\n  }),\n  $json.provision_status\n]"
+        }
+      },
+      "id": "update-tenant-provision-status",
+      "name": "Actualizar Estado Tenant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [2450, 300]
+    },
+    {
+      "parameters": {
+        "respondWithOptions": "responseData",
+        "responseData": "={\n  \"success\": true,\n  \"message\": \"Provisión de workflows completada\",\n  \"tenant_id\": \"{{ $json.tenant_id }}\",\n  \"provision_status\": \"{{ $('Generar Resumen Final').first().json.provision_status }}\",\n  \"stats\": {{ JSON.stringify($('Generar Resumen Final').first().json.provision_stats) }},\n  \"provisioned_workflows\": {{ JSON.stringify($('Generar Resumen Final').first().json.provisioned_workflows) }},\n  \"important_urls\": {{ JSON.stringify($('Generar Resumen Final').first().json.important_urls) }},\n  \"next_steps\": [\n    \"Configurar WhatsApp Business webhooks\",\n    \"Cargar documentos RAG iniciales\", \n    \"Configurar usuarios y permisos\",\n    \"Realizar pruebas de integración\",\n    \"Activar workflows de producción\"\n  ]\n}"
+      },
+      "id": "respond-provision-complete",
+      "name": "Respuesta Provisión",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2670, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Provisión Workflows": {
+      "main": [[{"node": "Validar Configuración", "type": "main", "index": 0}]]
+    },
+    "Validar Configuración": {
+      "main": [[{"node": "Verificar Tenant Existe", "type": "main", "index": 0}]]
+    },
+    "Verificar Tenant Existe": {
+      "main": [[{"node": "Preparar Configs Workflows", "type": "main", "index": 0}]]
+    },
+    "Preparar Configs Workflows": {
+      "main": [[{"node": "Crear Items Provisión", "type": "main", "index": 0}]]
+    },
+    "Crear Items Provisión": {
+      "main": [[{"node": "Crear Workflow via API", "type": "main", "index": 0}]]
+    },
+    "Crear Workflow via API": {
+      "main": [[{"node": "Registrar Workflow", "type": "main", "index": 0}]]
+    },
+    "Registrar Workflow": {
+      "main": [[{"node": "Activar Workflow", "type": "main", "index": 0}]]
+    },
+    "Activar Workflow": {
+      "main": [[{"node": "Procesar Resultado", "type": "main", "index": 0}]]
+    },
+    "Procesar Resultado": {
+      "main": [[{"node": "Generar Resumen Final", "type": "main", "index": 0}]]
+    },
+    "Generar Resumen Final": {
+      "main": [[{"node": "Actualizar Estado Tenant", "type": "main", "index": 0}]]
+    },
+    "Actualizar Estado Tenant": {
+      "main": [[{"node": "Respuesta Provisión", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "manejador-errores"
+  },
+  "staticData": {},
+  "variables": {
+    "PROVISION_VERSION": "1.0.0",
+    "N8N_API_BASE": "http://n8n-service:5678/api/v1",
+    "WEBHOOK_BASE_URL": "https://n8n-optimacx.run.app/webhook",
+    "DEFAULT_PROVISION_MODE": "complete",
+    "MAX_CONCURRENT_PROVISIONS": 10
+  }
+}

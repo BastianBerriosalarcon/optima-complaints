@@ -1,0 +1,154 @@
+{
+  "name": "Recordatorios Automáticos de Leads",
+  "description": "Workflow que monitorea leads sin contactar y envía recordatorios automáticos a asesores para asegurar seguimiento oportuno según reglas de negocio.",
+  "tags": [
+    "leads",
+    "recordatorios", 
+    "seguimiento",
+    "automatizacion",
+    "critico"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Ejecutar cada 2 horas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Buscar leads sin contactar que requieren recordatorio\nSELECT \n  l.id,\n  l.concesionario_id,\n  l.telefono_cliente,\n  l.nombre_cliente,\n  l.mensaje_original,\n  l.score_calidad,\n  l.nivel_interes,\n  l.asesor_asignado_id,\n  l.estado,\n  l.fecha_creacion,\n  u.nombre as asesor_nombre,\n  u.email as asesor_email,\n  c.nombre as concesionario_nombre,\n  \n  -- Calcular horas transcurridas\n  EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 as horas_transcurridas,\n  \n  -- Determinar tipo de recordatorio según nivel de interés y tiempo\n  CASE \n    WHEN l.nivel_interes = 'alto' AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 >= 1 THEN 'urgente_1h'\n    WHEN l.nivel_interes = 'alto' AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 >= 4 THEN 'urgente_4h'\n    WHEN l.nivel_interes = 'medio' AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 >= 2 THEN 'medio_2h'\n    WHEN l.nivel_interes = 'medio' AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 >= 8 THEN 'medio_8h'\n    WHEN l.nivel_interes = 'bajo' AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 >= 24 THEN 'bajo_24h'\n    WHEN l.nivel_interes = 'bajo' AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 >= 72 THEN 'bajo_72h'\n    ELSE 'no_recordatorio'\n  END as tipo_recordatorio\n  \nFROM leads l\nINNER JOIN usuarios u ON l.asesor_asignado_id = u.id\nINNER JOIN concesionarios c ON l.concesionario_id = c.id\nWHERE \n  l.estado = 'nuevo'  -- Solo leads no contactados\n  AND l.fecha_primer_contacto IS NULL\n  AND l.asesor_asignado_id IS NOT NULL\n  AND c.activo = true\n  AND u.activo = true\n  -- Filtrar por tiempo mínimo según nivel de interés\n  AND (\n    (l.nivel_interes = 'alto' AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 >= 1) OR\n    (l.nivel_interes = 'medio' AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 >= 2) OR  \n    (l.nivel_interes = 'bajo' AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 >= 24)\n  )\nORDER BY \n  l.nivel_interes DESC,\n  l.score_calidad DESC,\n  l.fecha_creacion ASC;"
+      },
+      "id": "query-pending-leads",
+      "name": "Consultar Leads Pendientes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-has-leads",
+      "name": "¿Hay Leads Pendientes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Agrupar leads por asesor y tipo de recordatorio\nconst leadsData = $input.all();\n\nif (!leadsData || leadsData.length === 0) {\n  return [];\n}\n\n// Estructura para agrupar por asesor\nconst asesorGroups = new Map();\n\nleadsData.forEach(item => {\n  const lead = item.json;\n  \n  // Skip leads que no necesitan recordatorio\n  if (lead.tipo_recordatorio === 'no_recordatorio') {\n    return;\n  }\n  \n  const asesorKey = `${lead.concesionario_id}_${lead.asesor_asignado_id}`;\n  \n  if (!asesorGroups.has(asesorKey)) {\n    asesorGroups.set(asesorKey, {\n      asesor_id: lead.asesor_asignado_id,\n      asesor_nombre: lead.asesor_nombre,\n      asesor_email: lead.asesor_email,\n      concesionario_id: lead.concesionario_id,\n      concesionario_nombre: lead.concesionario_nombre,\n      leads_por_tipo: {\n        urgentes: [], // alto interés\n        medios: [],   // medio interés\n        bajos: []     // bajo interés\n      },\n      total_leads: 0,\n      urgencia_maxima: 'baja'\n    });\n  }\n  \n  const asesorData = asesorGroups.get(asesorKey);\n  \n  // Categorizar lead según tipo de recordatorio\n  if (lead.tipo_recordatorio.startsWith('urgente')) {\n    asesorData.leads_por_tipo.urgentes.push({\n      id: lead.id,\n      telefono: lead.telefono_cliente,\n      nombre: lead.nombre_cliente,\n      score: lead.score_calidad,\n      horas_transcurridas: Math.round(lead.horas_transcurridas * 10) / 10,\n      mensaje_original: lead.mensaje_original.substring(0, 100) + '...',\n      tipo_recordatorio: lead.tipo_recordatorio\n    });\n    asesorData.urgencia_maxima = 'alta';\n  } else if (lead.tipo_recordatorio.startsWith('medio')) {\n    asesorData.leads_por_tipo.medios.push({\n      id: lead.id,\n      telefono: lead.telefono_cliente,\n      nombre: lead.nombre_cliente,\n      score: lead.score_calidad,\n      horas_transcurridas: Math.round(lead.horas_transcurridas * 10) / 10,\n      mensaje_original: lead.mensaje_original.substring(0, 100) + '...',\n      tipo_recordatorio: lead.tipo_recordatorio\n    });\n    if (asesorData.urgencia_maxima !== 'alta') {\n      asesorData.urgencia_maxima = 'media';\n    }\n  } else if (lead.tipo_recordatorio.startsWith('bajo')) {\n    asesorData.leads_por_tipo.bajos.push({\n      id: lead.id,\n      telefono: lead.telefono_cliente,\n      nombre: lead.nombre_cliente,\n      score: lead.score_calidad,\n      horas_transcurridas: Math.round(lead.horas_transcurridas * 10) / 10,\n      mensaje_original: lead.mensaje_original.substring(0, 100) + '...',\n      tipo_recordatorio: lead.tipo_recordatorio\n    });\n  }\n  \n  asesorData.total_leads++;\n});\n\n// Convertir Map a array\nconst result = Array.from(asesorGroups.values());\n\nconsole.log('Leads agrupados por asesor:', {\n  total_asesores: result.length,\n  total_recordatorios: result.reduce((sum, asesor) => sum + asesor.total_leads, 0)\n});\n\nreturn result.map(asesor => ({ json: asesor }));"
+      },
+      "id": "group-by-asesor",
+      "name": "Agrupar por Asesor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 200]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "emailSmtp",
+        "fromEmail": "noreply@optimacx.com",
+        "toEmail": "={{ $json.asesor_email }}",
+        "subject": "🚨 {{ $json.urgencia_maxima === 'alta' ? 'URGENTE' : $json.urgencia_maxima === 'media' ? 'IMPORTANTE' : 'RECORDATORIO' }} - Leads sin contactar ({{ $json.total_leads }})",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        .container { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; }\n        .header { background: {{ $json.urgencia_maxima === 'alta' ? '#dc3545' : $json.urgencia_maxima === 'media' ? '#fd7e14' : '#28a745' }}; color: white; padding: 20px; text-align: center; }\n        .lead-item { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; }\n        .urgente { border-left: 5px solid #dc3545; }\n        .medio { border-left: 5px solid #fd7e14; }\n        .bajo { border-left: 5px solid #ffc107; }\n        .score { font-weight: bold; color: #007bff; }\n        .time { color: #6c757d; font-size: 0.9em; }\n        .cta { background: #007bff; color: white; padding: 15px; text-align: center; margin: 20px 0; border-radius: 5px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h2>{{ $json.urgencia_maxima === 'alta' ? '🚨 LEADS URGENTES' : $json.urgencia_maxima === 'media' ? '⚠️ LEADS IMPORTANTES' : '📋 RECORDATORIO LEADS' }}</h2>\n            <p>{{ $json.concesionario_nombre }}</p>\n        </div>\n        \n        <div style=\"padding: 20px;\">\n            <p>Hola <strong>{{ $json.asesor_nombre }}</strong>,</p>\n            <p>Tienes <strong>{{ $json.total_leads }} leads sin contactar</strong> que requieren tu atención:</p>\n            \n            {{ $json.leads_por_tipo.urgentes.length > 0 ? `\n            <h3 style=\"color: #dc3545;\">🚨 URGENTES (${$json.leads_por_tipo.urgentes.length})</h3>\n            ${$json.leads_por_tipo.urgentes.map(lead => `\n            <div class=\"lead-item urgente\">\n                <div><strong>${lead.nombre}</strong> - ${lead.telefono}</div>\n                <div class=\"score\">Score: ${lead.score}/100</div>\n                <div class=\"time\">Hace ${lead.horas_transcurridas}h - ${lead.tipo_recordatorio}</div>\n                <div style=\"margin-top: 10px; font-style: italic;\">${lead.mensaje_original}</div>\n            </div>\n            `).join('')}\n            ` : '' }}\n            \n            {{ $json.leads_por_tipo.medios.length > 0 ? `\n            <h3 style=\"color: #fd7e14;\">⚠️ IMPORTANTES (${$json.leads_por_tipo.medios.length})</h3>\n            ${$json.leads_por_tipo.medios.map(lead => `\n            <div class=\"lead-item medio\">\n                <div><strong>${lead.nombre}</strong> - ${lead.telefono}</div>\n                <div class=\"score\">Score: ${lead.score}/100</div>\n                <div class=\"time\">Hace ${lead.horas_transcurridas}h - ${lead.tipo_recordatorio}</div>\n                <div style=\"margin-top: 10px; font-style: italic;\">${lead.mensaje_original}</div>\n            </div>\n            `).join('')}\n            ` : '' }}\n            \n            {{ $json.leads_por_tipo.bajos.length > 0 ? `\n            <h3 style=\"color: #ffc107;\">📝 SEGUIMIENTO (${$json.leads_por_tipo.bajos.length})</h3>\n            ${$json.leads_por_tipo.bajos.map(lead => `\n            <div class=\"lead-item bajo\">\n                <div><strong>${lead.nombre}</strong> - ${lead.telefono}</div>\n                <div class=\"score\">Score: ${lead.score}/100</div>\n                <div class=\"time\">Hace ${lead.horas_transcurridas}h - ${lead.tipo_recordatorio}</div>\n                <div style=\"margin-top: 10px; font-style: italic;\">${lead.mensaje_original}</div>\n            </div>\n            `).join('')}\n            ` : '' }}\n            \n            <div class=\"cta\">\n                <strong>⏰ Acción Requerida:</strong><br>\n                {{ $json.urgencia_maxima === 'alta' ? 'Contacta INMEDIATAMENTE los leads urgentes' : $json.urgencia_maxima === 'media' ? 'Contacta hoy los leads importantes' : 'Programa contacto para estos leads' }}\n            </div>\n            \n            <p><strong>Recordatorio:</strong></p>\n            <ul>\n                <li>Leads de alto interés deben contactarse en menos de 1 hora</li>\n                <li>Leads de medio interés deben contactarse en menos de 2 horas</li>\n                <li>Leads de bajo interés deben contactarse dentro de 24 horas</li>\n            </ul>\n            \n            <p>Accede al sistema: <a href=\"https://app.optimacx.com/leads\">Ver Leads</a></p>\n            \n            <hr style=\"margin: 30px 0;\">\n            <p style=\"font-size: 0.9em; color: #6c757d;\">Este es un recordatorio automático de Óptima-CX<br>Enviado: {{ new Date().toLocaleString('es-CL') }}</p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "send-reminder-email",
+      "name": "Enviar Email Recordatorio",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Registrar envío de recordatorio\nINSERT INTO recordatorios_leads (\n  lead_id,\n  asesor_id,\n  concesionario_id,\n  tipo_recordatorio,\n  canal,\n  enviado_at,\n  metadata\n) \nSELECT \n  unnest(ARRAY[{{ $json.leads_por_tipo.urgentes.map(l => l.id).concat($json.leads_por_tipo.medios.map(l => l.id)).concat($json.leads_por_tipo.bajos.map(l => l.id)).join(',') }}]) as lead_id,\n  $1 as asesor_id,\n  $2 as concesionario_id,\n  'email_automatico' as tipo_recordatorio,\n  'email' as canal,\n  CURRENT_TIMESTAMP as enviado_at,\n  $3::jsonb as metadata\nRETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.asesor_id,\n  $json.concesionario_id,\n  JSON.stringify({\n    total_leads: $json.total_leads,\n    urgencia_maxima: $json.urgencia_maxima,\n    tipos_incluidos: {\n      urgentes: $json.leads_por_tipo.urgentes.length,\n      medios: $json.leads_por_tipo.medios.length,\n      bajos: $json.leads_por_tipo.bajos.length\n    }\n  })\n]"
+        }
+      },
+      "id": "log-reminder-sent",
+      "name": "Registrar Recordatorio",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1350, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Métricas de recordatorios enviados\nconst processedData = $input.all();\n\nconst summary = {\n  total_asesores_notificados: processedData.length,\n  total_leads_recordados: processedData.reduce((sum, item) => {\n    return sum + (item.json.total_leads || 0);\n  }, 0),\n  distribuccion_urgencia: {\n    alta: processedData.filter(item => item.json.urgencia_maxima === 'alta').length,\n    media: processedData.filter(item => item.json.urgencia_maxima === 'media').length,\n    baja: processedData.filter(item => item.json.urgencia_maxima === 'baja').length\n  },\n  timestamp: new Date().toISOString(),\n  execution_success: true\n};\n\nconsole.log('Recordatorios procesados:', summary);\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-summary",
+      "name": "Generar Resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1570, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No hay leads pendientes de recordatorio\nconsole.log('No hay leads que requieran recordatorio en este momento');\n\nreturn [{\n  json: {\n    message: 'No hay leads pendientes de recordatorio',\n    timestamp: new Date().toISOString(),\n    execution_success: true,\n    leads_found: 0\n  }\n}];"
+      },
+      "id": "no-leads-response",
+      "name": "Sin Leads Pendientes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 400]
+    }
+  ],
+  "connections": {
+    "Ejecutar cada 2 horas": {
+      "main": [[{"node": "Consultar Leads Pendientes", "type": "main", "index": 0}]]
+    },
+    "Consultar Leads Pendientes": {
+      "main": [[{"node": "¿Hay Leads Pendientes?", "type": "main", "index": 0}]]
+    },
+    "¿Hay Leads Pendientes?": {
+      "main": [
+        [{"node": "Agrupar por Asesor", "type": "main", "index": 0}],
+        [{"node": "Sin Leads Pendientes", "type": "main", "index": 0}]
+      ]
+    },
+    "Agrupar por Asesor": {
+      "main": [[{"node": "Enviar Email Recordatorio", "type": "main", "index": 0}]]
+    },
+    "Enviar Email Recordatorio": {
+      "main": [[{"node": "Registrar Recordatorio", "type": "main", "index": 0}]]
+    },
+    "Registrar Recordatorio": {
+      "main": [[{"node": "Generar Resumen", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "manejador-errores"
+  },
+  "staticData": {},
+  "variables": {
+    "REMINDER_VERSION": "1.0.0",
+    "HIGH_PRIORITY_THRESHOLD_HOURS": 1,
+    "MEDIUM_PRIORITY_THRESHOLD_HOURS": 2,
+    "LOW_PRIORITY_THRESHOLD_HOURS": 24
+  }
+}

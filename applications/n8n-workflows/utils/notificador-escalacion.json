@@ -1,0 +1,158 @@
+{
+  "name": "Notificador de Escalación Automática",
+  "description": "Workflow que monitorea leads, encuestas y reclamos sin atender por tiempo límite y escala automáticamente a supervisores según reglas de negocio críticas.",
+  "tags": [
+    "escalacion",
+    "notificaciones", 
+    "supervision",
+    "sla",
+    "critico"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Ejecutar cada hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- LEADS: ESCALACIÓN INMEDIATA - Buscar leads sin contactar para escalación instantánea\nSELECT \n  'lead' as tipo_item,\n  l.id as item_id,\n  l.concesionario_id,\n  l.telefono_cliente,\n  l.nombre_cliente,\n  l.mensaje_original,\n  l.score_calidad,\n  l.nivel_interes,\n  l.asesor_asignado_id,\n  l.estado,\n  l.fecha_creacion,\n  \n  -- Información del asesor asignado\n  asesor.nombre as asesor_nombre,\n  asesor.email as asesor_email,\n  \n  -- Información del supervisor (jefe de ventas)\n  supervisor.id as supervisor_id,\n  supervisor.nombre as supervisor_nombre,\n  supervisor.email as supervisor_email,\n  \n  -- Información del concesionario\n  c.nombre as concesionario_nombre,\n  c.configuracion_escalacion,\n  \n  -- Cálculos de tiempo\n  EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/60 as minutos_transcurridos,\n  \n  -- ESCALACIÓN INMEDIATA: Todo es crítico después de 2 minutos\n  CASE \n    WHEN EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/60 >= 2 THEN 'critico'\n    ELSE 'normal'\n  END as nivel_escalacion,\n  \n  'Lead sin contactar - Escalación inmediata para captura rápida' as motivo_escalacion\n  \nFROM leads l\nINNER JOIN usuarios asesor ON l.asesor_asignado_id = asesor.id\nINNER JOIN usuarios supervisor ON asesor.concesionario_id = supervisor.concesionario_id AND supervisor.rol = 'jefe_ventas'\nINNER JOIN concesionarios c ON l.concesionario_id = c.id\nWHERE \n  l.estado = 'nuevo'\n  AND l.fecha_primer_contacto IS NULL\n  AND l.asesor_asignado_id IS NOT NULL\n  AND c.activo = true\n  AND asesor.activo = true\n  AND supervisor.activo = true\n  -- ESCALACIÓN INMEDIATA: Después de 2 minutos\n  AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/60 >= 2\n  -- Evitar escalaciones duplicadas en últimos 10 minutos\n  AND NOT EXISTS (\n    SELECT 1 FROM escalaciones e \n    WHERE e.item_type = 'lead' \n    AND e.item_id = l.id \n    AND e.created_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes'\n  )\n\nUNION ALL\n\n-- RECLAMOS: ESCALACIÓN INSTANTÁNEA - Al crearse ya están asignados, escalamos si no hay acción\nSELECT \n  'reclamo' as tipo_item,\n  r.id as item_id,\n  r.concesionario_id,\n  c.telefono_principal as cliente_telefono,  -- Ajustado según estructura de CLAUDE.md\n  'Cliente de ' || c.nombre as cliente_nombre,  -- Ajustado\n  r.detalle,\n  CASE WHEN r.black_alert THEN 100 ELSE 80 END as score_calidad,\n  CASE WHEN r.black_alert THEN 'alto' ELSE 'alto' END as nivel_interes,  -- Todos los reclamos son alta prioridad\n  COALESCE(asesor.id, jefe.id) as asesor_asignado_id,  -- Puede estar asignado al asesor o jefe directamente\n  r.estado,\n  r.fecha_creacion,\n  \n  -- Información del responsable actual\n  COALESCE(asesor.nombre, jefe.nombre) as asesor_nombre,\n  COALESCE(asesor.email, jefe.email) as asesor_email,\n  \n  -- Información del supervisor (siempre jefe de servicio)\n  jefe.id as supervisor_id,\n  jefe.nombre as supervisor_nombre,\n  jefe.email as supervisor_email,\n  \n  -- Información del concesionario\n  c.nombre as concesionario_nombre,\n  c.configuracion_escalacion,\n  \n  -- Cálculos de tiempo\n  EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - r.fecha_creacion))/60 as minutos_transcurridos,\n  \n  -- ESCALACIÓN INSTANTÁNEA: Todo es emergencia después de 1 minuto\n  CASE \n    WHEN r.black_alert AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - r.fecha_creacion))/60 >= 1 THEN 'emergencia'\n    WHEN NOT r.black_alert AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - r.fecha_creacion))/60 >= 1 THEN 'critico'\n    ELSE 'normal'\n  END as nivel_escalacion,\n  \n  CASE \n    WHEN r.black_alert THEN '🚨 RECLAMO BLACK ALERT - Cliente puede ir a SERNAC - ACCIÓN INMEDIATA'\n    ELSE '🔴 RECLAMO CRÍTICO - Cliente insatisfecho - Contención de daños inmediata'\n  END as motivo_escalacion\n  \nFROM reclamos r\nINNER JOIN concesionarios c ON r.concesionario_id = c.id\nINNER JOIN usuarios jefe ON c.id = jefe.concesionario_id AND jefe.rol = 'jefe_servicio'\nLEFT JOIN usuarios asesor ON r.asesor_asignado_id = asesor.id  -- Puede no tener asesor específico asignado\nWHERE \n  r.estado IN ('pendiente', 'en_proceso')  -- Estados que requieren atención\n  AND c.activo = true\n  AND jefe.activo = true\n  AND (asesor.activo = true OR asesor.id IS NULL)\n  -- ESCALACIÓN INSTANTÁNEA: Después de 1 minuto\n  AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - r.fecha_creacion))/60 >= 1\n  -- Evitar escalaciones duplicadas en últimos 5 minutos\n  AND NOT EXISTS (\n    SELECT 1 FROM escalaciones e \n    WHERE e.item_type = 'reclamo' \n    AND e.item_id = r.id \n    AND e.created_at > CURRENT_TIMESTAMP - INTERVAL '5 minutes'\n  )\n\nORDER BY \n  nivel_escalacion DESC,\n  minutos_transcurridos DESC,\n  score_calidad DESC;"
+      },
+      "id": "query-items-for-escalation",
+      "name": "Consultar Items para Escalación",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-has-escalations",
+      "name": "¿Hay Items para Escalar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Agrupar escalaciones por supervisor y nivel de criticidad\nconst escalationData = $input.all();\n\nif (!escalationData || escalationData.length === 0) {\n  return [];\n}\n\n// Estructura para agrupar por supervisor\nconst supervisorGroups = new Map();\n\nescalationData.forEach(item => {\n  const escalation = item.json;\n  \n  const supervisorKey = `${escalation.concesionario_id}_${escalation.supervisor_id}`;\n  \n  if (!supervisorGroups.has(supervisorKey)) {\n    supervisorGroups.set(supervisorKey, {\n      supervisor_id: escalation.supervisor_id,\n      supervisor_nombre: escalation.supervisor_nombre,\n      supervisor_email: escalation.supervisor_email,\n      concesionario_id: escalation.concesionario_id,\n      concesionario_nombre: escalation.concesionario_nombre,\n      escalaciones_por_nivel: {\n        emergencia: [],\n        critico: [],\n        urgente: [],\n        importante: []\n      },\n      total_escalaciones: 0,\n      max_criticidad: 'importante',\n      requiere_atencion_inmediata: false\n    });\n  }\n  \n  const supervisorData = supervisorGroups.get(supervisorKey);\n  \n  // Estructura del item escalado\n  const escalatedItem = {\n    tipo: escalation.tipo_item,\n    id: escalation.item_id,\n    cliente: {\n      telefono: escalation.telefono_cliente,\n      nombre: escalation.nombre_cliente\n    },\n    asesor: {\n      nombre: escalation.asesor_nombre,\n      email: escalation.asesor_email\n    },\n    detalles: {\n      score: escalation.score_calidad,\n      nivel_interes: escalation.nivel_interes,\n      horas_transcurridas: Math.round(escalation.horas_transcurridas * 10) / 10,\n      motivo: escalation.motivo_escalacion,\n      mensaje_resumen: escalation.tipo_item === 'lead' ? \n        escalation.mensaje_original.substring(0, 150) + '...' :\n        escalation.detalle.substring(0, 150) + '...'\n    }\n  };\n  \n  // Categorizar por nivel de escalación\n  const nivel = escalation.nivel_escalacion;\n  if (supervisorData.escalaciones_por_nivel[nivel]) {\n    supervisorData.escalaciones_por_nivel[nivel].push(escalatedItem);\n    \n    // Actualizar criticidad máxima\n    const criticidadOrden = ['importante', 'urgente', 'critico', 'emergencia'];\n    const currentIndex = criticidadOrden.indexOf(supervisorData.max_criticidad);\n    const newIndex = criticidadOrden.indexOf(nivel);\n    \n    if (newIndex > currentIndex) {\n      supervisorData.max_criticidad = nivel;\n    }\n    \n    // Marcar si requiere atención inmediata\n    if (nivel === 'emergencia' || nivel === 'critico') {\n      supervisorData.requiere_atencion_inmediata = true;\n    }\n  }\n  \n  supervisorData.total_escalaciones++;\n});\n\n// Convertir Map a array y ordenar por criticidad\nconst result = Array.from(supervisorGroups.values())\n  .sort((a, b) => {\n    const criticidadOrden = ['importante', 'urgente', 'critico', 'emergencia'];\n    return criticidadOrden.indexOf(b.max_criticidad) - criticidadOrden.indexOf(a.max_criticidad);\n  });\n\nconsole.log('Escalaciones agrupadas por supervisor:', {\n  total_supervisores: result.length,\n  emergencias: result.filter(s => s.max_criticidad === 'emergencia').length,\n  criticos: result.filter(s => s.max_criticidad === 'critico').length,\n  total_items_escalados: result.reduce((sum, s) => sum + s.total_escalaciones, 0)\n});\n\nreturn result.map(supervisor => ({ json: supervisor }));"
+      },
+      "id": "group-by-supervisor",
+      "name": "Agrupar por Supervisor", 
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 200]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "emailSmtp",
+        "fromEmail": "escalaciones@optimacx.com",
+        "toEmail": "={{ $json.supervisor_email }}",
+        "ccEmail": "={{ $json.max_criticidad === 'emergencia' ? 'gerencia@optimacx.com' : '' }}",
+        "subject": "🚨 {{ $json.max_criticidad === 'emergencia' ? 'EMERGENCIA' : $json.max_criticidad === 'critico' ? 'CRÍTICO' : $json.max_criticidad === 'urgente' ? 'URGENTE' : 'IMPORTANTE' }} - Escalación Automática ({{ $json.total_escalaciones }} items)",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        .container { font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; }\n        .header { \n            background: {{ $json.max_criticidad === 'emergencia' ? '#8B0000' : $json.max_criticidad === 'critico' ? '#dc3545' : $json.max_criticidad === 'urgente' ? '#fd7e14' : '#ffc107' }}; \n            color: white; \n            padding: 20px; \n            text-align: center; \n            border-radius: 8px 8px 0 0;\n        }\n        .escalation-item { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; }\n        .emergencia { border-left: 5px solid #8B0000; background-color: #fff5f5; }\n        .critico { border-left: 5px solid #dc3545; background-color: #fff5f5; }\n        .urgente { border-left: 5px solid #fd7e14; background-color: #fff8f0; }\n        .importante { border-left: 5px solid #ffc107; background-color: #fffef7; }\n        .client-info { font-weight: bold; color: #2c3e50; margin-bottom: 8px; }\n        .advisor-info { color: #7f8c8d; font-size: 0.9em; }\n        .time-critical { color: #e74c3c; font-weight: bold; }\n        .details { margin-top: 10px; font-style: italic; color: #5a6c7d; }\n        .cta { background: #dc3545; color: white; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px; }\n        .stats { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h2>{{ $json.max_criticidad === 'emergencia' ? '🚨 ESCALACIÓN DE EMERGENCIA' : $json.max_criticidad === 'critico' ? '🔴 ESCALACIÓN CRÍTICA' : $json.max_criticidad === 'urgente' ? '🟠 ESCALACIÓN URGENTE' : '🟡 ESCALACIÓN IMPORTANTE' }}</h2>\n            <p><strong>{{ $json.concesionario_nombre }}</strong></p>\n            <p>{{ new Date().toLocaleString('es-CL', { timeZone: 'America/Santiago' }) }}</p>\n        </div>\n        \n        <div style=\"padding: 20px;\">\n            <p><strong>{{ $json.supervisor_nombre }}</strong>,</p>\n            <p>Se han detectado <strong>{{ $json.total_escalaciones }} items</strong> que requieren tu intervención inmediata por exceder los tiempos SLA establecidos.</p>\n            \n            <div class=\"stats\">\n                <h4>📊 Resumen de Escalaciones:</h4>\n                <ul>\n                    {{ $json.escalaciones_por_nivel.emergencia.length > 0 ? `<li><strong>🚨 EMERGENCIA:</strong> ${$json.escalaciones_por_nivel.emergencia.length}</li>` : '' }}\n                    {{ $json.escalaciones_por_nivel.critico.length > 0 ? `<li><strong>🔴 CRÍTICO:</strong> ${$json.escalaciones_por_nivel.critico.length}</li>` : '' }}\n                    {{ $json.escalaciones_por_nivel.urgente.length > 0 ? `<li><strong>🟠 URGENTE:</strong> ${$json.escalaciones_por_nivel.urgente.length}</li>` : '' }}\n                    {{ $json.escalaciones_por_nivel.importante.length > 0 ? `<li><strong>🟡 IMPORTANTE:</strong> ${$json.escalaciones_por_nivel.importante.length}</li>` : '' }}\n                </ul>\n            </div>\n            \n            {{ $json.escalaciones_por_nivel.emergencia.length > 0 ? `\n            <h3 style=\"color: #8B0000;\">🚨 EMERGENCIA - Atención INMEDIATA</h3>\n            ${$json.escalaciones_por_nivel.emergencia.map(item => `\n            <div class=\"escalation-item emergencia\">\n                <div class=\"client-info\">${item.tipo.toUpperCase()} #${item.id} - ${item.cliente.nombre}</div>\n                <div><strong>📞 ${item.cliente.telefono}</strong></div>\n                <div class=\"advisor-info\">Asesor: ${item.asesor.nombre} (${item.asesor.email})</div>\n                <div class=\"time-critical\">⏰ ${item.detalles.horas_transcurridas}h transcurridas</div>\n                <div><strong>Motivo:</strong> ${item.detalles.motivo}</div>\n                <div class=\"details\">${item.detalles.mensaje_resumen}</div>\n            </div>\n            `).join('')}\n            ` : '' }}\n            \n            {{ $json.escalaciones_por_nivel.critico.length > 0 ? `\n            <h3 style=\"color: #dc3545;\">🔴 CRÍTICO - Resolver Hoy</h3>\n            ${$json.escalaciones_por_nivel.critico.map(item => `\n            <div class=\"escalation-item critico\">\n                <div class=\"client-info\">${item.tipo.toUpperCase()} #${item.id} - ${item.cliente.nombre}</div>\n                <div><strong>📞 ${item.cliente.telefono}</strong></div>\n                <div class=\"advisor-info\">Asesor: ${item.asesor.nombre} (${item.asesor.email})</div>\n                <div class=\"time-critical\">⏰ ${item.detalles.horas_transcurridas}h transcurridas</div>\n                <div><strong>Motivo:</strong> ${item.detalles.motivo}</div>\n                <div class=\"details\">${item.detalles.mensaje_resumen}</div>\n            </div>\n            `).join('')}\n            ` : '' }}\n            \n            {{ $json.escalaciones_por_nivel.urgente.length > 0 ? `\n            <h3 style=\"color: #fd7e14;\">🟠 URGENTE - Atención Prioritaria</h3>\n            ${$json.escalaciones_por_nivel.urgente.map(item => `\n            <div class=\"escalation-item urgente\">\n                <div class=\"client-info\">${item.tipo.toUpperCase()} #${item.id} - ${item.cliente.nombre}</div>\n                <div><strong>📞 ${item.cliente.telefono}</strong></div>\n                <div class=\"advisor-info\">Asesor: ${item.asesor.nombre} (${item.asesor.email})</div>\n                <div class=\"time-critical\">⏰ ${item.detalles.horas_transcurridas}h transcurridas</div>\n                <div><strong>Motivo:</strong> ${item.detalles.motivo}</div>\n                <div class=\"details\">${item.detalles.mensaje_resumen}</div>\n            </div>\n            `).join('')}\n            ` : '' }}\n            \n            {{ $json.escalaciones_por_nivel.importante.length > 0 ? `\n            <h3 style=\"color: #ffc107;\">🟡 IMPORTANTE - Seguimiento Requerido</h3>\n            ${$json.escalaciones_por_nivel.importante.map(item => `\n            <div class=\"escalation-item importante\">\n                <div class=\"client-info\">${item.tipo.toUpperCase()} #${item.id} - ${item.cliente.nombre}</div>\n                <div><strong>📞 ${item.cliente.telefono}</strong></div>\n                <div class=\"advisor-info\">Asesor: ${item.asesor.nombre} (${item.asesor.email})</div>\n                <div class=\"time-critical\">⏰ ${item.detalles.horas_transcurridas}h transcurridas</div>\n                <div><strong>Motivo:</strong> ${item.detalles.motivo}</div>\n                <div class=\"details\">${item.detalles.mensaje_resumen}</div>\n            </div>\n            `).join('')}\n            ` : '' }}\n            \n            <div class=\"cta\">\n                <strong>⚡ ACCIÓN REQUERIDA:</strong><br>\n                {{ $json.requiere_atencion_inmediata ? 'Contacta INMEDIATAMENTE con los asesores responsables y verifica el estado de estos casos.' : 'Revisa y coordina con tu equipo la atención de estos casos pendientes.' }}\n            </div>\n            \n            <div style=\"background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;\">\n                <h4>📋 Acciones Recomendadas:</h4>\n                <ol>\n                    <li><strong>Contactar asesores</strong> para verificar estado actual</li>\n                    <li><strong>Reasignar casos</strong> si el asesor no está disponible</li>\n                    <li><strong>Contactar clientes</strong> para informar seguimiento</li>\n                    <li><strong>Actualizar sistema</strong> con acciones tomadas</li>\n                    {{ $json.max_criticidad === 'emergencia' ? '<li><strong>Informar a gerencia</strong> sobre casos de emergencia</li>' : '' }}\n                </ol>\n            </div>\n            \n            <p>💻 <strong>Acceder al sistema:</strong> <a href=\"https://app.optimacx.com/dashboard\">Dashboard Supervisión</a></p>\n            \n            <hr style=\"margin: 30px 0;\">\n            <p style=\"font-size: 0.9em; color: #6c757d;\">\n                <strong>Escalación Automática - Óptima-CX</strong><br>\n                Este email se envía automáticamente cuando se exceden los tiempos SLA establecidos.<br>\n                Para modificar configuraciones de escalación, contacta al administrador del sistema.\n            </p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "send-escalation-email",
+      "name": "Enviar Email Escalación",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Registrar escalaciones enviadas para auditoría\nINSERT INTO escalaciones (\n  item_type,\n  item_id,\n  concesionario_id,\n  asesor_id,\n  supervisor_id,\n  nivel_escalacion,\n  motivo,\n  horas_transcurridas,\n  metadata,\n  created_at\n)\nSELECT \n  unnest(ARRAY[{{ \n    $json.escalaciones_por_nivel.emergencia.concat(\n      $json.escalaciones_por_nivel.critico,\n      $json.escalaciones_por_nivel.urgente,\n      $json.escalaciones_por_nivel.importante\n    ).map(item => `'${item.tipo}'`).join(',') \n  }}]) as item_type,\n  unnest(ARRAY[{{ \n    $json.escalaciones_por_nivel.emergencia.concat(\n      $json.escalaciones_por_nivel.critico,\n      $json.escalaciones_por_nivel.urgente,\n      $json.escalaciones_por_nivel.importante\n    ).map(item => item.id).join(',') \n  }}]) as item_id,\n  $1 as concesionario_id,\n  unnest(ARRAY[{{ \n    $json.escalaciones_por_nivel.emergencia.concat(\n      $json.escalaciones_por_nivel.critico,\n      $json.escalaciones_por_nivel.urgente,\n      $json.escalaciones_por_nivel.importante\n    ).map(item => `'${item.asesor.email}'`).join(',') \n  }}]) as asesor_id,\n  $2 as supervisor_id,\n  $3 as nivel_escalacion,\n  'Escalación automática por exceso de tiempo SLA' as motivo,\n  unnest(ARRAY[{{ \n    $json.escalaciones_por_nivel.emergencia.concat(\n      $json.escalaciones_por_nivel.critico,\n      $json.escalaciones_por_nivel.urgente,\n      $json.escalaciones_por_nivel.importante\n    ).map(item => item.detalles.horas_transcurridas).join(',') \n  }}]) as horas_transcurridas,\n  $4::jsonb as metadata,\n  CURRENT_TIMESTAMP as created_at\nRETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.concesionario_id,\n  $json.supervisor_id,\n  $json.max_criticidad,\n  JSON.stringify({\n    total_escalaciones: $json.total_escalaciones,\n    distribucion: {\n      emergencia: $json.escalaciones_por_nivel.emergencia.length,\n      critico: $json.escalaciones_por_nivel.critico.length,\n      urgente: $json.escalaciones_por_nivel.urgente.length,\n      importante: $json.escalaciones_por_nivel.importante.length\n    }\n  })\n]"
+        }
+      },
+      "id": "log-escalations",
+      "name": "Registrar Escalaciones",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1350, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar métricas de escalaciones procesadas\nconst processedData = $input.all();\n\nconst summary = {\n  total_supervisores_notificados: processedData.length,\n  total_items_escalados: processedData.reduce((sum, item) => {\n    return sum + (item.json.total_escalaciones || 0);\n  }, 0),\n  distribucion_criticidad: {\n    emergencia: processedData.filter(item => item.json.max_criticidad === 'emergencia').length,\n    critico: processedData.filter(item => item.json.max_criticidad === 'critico').length,\n    urgente: processedData.filter(item => item.json.max_criticidad === 'urgente').length,\n    importante: processedData.filter(item => item.json.max_criticidad === 'importante').length\n  },\n  atencion_inmediata_requerida: processedData.filter(item => item.json.requiere_atencion_inmediata).length,\n  timestamp: new Date().toISOString(),\n  execution_success: true\n};\n\nconsole.log('Escalaciones procesadas:', summary);\n\n// Si hay casos de emergencia, log especial\nif (summary.distribucion_criticidad.emergencia > 0) {\n  console.error('⚠️ CASOS DE EMERGENCIA ESCALADOS:', summary.distribucion_criticidad.emergencia);\n}\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-escalation-summary",
+      "name": "Generar Resumen Escalaciones",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1570, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No hay items que requieran escalación\nconsole.log('No hay items que requieran escalación en este momento');\n\nreturn [{\n  json: {\n    message: 'No hay items pendientes de escalación',\n    timestamp: new Date().toISOString(),\n    execution_success: true,\n    items_found: 0\n  }\n}];"
+      },
+      "id": "no-escalations-response",
+      "name": "Sin Escalaciones",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 400]
+    }
+  ],
+  "connections": {
+    "Ejecutar cada hora": {
+      "main": [[{"node": "Consultar Items para Escalación", "type": "main", "index": 0}]]
+    },
+    "Consultar Items para Escalación": {
+      "main": [[{"node": "¿Hay Items para Escalar?", "type": "main", "index": 0}]]
+    },
+    "¿Hay Items para Escalar?": {
+      "main": [
+        [{"node": "Agrupar por Supervisor", "type": "main", "index": 0}],
+        [{"node": "Sin Escalaciones", "type": "main", "index": 0}]
+      ]
+    },
+    "Agrupar por Supervisor": {
+      "main": [[{"node": "Enviar Email Escalación", "type": "main", "index": 0}]]
+    },
+    "Enviar Email Escalación": {
+      "main": [[{"node": "Registrar Escalaciones", "type": "main", "index": 0}]]
+    },
+    "Registrar Escalaciones": {
+      "main": [[{"node": "Generar Resumen Escalaciones", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "manejador-errores"
+  },
+  "staticData": {},
+  "variables": {
+    "ESCALATION_VERSION": "2.0.0",
+    "ESCALATION_MODE": "IMMEDIATE",
+    "LEAD_ESCALATION_MINUTES": 2,
+    "COMPLAINT_BLACK_ALERT_MINUTES": 1,
+    "COMPLAINT_NORMAL_MINUTES": 1,
+    "ANTI_SPAM_LEAD_MINUTES": 10,
+    "ANTI_SPAM_COMPLAINT_MINUTES": 5
+  }
+}

@@ -1,0 +1,217 @@
+{
+  "name": "Calculadora Automática de NPS",
+  "description": "Workflow que calcula automáticamente el Net Promoter Score (NPS) tanto para encuestas de post-venta como de ventas, proporcionando métricas críticas de satisfacción del cliente por concesionario.",
+  "tags": [
+    "nps",
+    "metricas", 
+    "satisfaccion",
+    "encuestas",
+    "kpi",
+    "critico"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Ejecutar cada 2 horas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Obtener encuestas completadas desde el último cálculo de NPS\nSELECT \n  -- Encuestas Post-Venta\n  'post_venta' as tipo_encuesta,\n  ep.id as encuesta_id,\n  ep.concesionario_id,\n  ep.sucursal_id,\n  ep.recomendacion as score_nps,\n  ep.satisfaccion,\n  ep.lavado,\n  ep.asesor as asesor_atencion,\n  ep.comentario,\n  ep.nombre_cliente,\n  ep.rut_cliente,\n  ep.telefono_cliente,\n  ep.origen,\n  ep.fecha_completado,\n  ep.fecha_creacion,\n  \n  -- Información del concesionario y sucursal\n  c.nombre as concesionario_nombre,\n  s.nombre as sucursal_nombre,\n  \n  -- Clasificación NPS\n  CASE \n    WHEN ep.recomendacion >= 9 THEN 'promotor'\n    WHEN ep.recomendacion >= 7 THEN 'pasivo'\n    ELSE 'detractor'\n  END as clasificacion_nps,\n  \n  -- Identificar si es nota baja (para alertas)\n  CASE WHEN ep.recomendacion <= 8 THEN true ELSE false END as es_nota_baja\n  \nFROM encuestas_postventa ep\nINNER JOIN concesionarios c ON ep.concesionario_id = c.id\nINNER JOIN sucursales s ON ep.sucursal_id = s.id\nWHERE \n  ep.estado = 'completado'\n  AND ep.recomendacion IS NOT NULL\n  AND c.activo = true\n  -- Solo encuestas completadas en las últimas 4 horas para evitar reprocesamiento\n  AND ep.fecha_completado > CURRENT_TIMESTAMP - INTERVAL '4 hours'\n  -- Verificar que no se haya calculado NPS recientemente para esta encuesta\n  AND NOT EXISTS (\n    SELECT 1 FROM calculos_nps cn \n    WHERE cn.encuesta_id = ep.id \n    AND cn.tipo_encuesta = 'post_venta'\n    AND cn.created_at > CURRENT_TIMESTAMP - INTERVAL '2 hours'\n  )\n\nUNION ALL\n\n-- Encuestas de Ventas (si existen)\nSELECT \n  'ventas' as tipo_encuesta,\n  ev.id as encuesta_id,\n  ev.concesionario_id,\n  ev.sucursal_id,\n  ev.recomendacion as score_nps,\n  ev.satisfaccion,\n  COALESCE(ev.proceso_compra, 0) as lavado, -- Mapear campo equivalente\n  ev.asesor as asesor_atencion,\n  ev.comentario,\n  ev.nombre_cliente,\n  ev.rut_cliente,\n  ev.telefono_cliente,\n  ev.origen,\n  ev.fecha_completado,\n  ev.fecha_creacion,\n  \n  -- Información del concesionario y sucursal\n  c.nombre as concesionario_nombre,\n  s.nombre as sucursal_nombre,\n  \n  -- Clasificación NPS\n  CASE \n    WHEN ev.recomendacion >= 9 THEN 'promotor'\n    WHEN ev.recomendacion >= 7 THEN 'pasivo'\n    ELSE 'detractor'\n  END as clasificacion_nps,\n  \n  -- Identificar si es nota baja (para alertas)\n  CASE WHEN ev.recomendacion <= 8 THEN true ELSE false END as es_nota_baja\n  \nFROM encuestas_ventas ev\nINNER JOIN concesionarios c ON ev.concesionario_id = c.id\nINNER JOIN sucursales s ON ev.sucursal_id = s.id\nWHERE \n  ev.estado = 'completado'\n  AND ev.recomendacion IS NOT NULL\n  AND c.activo = true\n  -- Solo encuestas completadas en las últimas 4 horas\n  AND ev.fecha_completado > CURRENT_TIMESTAMP - INTERVAL '4 hours'\n  -- Verificar que no se haya calculado NPS recientemente\n  AND NOT EXISTS (\n    SELECT 1 FROM calculos_nps cn \n    WHERE cn.encuesta_id = ev.id \n    AND cn.tipo_encuesta = 'ventas'\n    AND cn.created_at > CURRENT_TIMESTAMP - INTERVAL '2 hours'\n  )\n\nORDER BY \n  fecha_completado DESC,\n  concesionario_id,\n  clasificacion_nps;",
+        "additionalFields": {}
+      },
+      "id": "query-completed-surveys", 
+      "name": "Consultar Encuestas Completadas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "check-has-surveys",
+      "name": "¿Hay Encuestas para Procesar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar encuestas y calcular NPS por concesionario y tipo\nconst surveyData = $input.all();\n\nif (!surveyData || surveyData.length === 0) {\n  return [];\n}\n\n// Agrupar por concesionario y tipo de encuesta\nconst npsGroups = new Map();\n\nsurveyData.forEach(item => {\n  const survey = item.json;\n  \n  const groupKey = `${survey.concesionario_id}_${survey.tipo_encuesta}`;\n  \n  if (!npsGroups.has(groupKey)) {\n    npsGroups.set(groupKey, {\n      concesionario_id: survey.concesionario_id,\n      concesionario_nombre: survey.concesionario_nombre,\n      tipo_encuesta: survey.tipo_encuesta,\n      encuestas: [],\n      \n      // Contadores por clasificación\n      promotores: 0,\n      pasivos: 0,\n      detractores: 0,\n      \n      // Métricas adicionales\n      total_encuestas: 0,\n      promedio_satisfaccion: 0,\n      notas_bajas: 0,\n      \n      // Distribución por sucursal\n      por_sucursal: new Map(),\n      \n      // Distribución por origen\n      por_origen: new Map()\n    });\n  }\n  \n  const group = npsGroups.get(groupKey);\n  \n  // Agregar encuesta al grupo\n  group.encuestas.push({\n    id: survey.encuesta_id,\n    score_nps: survey.score_nps,\n    clasificacion: survey.clasificacion_nps,\n    satisfaccion: survey.satisfaccion,\n    es_nota_baja: survey.es_nota_baja,\n    sucursal: survey.sucursal_nombre,\n    origen: survey.origen,\n    fecha: survey.fecha_completado,\n    cliente: survey.nombre_cliente\n  });\n  \n  // Incrementar contadores\n  if (survey.clasificacion_nps === 'promotor') {\n    group.promotores++;\n  } else if (survey.clasificacion_nps === 'pasivo') {\n    group.pasivos++;\n  } else {\n    group.detractores++;\n  }\n  \n  if (survey.es_nota_baja) {\n    group.notas_bajas++;\n  }\n  \n  group.total_encuestas++;\n  \n  // Agrupar por sucursal\n  const sucursalKey = survey.sucursal_nombre;\n  if (!group.por_sucursal.has(sucursalKey)) {\n    group.por_sucursal.set(sucursalKey, {\n      nombre: sucursalKey,\n      promotores: 0,\n      pasivos: 0,\n      detractores: 0,\n      total: 0\n    });\n  }\n  \n  const sucursalData = group.por_sucursal.get(sucursalKey);\n  sucursalData[survey.clasificacion_nps + 's']++;\n  sucursalData.total++;\n  \n  // Agrupar por origen\n  const origenKey = survey.origen;\n  if (!group.por_origen.has(origenKey)) {\n    group.por_origen.set(origenKey, {\n      nombre: origenKey,\n      promotores: 0,\n      pasivos: 0,\n      detractores: 0,\n      total: 0\n    });\n  }\n  \n  const origenData = group.por_origen.get(origenKey);\n  origenData[survey.clasificacion_nps + 's']++;\n  origenData.total++;\n});\n\n// Calcular NPS y métricas para cada grupo\nconst npsResults = Array.from(npsGroups.values()).map(group => {\n  // Calcular NPS: ((Promotores - Detractores) / Total) * 100\n  const npsScore = group.total_encuestas > 0 \n    ? Math.round(((group.promotores - group.detractores) / group.total_encuestas) * 100)\n    : 0;\n  \n  // Calcular porcentajes\n  const porcentajePromotores = group.total_encuestas > 0 \n    ? Math.round((group.promotores / group.total_encuestas) * 100)\n    : 0;\n  \n  const porcentajePasivos = group.total_encuestas > 0 \n    ? Math.round((group.pasivos / group.total_encuestas) * 100)\n    : 0;\n  \n  const porcentajeDetractores = group.total_encuestas > 0 \n    ? Math.round((group.detractores / group.total_encuestas) * 100)\n    : 0;\n  \n  // Promedio de satisfacción\n  const promedioSatisfaccion = group.encuestas.length > 0\n    ? Math.round((group.encuestas.reduce((sum, enc) => sum + (enc.satisfaccion || 0), 0) / group.encuestas.length) * 10) / 10\n    : 0;\n  \n  // Clasificar NPS\n  let clasificacionNPS = 'malo';\n  if (npsScore >= 70) clasificacionNPS = 'excelente';\n  else if (npsScore >= 50) clasificacionNPS = 'muy_bueno';\n  else if (npsScore >= 30) clasificacionNPS = 'bueno';\n  else if (npsScore >= 0) clasificacionNPS = 'regular';\n  \n  // Convertir Maps a arrays para JSON\n  const sucursalesArray = Array.from(group.por_sucursal.values()).map(suc => ({\n    ...suc,\n    nps: suc.total > 0 ? Math.round(((suc.promotores - suc.detractores) / suc.total) * 100) : 0\n  }));\n  \n  const origenesArray = Array.from(group.por_origen.values()).map(orig => ({\n    ...orig,\n    nps: orig.total > 0 ? Math.round(((orig.promotores - orig.detractores) / orig.total) * 100) : 0\n  }));\n  \n  return {\n    json: {\n      ...group,\n      por_sucursal: sucursalesArray,\n      por_origen: origenesArray,\n      \n      // Métricas calculadas\n      nps_score: npsScore,\n      clasificacion_nps: clasificacionNPS,\n      porcentaje_promotores: porcentajePromotores,\n      porcentaje_pasivos: porcentajePasivos,\n      porcentaje_detractores: porcentajeDetractores,\n      promedio_satisfaccion: promedioSatisfaccion,\n      porcentaje_notas_bajas: group.total_encuestas > 0 \n        ? Math.round((group.notas_bajas / group.total_encuestas) * 100)\n        : 0,\n      \n      // Metadata del cálculo\n      calculo_timestamp: new Date().toISOString(),\n      periodo_calculo: 'ultimas_4_horas',\n      requiere_atencion: npsScore < 30 || group.porcentaje_notas_bajas > 20\n    }\n  };\n});\n\nconsole.log('NPS calculado por grupo:', {\n  total_grupos: npsResults.length,\n  post_venta: npsResults.filter(r => r.json.tipo_encuesta === 'post_venta').length,\n  ventas: npsResults.filter(r => r.json.tipo_encuesta === 'ventas').length,\n  requieren_atencion: npsResults.filter(r => r.json.requiere_atencion).length\n});\n\nreturn npsResults;"
+      },
+      "id": "calculate-nps-by-group",
+      "name": "Calcular NPS por Grupo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Insertar cálculos individuales de NPS para cada encuesta\nINSERT INTO calculos_nps (\n  encuesta_id,\n  tipo_encuesta,\n  concesionario_id,\n  sucursal_nombre,\n  score_nps,\n  clasificacion_nps,\n  satisfaccion_score,\n  origen_encuesta,\n  es_nota_baja,\n  fecha_encuesta,\n  metadata,\n  created_at\n)\nSELECT \n  unnest(ARRAY[{{ $json.encuestas.map(e => e.id).join(',') }}]) as encuesta_id,\n  $1 as tipo_encuesta,\n  $2 as concesionario_id,\n  unnest(ARRAY[{{ $json.encuestas.map(e => `'${e.sucursal}'`).join(',') }}]) as sucursal_nombre,\n  unnest(ARRAY[{{ $json.encuestas.map(e => e.score_nps).join(',') }}]) as score_nps,\n  unnest(ARRAY[{{ $json.encuestas.map(e => `'${e.clasificacion}'`).join(',') }}]) as clasificacion_nps,\n  unnest(ARRAY[{{ $json.encuestas.map(e => e.satisfaccion || 0).join(',') }}]) as satisfaccion_score,\n  unnest(ARRAY[{{ $json.encuestas.map(e => `'${e.origen}'`).join(',') }}]) as origen_encuesta,\n  unnest(ARRAY[{{ $json.encuestas.map(e => e.es_nota_baja).join(',') }}]) as es_nota_baja,\n  unnest(ARRAY[{{ $json.encuestas.map(e => `'${e.fecha}'`).join(',') }}])::timestamp as fecha_encuesta,\n  $3::jsonb as metadata,\n  CURRENT_TIMESTAMP as created_at\nON CONFLICT (encuesta_id, tipo_encuesta) DO UPDATE SET\n  score_nps = EXCLUDED.score_nps,\n  clasificacion_nps = EXCLUDED.clasificacion_nps,\n  updated_at = CURRENT_TIMESTAMP\nRETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.tipo_encuesta,\n  $json.concesionario_id,\n  JSON.stringify({\n    nps_calculado: $json.nps_score,\n    clasificacion_nps: $json.clasificacion_nps,\n    total_encuestas: $json.total_encuestas,\n    promotores: $json.promotores,\n    pasivos: $json.pasivos,\n    detractores: $json.detractores\n  })\n]"
+        }
+      },
+      "id": "store-individual-nps",
+      "name": "Almacenar NPS Individual",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1130, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Insertar/actualizar métricas agregadas de NPS por concesionario y tipo\nINSERT INTO metricas_nps (\n  concesionario_id,\n  tipo_encuesta,\n  periodo,\n  nps_score,\n  clasificacion_nps,\n  total_encuestas,\n  promotores,\n  pasivos,\n  detractores,\n  porcentaje_promotores,\n  porcentaje_pasivos,\n  porcentaje_detractores,\n  promedio_satisfaccion,\n  notas_bajas,\n  porcentaje_notas_bajas,\n  distribucion_sucursales,\n  distribucion_origenes,\n  requiere_atencion,\n  fecha_calculo,\n  metadata,\n  created_at\n) VALUES (\n  $1,\n  $2,\n  'ultimas_4_horas',\n  $3,\n  $4,\n  $5,\n  $6,\n  $7,\n  $8,\n  $9,\n  $10,\n  $11,\n  $12,\n  $13,\n  $14,\n  $15::jsonb,\n  $16::jsonb,\n  $17,\n  CURRENT_TIMESTAMP,\n  $18::jsonb,\n  CURRENT_TIMESTAMP\n) \nON CONFLICT (concesionario_id, tipo_encuesta, periodo, DATE(fecha_calculo)) DO UPDATE SET\n  nps_score = EXCLUDED.nps_score,\n  clasificacion_nps = EXCLUDED.clasificacion_nps,\n  total_encuestas = EXCLUDED.total_encuestas,\n  promotores = EXCLUDED.promotores,\n  pasivos = EXCLUDED.pasivos,\n  detractores = EXCLUDED.detractores,\n  porcentaje_promotores = EXCLUDED.porcentaje_promotores,\n  porcentaje_pasivos = EXCLUDED.porcentaje_pasivos,\n  porcentaje_detractores = EXCLUDED.porcentaje_detractores,\n  promedio_satisfaccion = EXCLUDED.promedio_satisfaccion,\n  notas_bajas = EXCLUDED.notas_bajas,\n  porcentaje_notas_bajas = EXCLUDED.porcentaje_notas_bajas,\n  distribucion_sucursales = EXCLUDED.distribucion_sucursales,\n  distribucion_origenes = EXCLUDED.distribucion_origenes,\n  requiere_atencion = EXCLUDED.requiere_atencion,\n  metadata = EXCLUDED.metadata,\n  updated_at = CURRENT_TIMESTAMP\nRETURNING *;",
+        "additionalFields": {
+          "queryParameters": "=[\n  $json.concesionario_id,\n  $json.tipo_encuesta,\n  $json.nps_score,\n  $json.clasificacion_nps,\n  $json.total_encuestas,\n  $json.promotores,\n  $json.pasivos,\n  $json.detractores,\n  $json.porcentaje_promotores,\n  $json.porcentaje_pasivos,\n  $json.porcentaje_detractores,\n  $json.promedio_satisfaccion,\n  $json.notas_bajas,\n  $json.porcentaje_notas_bajas,\n  JSON.stringify($json.por_sucursal),\n  JSON.stringify($json.por_origen),\n  $json.requiere_atencion,\n  JSON.stringify({\n    calculo_timestamp: $json.calculo_timestamp,\n    periodo_calculo: $json.periodo_calculo,\n    encuestas_procesadas: $json.encuestas.length\n  })\n]"
+        }
+      },
+      "id": "store-aggregated-nps",
+      "name": "Almacenar NPS Agregado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1350, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.requiere_atencion }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-requires-attention",
+      "name": "¿Requiere Atención?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1570, 200]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Obtener emails de responsables para notificación de NPS bajo\nSELECT \n  u.nombre,\n  u.email,\n  u.rol\nFROM usuarios u\nWHERE \n  u.concesionario_id = $1\n  AND u.activo = true\n  AND u.rol IN (\n    CASE \n      WHEN $2 = 'post_venta' THEN 'jefe_servicio'\n      WHEN $2 = 'ventas' THEN 'jefe_ventas'\n      ELSE 'gerencia'\n    END,\n    'encargado_calidad',\n    'gerencia'\n  )\nORDER BY \n  CASE u.rol\n    WHEN 'gerencia' THEN 1\n    WHEN 'jefe_servicio' THEN 2\n    WHEN 'jefe_ventas' THEN 2\n    WHEN 'encargado_calidad' THEN 3\n    ELSE 4\n  END;",
+        "additionalFields": {
+          "queryParameters": "=[$json.concesionario_id, $json.tipo_encuesta]"
+        }
+      },
+      "id": "get-notification-recipients",
+      "name": "Obtener Destinatarios",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1790, 120]
+    },
+    {
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "emailSmtp",
+        "fromEmail": "calidad@optimacx.com",
+        "toEmail": "={{ $('Obtener Destinatarios').all().map(item => item.json.email).join(',') }}",
+        "subject": "🚨 ALERTA NPS {{ $('Calcular NPS por Grupo').first().json.tipo_encuesta.toUpperCase() }} - {{ $('Calcular NPS por Grupo').first().json.concesionario_nombre }}",
+        "html": "=<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        .container { font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; }\n        .header { \n            background: {{ $('Calcular NPS por Grupo').first().json.nps_score < 0 ? '#8B0000' : $('Calcular NPS por Grupo').first().json.nps_score < 30 ? '#dc3545' : '#fd7e14' }}; \n            color: white; \n            padding: 20px; \n            text-align: center; \n            border-radius: 8px 8px 0 0;\n        }\n        .nps-score { font-size: 3em; font-weight: bold; margin: 20px 0; }\n        .metric-box { background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px; display: inline-block; width: 45%; }\n        .promotor { color: #28a745; }\n        .pasivo { color: #ffc107; }\n        .detractor { color: #dc3545; }\n        .alert-section { background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0; }\n        .sucursal-item { margin: 10px 0; padding: 10px; border-left: 4px solid #007bff; background: #f8f9fa; }\n        .cta { background: #dc3545; color: white; padding: 20px; text-align: center; margin: 20px 0; border-radius: 5px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h2>🚨 ALERTA NPS {{ $('Calcular NPS por Grupo').first().json.clasificacion_nps.toUpperCase() }}</h2>\n            <p><strong>{{ $('Calcular NPS por Grupo').first().json.concesionario_nombre }}</strong></p>\n            <p>{{ $('Calcular NPS por Grupo').first().json.tipo_encuesta === 'post_venta' ? 'Encuestas Post-Venta' : 'Encuestas de Ventas' }}</p>\n            <div class=\"nps-score\">{{ $('Calcular NPS por Grupo').first().json.nps_score }}</div>\n        </div>\n        \n        <div style=\"padding: 20px;\">\n            <div class=\"alert-section\">\n                <h3>⚠️ Situación Crítica Detectada</h3>\n                <p>El NPS ha caído a <strong>{{ $('Calcular NPS por Grupo').first().json.nps_score }} puntos</strong>, clasificado como <strong>{{ $('Calcular NPS por Grupo').first().json.clasificacion_nps.replace('_', ' ').toUpperCase() }}</strong>.</p>\n                <p><strong>{{ $('Calcular NPS por Grupo').first().json.porcentaje_notas_bajas }}%</strong> de las encuestas tienen notas bajas (≤8).</p>\n            </div>\n            \n            <h3>📊 Distribución Detallada</h3>\n            <div style=\"display: flex; justify-content: space-between; flex-wrap: wrap;\">\n                <div class=\"metric-box\">\n                    <div class=\"promotor\">😊 PROMOTORES</div>\n                    <div><strong>{{ $('Calcular NPS por Grupo').first().json.promotores }}</strong> ({{ $('Calcular NPS por Grupo').first().json.porcentaje_promotores }}%)</div>\n                </div>\n                <div class=\"metric-box\">\n                    <div class=\"pasivo\">😐 PASIVOS</div>\n                    <div><strong>{{ $('Calcular NPS por Grupo').first().json.pasivos }}</strong> ({{ $('Calcular NPS por Grupo').first().json.porcentaje_pasivos }}%)</div>\n                </div>\n                <div class=\"metric-box\">\n                    <div class=\"detractor\">😠 DETRACTORES</div>\n                    <div><strong>{{ $('Calcular NPS por Grupo').first().json.detractores }}</strong> ({{ $('Calcular NPS por Grupo').first().json.porcentaje_detractores }}%)</div>\n                </div>\n                <div class=\"metric-box\">\n                    <div>📋 TOTAL ENCUESTAS</div>\n                    <div><strong>{{ $('Calcular NPS por Grupo').first().json.total_encuestas }}</strong></div>\n                </div>\n            </div>\n            \n            <h3>🏢 NPS por Sucursal</h3>\n            {{ $('Calcular NPS por Grupo').first().json.por_sucursal.map(suc => `\n            <div class=\"sucursal-item\">\n                <strong>${suc.nombre}</strong>: NPS ${suc.nps} \n                (${suc.promotores}P / ${suc.pasivos}PA / ${suc.detractores}D de ${suc.total} total)\n            </div>\n            `).join('') }}\n            \n            <h3>📈 NPS por Canal</h3>\n            {{ $('Calcular NPS por Grupo').first().json.por_origen.map(orig => `\n            <div style=\"margin: 5px 0;\">\n                <strong>${orig.nombre}:</strong> NPS ${orig.nps} (${orig.total} encuestas)\n            </div>\n            `).join('') }}\n            \n            <div class=\"cta\">\n                <strong>⚡ ACCIÓN INMEDIATA REQUERIDA:</strong><br>\n                El NPS crítico requiere intervención inmediata para evitar deterioro de imagen y pérdida de clientes.\n            </div>\n            \n            <div style=\"background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;\">\n                <h4>📋 Plan de Acción Sugerido:</h4>\n                <ol>\n                    <li><strong>Revisar detractores inmediatamente</strong> - Identificar casos específicos</li>\n                    <li><strong>Contactar clientes insatisfechos</strong> - Llamadas de disculpa y solución</li>\n                    <li><strong>Analizar causas raíz</strong> - Problemas de proceso o personal</li>\n                    <li><strong>Implementar mejoras urgentes</strong> - Capacitación y ajustes</li>\n                    <li><strong>Monitoreo diario</strong> - Seguimiento estrecho por 2 semanas</li>\n                    {{ $('Calcular NPS por Grupo').first().json.tipo_encuesta === 'post_venta' ? '<li><strong>Revisar procedimientos de servicio técnico</strong></li>' : '<li><strong>Revisar proceso de ventas y entrega</strong></li>' }}\n                </ol>\n            </div>\n            \n            <p><strong>Promedio de Satisfacción:</strong> {{ $('Calcular NPS por Grupo').first().json.promedio_satisfaccion }}/10</p>\n            <p><strong>Período:</strong> Últimas 4 horas ({{ $('Calcular NPS por Grupo').first().json.calculo_timestamp }})</p>\n            \n            <p>💻 <strong>Ver dashboard:</strong> <a href=\"https://app.optimacx.com/metricas/nps\">Métricas NPS Detalladas</a></p>\n            \n            <hr style=\"margin: 30px 0;\">\n            <p style=\"font-size: 0.9em; color: #6c757d;\">\n                <strong>Calculadora Automática NPS - Óptima-CX</strong><br>\n                Esta alerta se envía cuando el NPS cae por debajo de 30 puntos o hay más de 20% de notas bajas.<br>\n                Destinatarios: {{ $('Obtener Destinatarios').all().map(item => `${item.json.nombre} (${item.json.rol})`).join(', ') }}\n            </p>\n        </div>\n    </div>\n</body>\n</html>"
+      },
+      "id": "send-nps-alert",
+      "name": "Enviar Alerta NPS",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [2010, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar resumen completo de cálculos NPS\nconst processedData = $input.all();\n\nconst summary = {\n  total_grupos_calculados: processedData.length,\n  distribucion_por_tipo: processedData.reduce((acc, item) => {\n    const tipo = item.json.tipo_encuesta;\n    acc[tipo] = (acc[tipo] || 0) + 1;\n    return acc;\n  }, {}),\n  \n  // Estadísticas de NPS\n  nps_promedio: processedData.length > 0 \n    ? Math.round(processedData.reduce((sum, item) => sum + item.json.nps_score, 0) / processedData.length)\n    : 0,\n  \n  distribucion_clasificacion: processedData.reduce((acc, item) => {\n    const clasificacion = item.json.clasificacion_nps;\n    acc[clasificacion] = (acc[clasificacion] || 0) + 1;\n    return acc;\n  }, {}),\n  \n  // Métricas de alerta\n  grupos_requieren_atencion: processedData.filter(item => item.json.requiere_atencion).length,\n  \n  total_encuestas_procesadas: processedData.reduce((sum, item) => \n    sum + item.json.total_encuestas, 0\n  ),\n  \n  // Distribución global de clasificaciones\n  total_promotores: processedData.reduce((sum, item) => sum + item.json.promotores, 0),\n  total_pasivos: processedData.reduce((sum, item) => sum + item.json.pasivos, 0),\n  total_detractores: processedData.reduce((sum, item) => sum + item.json.detractores, 0),\n  \n  // Métricas de calidad\n  promedio_satisfaccion_global: processedData.length > 0\n    ? Math.round((processedData.reduce((sum, item) => \n        sum + item.json.promedio_satisfaccion, 0) / processedData.length) * 10) / 10\n    : 0,\n  \n  total_notas_bajas: processedData.reduce((sum, item) => sum + item.json.notas_bajas, 0),\n  \n  // Metadata del procesamiento\n  timestamp: new Date().toISOString(),\n  execution_success: true,\n  periodo_procesado: 'ultimas_4_horas'\n};\n\n// Calcular NPS global si hay datos\nif (summary.total_encuestas_procesadas > 0) {\n  summary.nps_global = Math.round(\n    ((summary.total_promotores - summary.total_detractores) / \n     summary.total_encuestas_procesadas) * 100\n  );\n  \n  summary.porcentaje_notas_bajas_global = Math.round(\n    (summary.total_notas_bajas / summary.total_encuestas_procesadas) * 100\n  );\n}\n\nconsole.log('Cálculos NPS completados:', summary);\n\nreturn [{ json: summary }];"
+      },
+      "id": "generate-nps-summary",
+      "name": "Generar Resumen NPS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2230, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No hay encuestas que procesar\nconsole.log('No hay encuestas completadas que requieran cálculo de NPS');\n\nreturn [{\n  json: {\n    message: 'No hay encuestas completadas para calcular NPS',\n    timestamp: new Date().toISOString(),\n    execution_success: true,\n    surveys_found: 0\n  }\n}];"
+      },
+      "id": "no-surveys-response",
+      "name": "Sin Encuestas Nuevas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [910, 400]
+    }
+  ],
+  "connections": {
+    "Ejecutar cada 2 horas": {
+      "main": [["Consultar Encuestas Completadas", "type": "main", "index": 0]]
+    },
+    "Consultar Encuestas Completadas": {
+      "main": [["¿Hay Encuestas para Procesar?", "type": "main", "index": 0]]
+    },
+    "¿Hay Encuestas para Procesar?": {
+      "main": [
+        [{"node": "Calcular NPS por Grupo", "type": "main", "index": 0}],
+        [{"node": "Sin Encuestas Nuevas", "type": "main", "index": 0}]
+      ]
+    },
+    "Calcular NPS por Grupo": {
+      "main": [["Almacenar NPS Individual", "type": "main", "index": 0]]
+    },
+    "Almacenar NPS Individual": {
+      "main": [["Almacenar NPS Agregado", "type": "main", "index": 0]]
+    },
+    "Almacenar NPS Agregado": {
+      "main": [["¿Requiere Atención?", "type": "main", "index": 0]]
+    },
+    "¿Requiere Atención?": {
+      "main": [
+        [{"node": "Obtener Destinatarios", "type": "main", "index": 0}],
+        [{"node": "Generar Resumen NPS", "type": "main", "index": 0}]
+      ]
+    },
+    "Obtener Destinatarios": {
+      "main": [["Enviar Alerta NPS", "type": "main", "index": 0]]
+    },
+    "Enviar Alerta NPS": {
+      "main": [["Generar Resumen NPS", "type": "main", "index": 0]]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "manejador-errores"
+  },
+  "staticData": {},
+  "variables": {
+    "NPS_VERSION": "1.0.0",
+    "PROMOTER_THRESHOLD": 9,
+    "PASSIVE_THRESHOLD": 7,
+    "CRITICAL_NPS_THRESHOLD": 30,
+    "HIGH_BAD_NOTES_THRESHOLD": 20,
+    "CALCULATION_INTERVAL_HOURS": 4,
+    "ALERT_ROLES": ["gerencia", "jefe_servicio", "jefe_ventas", "encargado_calidad"]
+  }
+}
