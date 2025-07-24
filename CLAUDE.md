@@ -4,7 +4,7 @@
 
 **Nombre del Proyecto:** Óptima-CX
 
-**Descripción:** Óptima-CX es una plataforma multitenant SaaS de experiencia al cliente diseñada para el sector automotriz. La plataforma integra tres módulos principales: **Gestión de Leads y Ventas**, **Encuestas Post-Venta** y **Gestión de Reclamos con IA**, optimizando todo el ciclo de vida del cliente automotriz desde la prospección hasta el servicio post-venta.
+**Descripción:** Óptima-CX es una plataforma multitenant SaaS de experiencia al cliente diseñada para el sector automotriz. La plataforma integra cuatro módulos principales: **Gestión de Leads y Ventas**, **Encuestas de Ventas**, **Encuestas Post-Venta** y **Gestión de Reclamos con IA**, optimizando todo el ciclo de vida del cliente automotriz desde la prospección hasta el servicio post-venta.
 
 **Arquitectura Actual:** La plataforma utiliza una arquitectura moderna basada en:
 - **Frontend:** Next.js 14 + TypeScript + Tailwind CSS + Supabase Auth
@@ -196,6 +196,72 @@ el disparador de conversación se envía una sola ves, ya que si no contesta pas
 * **Registro por Llamada (Salida):** Cuando un ejecutivo de Contact Center realiza una encuesta por llamada y la nota es de **1 a 8 (baja)**, el sistema debe disparar automáticamente un correo electrónico (vía n8no internamente) al **Jefe de Servicio, Asesor de Servicio y Responsable de Calidad** del mismo concesionario con el detalle de la encuesta para una acción inmediata.
 * Si la nota es **9 a 10 (positiva)**, la encuesta simplemente se registra y va al dashboard.
 
+### 3.3. Módulo de Encuestas de Ventas (Nuevo)
+
+**Objetivo Principal:** Medir la satisfacción del cliente inmediatamente después de la finalización del ciclo de venta (ya sea concretada o perdida) para obtener feedback sobre el proceso y el desempeño del asesor.
+
+#### **Estructura de Encuestas de Ventas:**
+
+**4 Preguntas Principales (Escala 1-10):**
+
+  1. ¿Cómo calificaría su experiencia general durante el proceso de compra/cotización?
+    - Campo: `experiencia_venta`
+    - Escala: 1-10
+    - Propósito: Mide la satisfacción general con el ciclo de venta.
+  2. ¿Cuál es su nivel de satisfacción con la atención del asesor de ventas?
+    - Campo: `satisfaccion_asesor_ventas`
+    - Escala: 1-10
+    - Propósito: Evalúa el desempeño del asesor de ventas.
+  3. ¿La información sobre el vehículo y la cotización fue clara y transparente?
+    - Campo: `claridad_informacion`
+    - Escala: 1-10
+    - Propósito: Evalúa la calidad de la información entregada.
+  4. ¿Qué tan probable es que nos recomiende a un amigo o familiar para comprar un vehículo?
+    - Campo: `recomendacion_venta`
+    - Escala: 1-10
+    - Propósito: Mide el NPS del proceso de ventas.
+
+  **Pregunta Adicional:**
+
+  5. ¿Tiene algún comentario adicional sobre su experiencia?
+    - Campo: `comentario_venta`
+    - Tipo: Texto libre (opcional)
+    - Propósito: Recopilar feedback cualitativo detallado.
+
+  **📊 Validaciones:**
+
+  - Campos requeridos cuando estado = 'completado': `experiencia_venta`, `satisfaccion_asesor_ventas`, `claridad_informacion`, `recomendacion_venta`.
+  - Campo opcional: `comentario_venta`.
+  - Escala: 1-10 para todas las preguntas numéricas.
+
+  **🎯 Automatización por Puntaje:**
+
+  - **Nota 9-10:** La encuesta se registra y se asocia al lead correspondiente.
+  - **Nota 1-8:** Dispara un email automático al **Jefe de Ventas** y al **Asesor de Ventas** asignado al lead, con el detalle de la encuesta para revisión y seguimiento.
+
+#### **Flujo de Automatización Multicanal (N8N):**
+
+El sistema orquesta un flujo inteligente y multicanal para maximizar la tasa de respuesta, priorizando el feedback inmediato y automatizando el seguimiento.
+
+**Canal 1: Código QR (Feedback Inmediato en Entrega)**
+1.  **Disparador:** Al momento de la entrega del vehículo, el cliente escanea un código QR único del concesionario.
+2.  **Acción:** Se presenta una encuesta de satisfacción de venta optimizada para móviles.
+3.  **Registro:** Las respuestas se guardan instantáneamente en la tabla `encuestas_ventas`, asociadas al `lead_id` (que debe ser buscado por RUT o teléfono), `asesor_asignado_id` y `concesionario_id`. El origen se registra como `QR_VENTA`.
+
+**Canal 2: WhatsApp (Seguimiento Automático para Leads 'Vendido')**
+1.  **Disparador:** El flujo se activa 24 horas después de que el `estado` de un lead cambia a **`Vendido`**.
+2.  **Filtrado Inteligente:** El sistema **verifica si el cliente ya respondió** a través del QR. Si ya lo hizo, el flujo se detiene para este cliente.
+3.  **Acción:** Si no hay respuesta previa, el sistema (vía N8N) envía automáticamente un mensaje de WhatsApp al `telefono_cliente` del lead con un enlace a la encuesta. El origen se registrará como `WHATSAPP_VENTA`.
+
+**Canal 3: WhatsApp (Seguimiento para Leads 'Perdido')**
+1.  **Disparador:** El flujo se activa cuando el `estado` de un lead cambia a **`Perdido`**.
+2.  **Acción:** Se envía una encuesta adaptada para entender las razones de la pérdida, con preguntas como "¿Qué podríamos haber hecho mejor?" o "¿Cuál fue el principal motivo para no elegirnos?". El origen se registra como `WHATSAPP_PERDIDO`.
+
+**Gestión de Respuestas y Alertas (Común a todos los canales):**
+1.  **Recepción de Respuesta:** El cliente completa la encuesta. Las respuestas se guardan en la tabla `encuestas_ventas`.
+2.  **Alerta por Baja Calificación:** Si cualquier pregunta principal recibe una nota de 1 a 8, el sistema ejecuta la automatización de alerta por correo electrónico al **Jefe de Ventas** y al **Asesor de Ventas**.
+3.  **Actualización de Dashboard:** Los resultados actualizan en tiempo real los dashboards de métricas de ventas.
+
 ### 4.2. Gestión de Reclamos y Agente IA con n8n
 
 **Canales de Recepción:** El sistema recibe reclamos desde múltiples canales integrados:
@@ -238,10 +304,12 @@ Referencias a documentos/procedimientos aplicables
 
 n8nvalida los datos extraídos y enriquecidos, y los envía al backend de supabase vía API para su registro
 supabase registra el reclamo enriquecido con la información contextual y lo asigna automáticamente al Jefe de Servicio y Asesor de la sucursal correspondiente (basado en la sucursal extraída por la IA y la lógica de asignación de supabase)
-n8nenvía notificaciones automáticas y personalizadas utilizando el contexto recuperado para personalizar los mensajes:
+n8nenvía notificaciones automáticas y personalizadas por rol, utilizando el contexto recuperado para adaptar los mensajes:
 
-Al cliente: Confirmación de recepción con información específica y número de seguimiento, a través del mismo canal de origen si es posible
-A los responsables: Asesor y Jefe de Servicio, y con copia a encargado de calidad, con los detalles del reclamo enriquecidos, sugerencias de resolución contextualizadas y un enlace directo a la plataforma para su gestión
+- **Al cliente:** Confirmación de recepción con información específica y número de seguimiento, a través del mismo canal de origen si es posible.
+- **Al Asesor de Servicio:** Notificación detallada con el reclamo completo, historial del cliente y sugerencias de resolución para que pueda iniciar la gestión.
+- **Al Jefe de Servicio:** Notificación de supervisión con un resumen del reclamo, la clasificación de la IA y el asesor asignado, permitiéndole monitorear el caso.
+- **Al Encargado de Calidad:** Notificación con foco en la clasificación, sentimiento del cliente y tipo de reclamo para análisis de tendencias y calidad.
 
 
 Automatización de Provisión de Flujos de n8n:
@@ -616,6 +684,25 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Pruebas y Calidad:** **SIEMPRE** considerar la adición de pruebas para nueva funcionalidad. El código debe ser legible, seguir estándares SOLID y ser mantenible. Buscar oportunidades de refactorización sin introducir regresiones.
 
 * **Modificación de Archivos:** Claude puede crear o modificar archivos directamente en el entorno de desarrollo, respetando la estructura modular actual del proyecto.
+
+## 6.1. Políticas de Escalación y SLAs (Acuerdos de Nivel de Servicio)
+
+Para garantizar la operatividad y la respuesta oportuna, el sistema implementa políticas de escalación automáticas gestionadas por los workflows en `utils/`.
+
+**1. Escalación de Leads no Atendidos:**
+*   **Regla:** Si un lead con `nivel_interes` **'alto'** no es contactado por el asesor asignado después de 2 recordatorios (aproximadamente 2 horas desde la asignación), el sistema escalará automáticamente el lead.
+*   **Acción:** El workflow `utils/notificador-escalacion.json` enviará una notificación de **"Lead Crítico Sin Atención"** al `Jefe de Ventas` correspondiente, incluyendo los detalles del lead y el tiempo transcurrido.
+*   **Objetivo:** Asegurar que los leads de mayor potencial reciban atención prioritaria y no se pierdan por falta de seguimiento.
+
+**2. Escalación de Reclamos no Gestionados:**
+*   **Regla:** Si un reclamo clasificado con `urgencia` **'alta'** permanece en estado **'Pendiente'** por más de 24 horas sin ninguna actualización o cambio de estado.
+*   **Acción:** El workflow `utils/notificador-escalacion.json` enviará una notificación de **"Reclamo Urgente Estancado"** al `Jefe de Servicio` y con copia al `Encargado de Calidad`.
+*   **Objetivo:** Garantizar que los reclamos más críticos sean atendidos dentro de un plazo razonable, mejorando la satisfacción del cliente.
+
+**3. Manejo de Fallos en Workflows Críticos:**
+*   **Regla:** Si un workflow crítico (ej. `procesador-rag-reclamos`, `procesador-whatsapp-leads`) falla 3 veces consecutivas para el mismo `tenant_id`.
+*   **Acción:** El workflow `utils/manejador-errores.json` registrará el fallo crítico y enviará una alerta de **"Fallo Crítico de Sistema"** al rol `admin` (o a un canal de operaciones designado). La alerta incluirá el nombre del workflow, el tenant afectado y los logs de error para una intervención técnica inmediata.
+*   **Objetivo:** Mantener la alta disponibilidad del sistema y detectar problemas de integración o configuración de forma proactiva.
 
 
 #### **Mediana Prioridad:**

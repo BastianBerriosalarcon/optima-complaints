@@ -1,0 +1,102 @@
+{
+  "name": "Agregador de Métricas de Reclamos",
+  "description": "Workflow que calcula y agrega métricas de reclamos (estado, tipo, sucursal, tiempos) para optimizar dashboards.",
+  "tags": ["dashboard", "metrics", "complaints", "aggregation"],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Ejecutar cada 4 horas",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Consulta para agregar métricas de reclamos de las últimas 24 horas\nSELECT \n    concesionario_id,\n    estado,\n    tipo_reclamo,\n    sucursal,\n    COUNT(*) as total_reclamos,\n    AVG(EXTRACT(EPOCH FROM (fecha_cierre - fecha_creacion))/3600) as tiempo_resolucion_horas,\n    COUNT(*) FILTER (WHERE black_alert = true) as total_black_alerts\nFROM \n    reclamos\nWHERE \n    fecha_creacion >= NOW() - INTERVAL '24 hours'\nGROUP BY \n    concesionario_id, estado, tipo_reclamo, sucursal;"
+      },
+      "id": "query-complaint-metrics",
+      "name": "Consultar Métricas de Reclamos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [470, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar y transformar los datos para la tabla de métricas\nconst rawMetrics = $input.all();\nconst processedData = {};\n\nrawMetrics.forEach(item => {\n  const metric = item.json;\n  const tenantId = metric.concesionario_id;\n\n  if (!processedData[tenantId]) {\n    processedData[tenantId] = {\n      concesionario_id: tenantId,\n      periodo: 'ultimas_24_horas',\n      fecha_calculo: new Date().toISOString().split('T')[0],\n      total_pendientes: 0,\n      total_en_proceso: 0,\n      total_cerrados: 0,\n      total_reclamos: 0,\n      distribucion_por_tipo: {},\n      distribucion_por_sucursal: {},\n      tiempos_resolucion: [],\n      total_black_alerts: 0\n    };\n  }\n\n  const tenantData = processedData[tenantId];\n  const total = parseInt(metric.total_reclamos, 10);\n  tenantData.total_reclamos += total;\n\n  if (metric.estado === 'Pendiente') tenantData.total_pendientes += total;\n  if (metric.estado === 'En Proceso') tenantData.total_en_proceso += total;\n  if (metric.estado === 'Cerrado') tenantData.total_cerrados += total;\n\n  if (metric.tipo_reclamo) {\n    tenantData.distribucion_por_tipo[metric.tipo_reclamo] = (tenantData.distribucion_por_tipo[metric.tipo_reclamo] || 0) + total;\n  }\n  if (metric.sucursal) {\n    tenantData.distribucion_por_sucursal[metric.sucursal] = (tenantData.distribucion_por_sucursal[metric.sucursal] || 0) + total;\n  }\n\n  if (metric.tiempo_resolucion_horas) tenantData.tiempos_resolucion.push(parseFloat(metric.tiempo_resolucion_horas));\n  if (metric.total_black_alerts) tenantData.total_black_alerts += parseInt(metric.total_black_alerts, 10);\n});\n\n// Calcular promedios finales\nObject.values(processedData).forEach(tenant => {\n  if (tenant.tiempos_resolucion.length > 0) {\n    tenant.tiempo_resolucion_promedio_horas = tenant.tiempos_resolucion.reduce((a, b) => a + b, 0) / tenant.tiempos_resolucion.length;\n  }\n  delete tenant.tiempos_resolucion;\n});\n\nreturn Object.values(processedData).map(item => ({ json: item }));" 
+      },
+      "id": "process-metrics",
+      "name": "Procesar Métricas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": "public",
+        "table": "metricas_dashboard_reclamos",
+        "conflictKey": "concesionario_id,periodo,fecha_calculo",
+        "columns": "concesionario_id,periodo,fecha_calculo,total_pendientes,total_en_proceso,total_cerrados,total_reclamos,distribucion_por_tipo,distribucion_por_sucursal,tiempo_resolucion_promedio_horas,total_black_alerts",
+        "additionalFields": {
+          "values": "={{ [$json.concesionario_id, $json.periodo, $json.fecha_calculo, $json.total_pendientes, $json.total_en_proceso, $json.total_cerrados, $json.total_reclamos, JSON.stringify($json.distribucion_por_tipo), JSON.stringify($json.distribucion_por_sucursal), $json.tiempo_resolucion_promedio_horas, $json.total_black_alerts] }}"
+        }
+      },
+      "id": "upsert-metrics",
+      "name": "Guardar Métricas en BD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [910, 300]
+    }
+  ],
+  "connections": {
+    "Ejecutar cada 4 horas": {
+      "main": [
+        [
+          {
+            "node": "Consultar Métricas de Reclamos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Métricas de Reclamos": {
+      "main": [
+        [
+          {
+            "node": "Procesar Métricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Métricas": {
+      "main": [
+        [
+          {
+            "node": "Guardar Métricas en BD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

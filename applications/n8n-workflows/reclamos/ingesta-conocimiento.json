@@ -135,7 +135,7 @@
       "main": [
         [
           {
-            "node": "Iniciar Chunking",
+            "node": "Iniciar Escaneo de Malware",
             "type": "main",
             "index": 0
           }

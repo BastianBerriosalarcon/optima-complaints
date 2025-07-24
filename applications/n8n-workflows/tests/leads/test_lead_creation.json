@@ -1,0 +1,152 @@
+{
+  "name": "TEST - Creación Exitosa de Lead desde WhatsApp",
+  "tags": ["test", "leads", "critical"],
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Datos de prueba que simulan un webhook de WhatsApp\nconst testPayload = {\n  object: 'whatsapp_business_account',\n  entry: [\n    {\n      id: 'WHATSAPP_BUSINESS_ACCOUNT_ID',\n      changes: [\n        {\n          value: {\n            messaging_product: 'whatsapp',\n            metadata: {\n              display_phone_number: '16505551111',\n              phone_number_id: '1234567890' // ID asociado a un tenant de prueba\n            },\n            contacts: [\n              {\n                profile: {\n                  name: 'Juan Tester'\n                },\n                wa_id: '56998765432'\n              }\n            ],\n            messages: [\n              {\n                from: '56998765432',\n                id: `wamid.${Date.now()}`,\n                timestamp: Math.floor(Date.now() / 1000).toString(),\n                text: {\n                  body: 'Hola, quiero cotizar un Toyota Yaris. Mi correo es juan.tester@example.com'\n                },\n                type: 'text'\n              }\n            ]\n          },\n          field: 'messages'\n        }\n      ]\n    }\n  ]\n};\n\nreturn { testPayload };"
+      },
+      "id": "setup-test-data",
+      "name": "1. Setup: Simular Webhook WhatsApp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/whatsapp/lead",
+        "body": "={{ JSON.stringify($json.testPayload) }}",
+        "options": {}
+      },
+      "id": "execute-workflow",
+      "name": "2. Execute: Llamar a Procesador de Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "id": "wait-for-processing",
+      "name": "3. Wait: Esperar Procesamiento",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM leads WHERE telefono_cliente = '56998765432' ORDER BY fecha_creacion DESC LIMIT 1;",
+        "options": {}
+      },
+      "id": "verify-lead-creation",
+      "name": "4. Verify: Consultar Lead Creado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $input.first()?.json;\n\n// --- ASERCIONES DE LA PRUEBA ---\nif (!lead) {\n  throw new Error('❌ FALLIDO: No se encontró el lead en la base de datos.');\n}\n\nif (lead.estado !== 'nuevo') {\n  throw new Error(`❌ FALLIDO: El estado esperado era 'nuevo', pero se encontró '${lead.estado}'`);\n}\n\nif (lead.intencion_detectada !== 'cotizacion') {\n  throw new Error(`❌ FALLIDO: La intención esperada era 'cotizacion', pero se detectó '${lead.intencion_detectada}'`);\n}\n\nif (lead.score_calidad < 50) {\n  throw new Error(`❌ FALLIDO: El score de calidad (${lead.score_calidad}) es inesperadamente bajo.`);\n}\n\nif (lead.email_cliente !== 'juan.tester@example.com') {\n  throw new Error(`❌ FALLIDO: El email no se extrajo correctamente.`);\n}\n\nconsole.log('✅ PRUEBA EXITOSA: El lead se creó y analizó correctamente.');\nreturn { success: true, lead_id: lead.id };"
+      },
+      "id": "assert-results",
+      "name": "5. Assert: Validar Resultados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM leads WHERE id = '{{ $json.lead_id }}';"
+      },
+      "id": "cleanup-database",
+      "name": "6. Cleanup: Eliminar Lead de Prueba",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "1. Setup: Simular Webhook WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Setup: Simular Webhook WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "2. Execute: Llamar a Procesador de Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Execute: Llamar a Procesador de Leads": {
+      "main": [
+        [
+          {
+            "node": "3. Wait: Esperar Procesamiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Wait: Esperar Procesamiento": {
+      "main": [
+        [
+          {
+            "node": "4. Verify: Consultar Lead Creado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Verify: Consultar Lead Creado": {
+      "main": [
+        [
+          {
+            "node": "5. Assert: Validar Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Assert: Validar Resultados": {
+      "main": [
+        [
+          {
+            "node": "6. Cleanup: Eliminar Lead de Prueba",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

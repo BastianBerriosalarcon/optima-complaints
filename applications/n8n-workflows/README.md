@@ -5,48 +5,39 @@
 ```
 applications/n8n-workflows/
 ├── 📋 README.md
+│
+├── 🏢 administracion/
+│   └── portal-super-admin.json                 # ✅ Portal Super-Admin para gestión de tenants
+│
 ├── 🎯 leads/
+│   ├── actualizador-estados-leads.json         # ✅ Actualizador automático de estados
 │   ├── analisis-ia-leads.json                    # ✅ Análisis IA con Gemini
 │   ├── asignacion-asesores.json                  # ✅ Asignación inteligente de asesores
+│   ├── calculador-metricas-conversion.json     # ✅ Calculador de métricas de conversión
 │   ├── notificaciones-leads.json                 # ✅ Notificaciones de leads
 │   ├── procesador-whatsapp-leads.json            # ✅ Procesador principal WhatsApp
-│   └── puntuacion-ia-leads.json                  # ✅ Scoring automático de calidad
+│   ├── puntuacion-ia-leads.json                  # ✅ Scoring automático de calidad
+│   ├── recordatorios-leads.json                # ✅ Recordatorios automáticos de seguimiento
+│   └── seguimiento-cotizaciones.json           # ✅ Seguimiento automático de cotizaciones
 │
 ├── 📊 encuestas/
+│   ├── calculador-nps.json                     # ✅ Calculador automático de NPS
 │   ├── postventa/
-│   │   ├── asignacion-contact-center.json        # ✅ Asignación a contact center
-│   │   ├── enviador-whatsapp.json                # ✅ Envío WhatsApp individual
-│   │   ├── exportador-excel.json                 # ✅ Exportación a Excel
-│   │   ├── filtro-duplicados.json                # ✅ Filtro de duplicados
-│   │   ├── manejador-respuestas.json             # ✅ Manejo de respuestas
-│   │   ├── monitor-respuestas.json               # ✅ Monitor de respuestas
-│   │   ├── notificador-notas-bajas.json          # ✅ Notificaciones notas bajas
-│   │   ├── procesador-excel.json                 # ✅ Procesador de carga Excel
-│   │   ├── procesador-qr.json                    # ✅ Procesador encuestas QR
-│   │   └── webhook-envio-encuestas.json          # ✅ Webhook de envío
-│   │
-│   └── ventas/ ⭐ MODULARIZADO (6 workflows SRP)
-│       ├── asignacion-contact-center-ventas.json # ✅ Asignación equitativa agentes
-│       ├── enviador-masivo-whatsapp-ventas.json  # ✅ Envío masivo WhatsApp ventas
-│       ├── enviador-whatsapp-ventas.json         # ✅ Envío individual WhatsApp
-│       ├── exportador-excel-ventas.json          # ✅ Exportación Excel ventas
-│       ├── filtro-duplicados-ventas.json         # ✅ Filtro duplicados ventas
-│       ├── manejador-respuestas-ventas.json      # ✅ Manejo respuestas ventas
-│       ├── monitor-respuestas-ventas.json        # ✅ Monitor respuestas (6h)
-│       ├── notificador-notas-bajas-ventas.json   # ✅ Notificaciones bajas ventas
-│       ├── procesador-excel-ventas.json          # ✅ Procesador carga Excel
-│       ├── procesador-qr-ventas.json             # ✅ Procesador QR ventas
-│       └── webhook-envio-encuestas-ventas.json   # ✅ Webhook recepción encuestas
+│   │   ├── ... (10 workflows modulares)
+│   └── ventas/ 
+│       ├── ... (11 workflows modulares)
 │
 ├── 🎫 reclamos/
 │   ├── alerta-black-alert.json                   # ✅ Alertas Black Alert
 │   ├── almacenamiento-conocimiento.json          # ✅ Almacenamiento RAG
 │   ├── asignacion-automatica-reclamos.json       # ✅ Asignación automática
+│   ├── auditor-modificaciones.json             # ✅ Auditor de modificaciones de reclamos
 │   ├── fragmentacion-conocimiento.json           # ✅ Chunking de documentos
 │   ├── generador-embeddings.json                 # ✅ Generador de embeddings
 │   ├── ingesta-conocimiento.json                 # ✅ Ingesta de conocimiento
 │   ├── notificaciones-reclamos.json              # ✅ Notificaciones de reclamos
-│   └── procesador-rag-reclamos.json              # ✅ Procesador RAG + IA
+│   ├── procesador-rag-reclamos.json              # ✅ Procesador RAG + IA
+│   └── rerank-cohere-documentos.json           # ✅ Refinamiento de documentos RAG con Cohere
 │
 ├── 🚀 campañas/
 │   ├── analiticas-campañas.json                  # ✅ Analíticas de campañas
@@ -57,29 +48,32 @@ applications/n8n-workflows/
 ├── 🔧 utils/
 │   ├── cargador-config-tenant.json               # ✅ Cargador configuración tenant
 │   ├── manejador-errores.json                    # ✅ Manejador de errores
+│   ├── monitor-telemetria-avanzada.json        # ✅ Monitor de telemetría avanzada
+│   ├── notificador-escalacion.json             # ✅ Notificador de escalaciones automáticas
 │   ├── optimizador-base-datos.json               # ✅ Optimizador de BD
+│   ├── sincronizador-chatwoot.json             # ✅ Sincronizador bidireccional con Chatwoot
 │   ├── utilidad-validacion.json                  # ✅ Utilidades de validación
 │   └── validador-mensajes-whatsapp.json          # ✅ Validador mensajes WhatsApp
 │
 └── 📋 templates/
-    ├── tenant-onboarding-template.json    # [Pendiente] Template onboarding
-    ├── multi-tenant-base-template.json    # [Pendiente] Template base
-    └── rag-pipeline-template.json         # [Pendiente] Template RAG
+    ├── plantilla-incorporacion-concesionario.json # ✅ Plantilla de onboarding de tenants
+    ├── provision-workflows-automatica.json     # ✅ Provisión automática de workflows
+    └── ... (otros templates base)
 ```
 
 ## 🏗️ Principios de Arquitectura Implementados
 
 ### **🎯 Módulos de Negocio Segregados**
-- ✅ **Leads**: Gestión completa de leads de ventas WhatsApp
-- 📊 **Encuestas**: 
-  - **Post-venta**: Multicanal (QR, WhatsApp, Llamadas) - 10 workflows modulares
-  - **Ventas**: Satisfacción de ventas (QR_VENTAS, WhatsApp_VENTAS, Llamada_VENTAS) - 6 workflows modulares ⭐
-- 🎫 **Reclamos**: RAG + IA para clasificación y respuesta automática
-- 🚀 **Campañas**: Automatización marketing y followup
+- 🏢 **Administración**: Portal de Super-Admin para gestión de tenants.
+- ✅ **Leads**: Gestión completa del ciclo de vida de leads, desde la captura hasta la conversión.
+- 📊 **Encuestas**: Flujos completos para encuestas de Post-Venta y Ventas.
+- 🎫 **Reclamos**: Pipeline RAG + IA para clasificación, gestión y respuesta automática.
+- 🚀 **Campañas**: Automatización de marketing, email y seguimiento.
 
 ### **🔧 Componentes Utilitarios Reutilizables**
-- ✅ **Utils**: Funciones comunes multi-tenant
-- 📋 **Templates**: Plantillas para nuevos tenants
+- ✅ **Utils**: Funciones críticas de soporte como manejo de errores, telemetría, optimización de BD y sincronización con servicios externos.
+- 📋 **Templates**: Plantillas base para la provisión y onboarding automático de nuevos tenants.
+
 
 ## ⭐ Modularización Completa de Encuestas de Ventas
 
