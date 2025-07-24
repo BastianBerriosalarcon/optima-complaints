@@ -16,7 +16,7 @@
 La plataforma maneja distintos roles de usuario con permisos y vistas de datos específicos:
 
 * **Super Usuario:** Administra el sistema completo y puede ver todos los concesionarios (siempre separados por concesionario).
-* **Roles por Concesionario:** Gerencia, Jefe de Servicio, Asesor de Servicio, Contact Center, Encargado de Calidad, Responsable de Contact Center, **Asesor de Ventas** (nuevo rol). Estos roles solo acceden a la información de su concesionario y/o sucursal asignada.
+* **Roles por Concesionario:** Gerencia, Jefe de Servicio, Asesor de Servicio, Contact Center, Encargado de Calidad, Jefa de Contact Center, **Jefe de Ventas**, **Asesor de Ventas**, Staff. Estos roles solo acceden a la información de su concesionario y/o sucursal asignada.
 
 Se busca automatizar la comunicación (correos, WhatsApp) y la gestión de datos (leads, encuestas, reclamos) utilizando N8N como motor de automatización, desplegado en Google Cloud Run. La integración y las automatizaciones deben ser totalmente aisladas y configurables por cada concesionario para proteger la privacidad de los datos, asegurar la consistencia de la marca y evitar la mezcla de datos sensibles como números de WhatsApp Business y correos electrónicos corporativos.
 
@@ -31,7 +31,7 @@ Se busca automatizar la comunicación (correos, WhatsApp) y la gestión de datos
 La plataforma maneja distintos roles de usuario con permisos y vistas de datos específicos:
 
 * **Super Usuario:** Administra el sistema completo y puede ver todos los concesionarios (siempre separados por concesionario).
-* **Roles por Concesionario:** Gerencia, Jefe de Servicio, Asesor de Servicio, Contact Center, Encargado de Calidad, Responsable de Contact Center. Estos roles solo acceden a la información de su concesionario y/o sucursal asignada.
+* **Roles por Concesionario:** Gerencia, Jefe de Servicio, Asesor de Servicio, Contact Center, Encargado de Calidad, Jefa de Contact Center, **Jefe de Ventas**, **Asesor de Ventas**, Staff. Estos roles solo acceden a la información de su concesionario y/o sucursal asignada.
 
 ## 3. Módulos de la Plataforma
 
@@ -108,6 +108,24 @@ La plataforma maneja distintos roles de usuario con permisos y vistas de datos e
 * Reglas de asignación específicas por concesionario
 * Templates de notificación customizados
 * Agentes Chatwoot con roles específicos
+
+#### **Roles Específicos para el Módulo de Ventas:**
+
+**🏢 Jefe de Ventas (jefe_ventas):**
+* **Supervisión Operativa:** Gestión completa del equipo de asesores de ventas
+* **Gestión de Leads:** Asignación inteligente y seguimiento de leads calientes
+* **Métricas y Reportes:** Acceso a dashboard específico de ventas con KPIs
+* **Configuración:** Parametrización de reglas de asignación y scoring
+* **Exportación:** Datos de ventas y performance del equipo
+* **Automatización:** Recibe notificaciones de leads de alta prioridad
+
+**👨‍💼 Asesor de Ventas (asesor_ventas):**  
+* **Gestión Individual:** Leads asignados automáticamente según especialidad
+* **Seguimiento:** Actualización de estados (contactado, cotizado, vendido/perdido)
+* **Información:** Acceso a datos de clientes, vehículos e historial
+* **Dashboard:** Vista operativa con sus leads y métricas personales
+* **Notificaciones:** Alertas inmediatas de nuevos leads asignados
+* **Integración:** Conexión directa con workflows de encuestas de ventas
 
 ## 2. Principios y Prioridades Clave
 

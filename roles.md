@@ -72,7 +72,7 @@ El sistema Optima-CX implementa un sistema de roles jerárquico que controla el 
 
 ---
 
-### 4. 🔍 **Analista de Calidad (analista_calidad)**
+### 4. 🔍 **Encargado de Calidad (encargado_calidad)**
 
 **Descripción**: Especialista en análisis de calidad y satisfacción del cliente
 
@@ -240,7 +240,7 @@ admin (Máximo acceso)
 │   │   └── asesor_servicio
 │   ├── jefe_ventas
 │   │   └── asesor_ventas
-│   └── analista_calidad
+│   └── encargado_calidad
 ├── staff
 └── cliente (Acceso mínimo)
 ```
@@ -248,7 +248,7 @@ admin (Máximo acceso)
 ## Sistema de Permisos
 
 ### Permisos de Exportación
-- **Exportación Estándar**: gerencia, jefe_servicio, analista_calidad, jefa_contact_center, jefe_ventas
+- **Exportación Estándar**: gerencia, jefe_servicio, encargado_calidad, jefa_contact_center, jefe_ventas
 - **Exportación Masiva**: gerencia, jefe_servicio (limitada por rendimiento)
 - **Exportación de Encuestas**: Todos los roles excepto contact_center
 - **Exportación de Reclamos**: Todos los roles de exportación
