@@ -1,0 +1,190 @@
+{
+  "name": "Sales Survey - Low Score Notifier",
+  "description": "Envía notificaciones por email al jefe de ventas y gerencia cuando una encuesta de ventas tiene calificación baja (1-8) y crea un caso para seguimiento.",
+  "tags": ["sales", "survey", "notification", "low-score", "ventas", "email", "case-management"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "sales-notification-trigger",
+      "name": "Trigger Notificación Ventas",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "tenant-config-loader",
+        "data": "={{ JSON.stringify({ \"concesionario_id\": $json.concesionario_id, \"config_type\": \"email_notifications\" }) }}"
+      },
+      "id": "load-tenant-config-sales",
+      "name": "Cargar Config Concesionario Ventas",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT u.id, u.email, u.nombre_completo, u.rol FROM usuarios u WHERE u.concesionario_id = $1 AND u.activo = true AND (u.rol IN ('jefe_ventas', 'encargado_calidad') OR u.id = $2)",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.concesionario_id, $json.venta_info.asesor_ventas_id] }}"
+        }
+      },
+      "id": "get-sales-recipients",
+      "name": "Obtener Destinatarios Específicos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Preparar datos específicos para email de notificación de VENTAS\nconst salesNotificationData = $('Trigger Notificación Ventas').first().json;\nconst tenantConfig = $('Cargar Config Concesionario Ventas').first().json;\nconst recipients = $('Obtener Destinatarios Específicos').first().json;\n\n// Validar que hay destinatarios\nif (!recipients || recipients.length === 0) {\n  throw new Error('No se encontraron destinatarios para notificación de ventas (jefe_ventas, asesor_ventas, encargado_calidad o gerencia)');\n}\n\n// Preparar datos del email específico para VENTAS\nconst emailData = {\n  // Configuración del tenant\n  tenant_config: tenantConfig,\n  recipients: recipients,\n  \n  // Datos específicos de la encuesta de VENTAS\n  survey_data: {\n    id: salesNotificationData.survey_id,\n    tipo: 'ENCUESTA DE VENTAS',\n    department: 'VENTAS',\n    cliente: salesNotificationData.cliente_info,\n    venta: salesNotificationData.venta_info,\n    calificaciones: salesNotificationData.scores,\n    contexto: salesNotificationData.survey_context,\n    urgencia: salesNotificationData.urgency\n  },\n  \n  // Configuración del email específica para VENTAS\n  email_config: {\n    subject: `🚨 ALERTA VENTAS - Calificación Baja (${salesNotificationData.scores.promedio}/10) - ${salesNotificationData.venta_info.vehiculo_modelo}`\n,\n    template_type: 'sales_low_score_alert',\n    priority: salesNotificationData.urgency === 'alta' ? 'high' : 'normal'\n  }\n};\n\nconsole.log('Preparando email de notificación VENTAS:', {\n  surveyId: emailData.survey_data.id,\n  tipo: 'VENTAS',\n  recipients: recipients.length,\n  vehiculo: emailData.survey_data.venta.vehiculo_modelo,\n  score: emailData.survey_data.calificaciones.promedio,\n  urgencia: emailData.survey_data.urgencia\n});\n\nreturn [{ json: emailData }];"
+      },
+      "id": "prepare-sales-email-data",
+      "name": "Preparar Datos Email Ventas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Generar HTML específico para notificación de VENTAS\nconst emailData = $input.first().json;\nconst surveyData = emailData.survey_data;\n\n// Template HTML específico para alertas de VENTAS\nconst salesEmailHTML = `\n<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"utf-8\">\n    <style>\n        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }\n        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }\n        .header { background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 20px; text-align: center; }\n        .header h1 { margin: 0; font-size: 24px; }\n        .alert-badge { background: #fff; color: #e74c3c; padding: 5px 15px; border-radius: 20px; font-weight: bold; margin-top: 10px; display: inline-block; }\n        .content { padding: 30px; }\n        .score-section { background: #ffeaa7; border-left: 4px solid #fdcb6e; padding: 15px; margin: 20px 0; border-radius: 4px; }\n        .score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 15px 0; }\n        .score-item { text-align: center; padding: 10px; background: #f8f9fa; border-radius: 6px; }\n        .score-value { font-size: 24px; font-weight: bold; color: #e74c3c; }\n        .score-label { font-size: 12px; color: #666; text-transform: uppercase; }\n        .info-section { margin: 20px 0; }\n        .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }\n        .info-label { font-weight: bold; color: #555; }\n        .footer { background: #2c3e50; color: white; padding: 15px; text-align: center; font-size: 12px; }\n        .action-required { background: #ff7675; color: white; padding: 15px; border-radius: 6px; margin: 20px 0; text-align: center; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h1>🚨 ALERTA DE VENTAS</h1>\n            <div class=\"alert-badge\">CALIFICACIÓN BAJA DETECTADA</div>\n        </div>\n        \n        <div class=\"content\">\n            <div class=\"score-section\">\n                <h3 style=\"margin: 0 0 15px 0; color: #e74c3c;\">Promedio General: ${surveyData.calificaciones.promedio}/10</h3>\n                <div class=\"score-grid\">\n                    <div class=\"score-item\">\n                        <div class=\"score-value\">${surveyData.calificaciones.recomendacion}</div>\n                        <div class=\"score-label\">Recomendación</div>\n                    </div>\n                    <div class=\"score-item\">\n                        <div class=\"score-value\">${surveyData.calificaciones.atencion_asesor}</div>\n                        <div class=\"score-label\">Atención Asesor</div>\n                    </div>\n                    <div class=\"score-item\">\n                        <div class=\"score-value\">${surveyData.calificaciones.proceso_entrega}</div>\n                        <div class=\"score-label\">Proceso Entrega</div>\n                    </div>\n                    <div class=\"score-item\">\n                        <div class=\"score-value\">${surveyData.calificaciones.satisfaccion_general}</div>\n                        <div class=\"score-label\">Satisfacción General</div>\n                    </div>\n                </div>\n            </div>\n            \n            <div class=\"info-section\">\n                <h3>📋 Información de la Venta</h3>\n                <div class=\"info-row\">\n                    <span class=\"info-label\">Cliente:</span>\n                    <span>${surveyData.cliente.nombre} (${surveyData.cliente.telefono})</span>\n                </div>\n                <div class=\"info-row\">\n                    <span class=\"info-label\">Vehículo:</span>\n                    <span>${surveyData.venta.vehiculo_modelo}</span>\n                </div>\n                <div class=\"info-row\">\n                    <span class=\"info-label\">Fecha de Venta:</span>\n                    <span>${new Date(surveyData.venta.fecha_venta).toLocaleDateString()}</span>\n                </div>\n                <div class=\"info-row\">\n                    <span class=\"info-label\">Asesor de Ventas:</span>\n                    <span>ID: ${surveyData.venta.asesor_ventas_id}</span>\n                </div>\n                <div class=\"info-row\">\n                    <span class=\"info-label\">Origen Encuesta:</span>\n                    <span>${surveyData.contexto.origen}</span>\n                </div>\n                <div class=\"info-row\">\n                    <span class=\"info-label\">Fecha Respuesta:</span>\n                    <span>${new Date(surveyData.contexto.fecha_respuesta).toLocaleString()}</span>\n                </div>\n            </div>\n            \n            ${surveyData.contexto.comentario ? `\n            <div class=\"info-section\">\n                <h3>💬 Comentario del Cliente</h3>\n                <p style=\"background: #f8f9fa; padding: 15px; border-radius: 6px; margin: 10px 0; font-style: italic;\">\n                    \"${surveyData.contexto.comentario}\"\n                </p>\n            </div>\n            ` : ''}\n            \n            <div class=\"action-required\">\n                <strong>⚡ ACCIÓN REQUERIDA</strong><br>\n                Se requiere seguimiento inmediato con el cliente y revisión del proceso de ventas.<br>\n                <strong>Destinatarios:</strong> Jefe de Ventas, Asesor de Ventas, Encargado de Calidad, Gerencia\n                <br><small>Urgencia: ${surveyData.urgencia.toUpperCase()}</small>\n            </div>\n        </div>\n        \n        <div class=\"footer\">\n            <p>Óptima-CX | Sistema de Gestión de Experiencia al Cliente</p>\n            <p>Módulo: VENTAS | Tipo: Alerta Automática | ID Encuesta: ${surveyData.id}</p>\n        </div>\n    </div>\n</body>\n</html>\n`;\n\nreturn [{ json: { \n  html_content: salesEmailHTML,\n  subject: emailData.email_config.subject,\n  recipients: emailData.recipients,\n  tenant_config: emailData.tenant_config,\n  priority: emailData.email_config.priority\n}}];"
+      },
+      "id": "generate-sales-email-html",
+      "name": "Generar HTML Email Ventas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.recipients.map(r => r.email).join(',') }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.html_content }}",
+        "options": {
+          "priority": "={{ $json.priority }}"
+        }
+      },
+      "id": "send-sales-notification-email",
+      "name": "Enviar Email Notificación Ventas",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "casos_feedback_ventas",
+        "columns": "survey_id,concesionario_id,sucursal_id,asesor_ventas_id,jefe_ventas_id,encargado_calidad_id",
+        "additionalFields": {
+          "values": "={{ [$('Trigger Notificación Ventas').first().json.survey_id, $('Trigger Notificación Ventas').first().json.concesionario_id, $('Trigger Notificación Ventas').first().json.sucursal_id, $('Trigger Notificación Ventas').first().json.venta_info.asesor_ventas_id, $('Obtener Destinatarios Específicos').first().json.find(r => r.rol === 'jefe_ventas')?.id, $('Obtener Destinatarios Específicos').first().json.find(r => r.rol === 'encargado_calidad')?.id] }}"
+        }
+      },
+      "id": "create-feedback-case",
+      "name": "Crear Caso de Feedback",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log de notificación enviada para VENTAS\nconst emailResult = $input.first().json;\nconst originalData = $('Trigger Notificación Ventas').first().json;\nconst caseData = $('Crear Caso de Feedback').first().json;\n\nconst logData = {\n  status: 'success',\n  message: 'Notificación de baja calificación VENTAS enviada y caso creado exitosamente',\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  survey_id: originalData.survey_id,\n  case_id: caseData[0]?.id,\n  recipients_count: $('Generar HTML Email Ventas').first().json.recipients.length,\n  score: originalData.scores.promedio,\n  vehiculo: originalData.venta_info.vehiculo_modelo,\n  urgency: originalData.urgency,\n  sent_at: new Date().toISOString(),\n  email_status: emailResult\n};\n\nconsole.log('Notificación VENTAS enviada y caso creado:', logData);\n\nreturn [{ json: logData }];"
+      },
+      "id": "log-sales-notification-sent",
+      "name": "Log Notificación y Caso Creado",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "Trigger Notificación Ventas": {
+      "main": [
+        [
+          {
+            "node": "Cargar Config Concesionario Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Config Concesionario Ventas": {
+      "main": [
+        [
+          {
+            "node": "Obtener Destinatarios Específicos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Destinatarios Específicos": {
+      "main": [
+        [
+          {
+            "node": "Preparar Datos Email Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Datos Email Ventas": {
+      "main": [
+        [
+          {
+            "node": "Generar HTML Email Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar HTML Email Ventas": {
+      "main": [
+        [
+          {
+            "node": "Enviar Email Notificación Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Email Notificación Ventas": {
+      "main": [
+        [
+          {
+            "node": "Crear Caso de Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Caso de Feedback": {
+      "main": [
+        [
+          {
+            "node": "Log Notificación y Caso Creado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

@@ -1,0 +1,172 @@
+{
+  "name": "Sales Survey - Response Handler",
+  "description": "Maneja respuestas de encuestas de VENTAS, registra en tabla sales_surveys y dispara notificaciones al jefe de ventas.",
+  "tags": ["sales", "survey", "response", "handler", "ventas"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "sales-workflow-trigger",
+      "name": "Trigger del Workflow Ventas",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en validar y normalizar respuesta de encuesta de VENTAS\n// Principio SRP: Una sola responsabilidad - validación de respuesta de ventas\n\nconst salesSurveyResponse = $input.first().json;\n\n// Validaciones críticas específicas para VENTAS\nconst requiredFields = [\n  'concesionario_id', 'sucursal_id', 'cliente_telefono', 'cliente_nombre',\n  'asesor_ventas_id', 'vehiculo_modelo', 'fecha_venta',\n  'recomendacion', 'atencion_asesor', 'proceso_entrega', 'satisfaccion_general'\n];\n\nfor (const field of requiredFields) {\n  if (salesSurveyResponse[field] === undefined || salesSurveyResponse[field] === null) {\n    throw new Error(`Campo requerido faltante en encuesta de VENTAS: ${field}`);\n  }\n}\n\n// Validar que las calificaciones de VENTAS estén en el rango 1-10\nconst scoreFields = ['recomendacion', 'atencion_asesor', 'proceso_entrega', 'satisfaccion_general'];\nfor (const field of scoreFields) {\n  const score = salesSurveyResponse[field];\n  if (typeof score !== 'number' || score < 1 || score > 10) {\n    throw new Error(`Calificación inválida para ${field}: ${score}. Debe ser un número entre 1 y 10.`);\n  }\n}\n\n// Validar UUID de concesionario\nconst uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nif (!uuidRegex.test(salesSurveyResponse.concesionario_id)) {\n  throw new Error('concesionario_id debe ser un UUID válido');\n}\n\n// Calcular promedio de las calificaciones DE VENTAS\nconst totalScore = scoreFields.reduce((sum, field) => sum + salesSurveyResponse[field], 0);\nconst averageScore = totalScore / scoreFields.length;\n\n// Normalizar datos para la tabla ESPECÍFICA de encuestas de ventas\nconst normalizedSalesSurvey = {\n  concesionario_id: salesSurveyResponse.concesionario_id,\n  sucursal_id: salesSurveyResponse.sucursal_id,\n  cliente_nombre: salesSurveyResponse.cliente_nombre,\n  cliente_rut: salesSurveyResponse.cliente_rut || null,\n  cliente_telefono: salesSurveyResponse.cliente_telefono,\n  asesor_ventas_id: salesSurveyResponse.asesor_ventas_id,\n  vehiculo_modelo: salesSurveyResponse.vehiculo_modelo,\n  fecha_venta: salesSurveyResponse.fecha_venta,\n  \n  // Calificaciones específicas de VENTAS\n  recomendacion: salesSurveyResponse.recomendacion,\n  atencion_asesor: salesSurveyResponse.atencion_asesor,\n  proceso_entrega: salesSurveyResponse.proceso_entrega,\n  satisfaccion_general: salesSurveyResponse.satisfaccion_general,\n  \n  comentario: salesSurveyResponse.comentario || null,\n  origen: salesSurveyResponse.origen || 'QR_VENTAS',\n  estado: 'completado',\n  fecha_creacion: new Date().toISOString(),\n  \n  // Campos calculados específicos de VENTAS\n  average_score: Math.round(averageScore * 10) / 10,\n  score_category: averageScore >= 9 ? 'excelente' : averageScore >= 7 ? 'bueno' : averageScore >= 5 ? 'regular' : 'bajo',\n  requires_notification: averageScore <= 8, // Notas 1-8 requieren notificación AL JEFE DE VENTAS\n  \n  // Metadatos específicos\n  survey_type: 'VENTAS',\n  department: 'VENTAS'\n};\n\nconsole.log('Respuesta de encuesta de VENTAS validada:', {\n  concesionarioId: normalizedSalesSurvey.concesionario_id,\n  tipo: 'VENTAS',\n  asesorVentas: normalizedSalesSurvey.asesor_ventas_id,\n  vehiculo: normalizedSalesSurvey.vehiculo_modelo,\n  averageScore: normalizedSalesSurvey.average_score,\n  requiresNotification: normalizedSalesSurvey.requires_notification\n});\n\nreturn [{ json: normalizedSalesSurvey }];"
+      },
+      "id": "validate-sales-survey-response",
+      "name": "Validar Respuesta Encuesta Ventas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO sales_surveys (concesionario_id, sucursal_id, cliente_nombre, cliente_rut, cliente_telefono, asesor_ventas_id, vehiculo_modelo, fecha_venta, recomendacion, atencion_asesor, proceso_entrega, satisfaccion_general, comentario, origen, estado, average_score, survey_type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.concesionario_id, $json.sucursal_id, $json.cliente_nombre, $json.cliente_rut, $json.cliente_telefono, $json.asesor_ventas_id, $json.vehiculo_modelo, $json.fecha_venta, $json.recomendacion, $json.atencion_asesor, $json.proceso_entrega, $json.satisfaccion_general, $json.comentario, $json.origen, $json.estado, $json.average_score, $json.survey_type] }}"
+        }
+      },
+      "id": "insert-sales-survey-response",
+      "name": "Registrar Encuesta Ventas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $('Validar Respuesta Encuesta Ventas').first().json.requires_notification }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-notification-required-sales",
+      "name": "¿Requiere Notificación Ventas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en preparar datos para notificación AL JEFE DE VENTAS\n// Principio SRP: Una sola responsabilidad - preparar notificación de ventas\n\nconst validatedSalesSurvey = $('Validar Respuesta Encuesta Ventas').first().json;\nconst insertedSalesSurvey = $('Registrar Encuesta Ventas').first().json[0];\n\n// Preparar datos para el workflow de notificación de baja calificación EN VENTAS\nconst salesNotificationData = {\n  // Datos de la encuesta de VENTAS\n  survey_id: insertedSalesSurvey.id,\n  concesionario_id: insertedSalesSurvey.concesionario_id,\n  sucursal_id: insertedSalesSurvey.sucursal_id,\n  \n  // Datos del cliente\n  cliente_info: {\n    nombre: insertedSalesSurvey.cliente_nombre,\n    telefono: insertedSalesSurvey.cliente_telefono,\n    rut: insertedSalesSurvey.cliente_rut\n  },\n  \n  // Datos específicos de la VENTA\n  venta_info: {\n    asesor_ventas_id: insertedSalesSurvey.asesor_ventas_id,\n    vehiculo_modelo: insertedSalesSurvey.vehiculo_modelo,\n    fecha_venta: insertedSalesSurvey.fecha_venta\n  },\n  \n  // Calificaciones detalladas de VENTAS\n  scores: {\n    recomendacion: insertedSalesSurvey.recomendacion,\n    atencion_asesor: insertedSalesSurvey.atencion_asesor,\n    proceso_entrega: insertedSalesSurvey.proceso_entrega,\n    satisfaccion_general: insertedSalesSurvey.satisfaccion_general,\n    promedio: insertedSalesSurvey.average_score\n  },\n  \n  // Contexto específico de VENTAS\n  survey_context: {\n    origen: insertedSalesSurvey.origen,\n    comentario: insertedSalesSurvey.comentario,\n    fecha_respuesta: insertedSalesSurvey.created_at,\n    categoria_score: validatedSalesSurvey.score_category,\n    survey_type: 'VENTAS',\n    department: 'VENTAS'\n  },\n  \n  // Control de flujo específico para VENTAS\n  notification_type: 'sales_low_score_alert',\n  target_roles: ['jefe_ventas', 'asesor_ventas', 'encargado_calidad', 'gerencia'], // Incluye asesor y encargado calidad\n  urgency: insertedSalesSurvey.average_score <= 5 ? 'alta' : 'media'\n};\n\nconsole.log('Preparando notificación de baja calificación VENTAS:', {\n  surveyId: salesNotificationData.survey_id,\n  tipo: 'VENTAS',\n  asesorVentas: salesNotificationData.venta_info.asesor_ventas_id,\n  vehiculo: salesNotificationData.venta_info.vehiculo_modelo,\n  averageScore: salesNotificationData.scores.promedio,\n  urgency: salesNotificationData.urgency\n});\n\nreturn [{ json: salesNotificationData }];"
+      },
+      "id": "prepare-sales-notification-data",
+      "name": "Preparar Datos Notificación Ventas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "sales-survey-low-score-notifier",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-sales-low-score-notification",
+      "name": "Disparar Notificación Baja Calificación Ventas",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Función enfocada en generar respuesta de éxito para VENTAS\n// Principio SRP: Una sola responsabilidad - generar respuesta final ventas\n\nconst validatedSalesSurvey = $('Validar Respuesta Encuesta Ventas').first().json;\nconst insertedSalesSurvey = $('Registrar Encuesta Ventas').first().json[0];\n\n// Generar respuesta de éxito con información específica de VENTAS\nconst salesSuccessResponse = {\n  status: 'success',\n  message: 'Encuesta de VENTAS procesada exitosamente.',\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  \n  survey_data: {\n    id: insertedSalesSurvey.id,\n    cliente_telefono: insertedSalesSurvey.cliente_telefono,\n    asesor_ventas_id: insertedSalesSurvey.asesor_ventas_id,\n    vehiculo_modelo: insertedSalesSurvey.vehiculo_modelo,\n    origen: insertedSalesSurvey.origen,\n    estado: insertedSalesSurvey.estado\n  },\n  \n  scoring_summary: {\n    recomendacion: insertedSalesSurvey.recomendacion,\n    atencion_asesor: insertedSalesSurvey.atencion_asesor,\n    proceso_entrega: insertedSalesSurvey.proceso_entrega,\n    satisfaccion_general: insertedSalesSurvey.satisfaccion_general,\n    promedio: insertedSalesSurvey.average_score,\n    categoria: validatedSalesSurvey.score_category\n  },\n  \n  processing_info: {\n    notification_triggered: validatedSalesSurvey.requires_notification,\n    workflow_completed: true,\n    processed_at: new Date().toISOString(),\n    target_department: 'VENTAS'\n  }\n};\n\nconsole.log('Encuesta de VENTAS procesada exitosamente:', {\n  surveyId: salesSuccessResponse.survey_data.id,\n  tipo: 'VENTAS',\n  asesorVentas: salesSuccessResponse.survey_data.asesor_ventas_id,\n  vehiculo: salesSuccessResponse.survey_data.vehiculo_modelo,\n  averageScore: salesSuccessResponse.scoring_summary.promedio,\n  notificationTriggered: salesSuccessResponse.processing_info.notification_triggered\n});\n\nreturn [{ json: salesSuccessResponse }];"
+      },
+      "id": "generate-sales-success-response",
+      "name": "Generar Respuesta Éxito Ventas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1340, 400]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow Ventas": {
+      "main": [
+        [
+          {
+            "node": "Validar Respuesta Encuesta Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Respuesta Encuesta Ventas": {
+      "main": [
+        [
+          {
+            "node": "Registrar Encuesta Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Encuesta Ventas": {
+      "main": [
+        [
+          {
+            "node": "¿Requiere Notificación Ventas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Requiere Notificación Ventas?": {
+      "main": [
+        [
+          {
+            "node": "Preparar Datos Notificación Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generar Respuesta Éxito Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Datos Notificación Ventas": {
+      "main": [
+        [
+          {
+            "node": "Disparar Notificación Baja Calificación Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparar Notificación Baja Calificación Ventas": {
+      "main": [
+        [
+          {
+            "node": "Generar Respuesta Éxito Ventas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}
