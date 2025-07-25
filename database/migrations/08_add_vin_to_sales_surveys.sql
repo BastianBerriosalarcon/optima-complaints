@@ -1,0 +1,1 @@
+ALTER TABLE encuestas_ventas ADD COLUMN vehiculo_vin TEXT;

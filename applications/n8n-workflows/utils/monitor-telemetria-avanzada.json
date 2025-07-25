@@ -115,7 +115,7 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "requestMethod": "POST",
-        "url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+        "url": "={{ $vars.SLACK_ALERTS_WEBHOOK_URL }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
