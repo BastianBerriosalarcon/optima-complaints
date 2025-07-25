@@ -48,26 +48,7 @@ output "load_balancer_ip" {
 #   value       = module.frontend.custom_domain_url
 # }
 
-# Chatwoot service outputs
-output "chatwoot_service_name" {
-  description = "Chatwoot service name"
-  value       = module.chatwoot.service_name
-}
-
-output "chatwoot_service_url" {
-  description = "Chatwoot service URL"
-  value       = module.chatwoot.service_url
-}
-
-output "chatwoot_service_id" {
-  description = "Chatwoot service ID"
-  value       = module.chatwoot.service_id
-}
-
-output "chatwoot_custom_domain_url" {
-  description = "Chatwoot custom domain URL"
-  value       = module.chatwoot.custom_domain_url
-}
+# Chatwoot service outputs - removed (using multitenant service instead)
 
 # Supabase secrets outputs
 output "supabase_url_secret" {
@@ -96,7 +77,4 @@ output "supabase_service_role_key_secret" {
 #   value       = module.security.frontend_service_account.email
 # }
 
-output "chatwoot_service_account_email" {
-  description = "Chatwoot service account email"
-  value       = module.security.chatwoot_service_account.email
-}
+# Chatwoot service account output - removed (using multitenant service instead)

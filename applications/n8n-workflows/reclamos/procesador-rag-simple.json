@@ -1,0 +1,340 @@
+{
+  "name": "RAG Processor - Simple",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/rag/process",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-input",
+      "name": "RAG Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validar y normalizar entrada\nconst data = $input.first().json;\n\nif (!data.tenant_id || !data.query) {\n  throw new Error('tenant_id y query requeridos');\n}\n\nreturn {\n  tenant_id: data.tenant_id,\n  query: data.query.trim(),\n  context: data.context || 'post_venta',\n  usar_cohere: data.usar_cohere !== false\n};"
+      },
+      "id": "validate-normalize",
+      "name": "Validate & Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $vars.GEMINI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "body": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ { \"parts\": [{ \"text\": $json.query }] } }}"
+            },
+            {
+              "name": "taskType",
+              "value": "RETRIEVAL_QUERY"
+            }
+          ]
+        }
+      },
+      "id": "generate-embedding",
+      "name": "Generate Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/rpc/buscar_conocimiento_rag_contextual",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "body": {
+          "parameters": [
+            {
+              "name": "p_tenant_id",
+              "value": "={{ $('Validate & Normalize').first().json.tenant_id }}"
+            },
+            {
+              "name": "p_consulta",
+              "value": "={{ $('Validate & Normalize').first().json.query }}"
+            },
+            {
+              "name": "p_contexto",
+              "value": "={{ $('Validate & Normalize').first().json.context }}"
+            },
+            {
+              "name": "p_categoria",
+              "value": null
+            },
+            {
+              "name": "p_num_resultados",
+              "value": 5
+            },
+            {
+              "name": "p_threshold",
+              "value": 0.7
+            },
+            {
+              "name": "p_query_embedding",
+              "value": "={{ JSON.stringify($('Generate Embedding').first().json.embedding.values) }}"
+            }
+          ]
+        }
+      },
+      "id": "vector-search",
+      "name": "Vector Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construir prompt con contexto RAG\nconst queryData = $('Validate & Normalize').first().json;\nconst documents = $input.first().json;\n\n// Contexto de documentos (top 3)\nconst context = documents\n  .slice(0, 3)\n  .map(doc => doc.contenido)\n  .join('\\n\\n---\\n\\n');\n\nconst hasContext = context.length > 0;\n\n// Prompt dinámico según contexto\nconst prompt = `\nEres un especialista en ${queryData.context === 'ventas' ? 'ventas automotrices' : 'servicio post-venta automotriz'}.\n\n${hasContext ? `CONTEXTO ESPECÍFICO:\\n${context}\\n\\n` : ''}CONSULTA:\n\"${queryData.query}\"\n\nAnaliza usando ${ hasContext ? 'las políticas específicas del contexto' : 'estándares de la industria' }.\n\nRESPONDE EN JSON:\n{\n  \"clasificacion\": {\n    \"tipo\": \"${queryData.context === 'ventas' ? 'informacion|cotizacion|financiamiento' : 'garantia|servicio_tecnico|atencion_cliente'}\",\n    \"urgencia\": \"alta|media|baja\"\n  },\n  \"analisis\": {\n    \"resumen\": \"descripción del problema/consulta\",\n    \"factores_clave\": [\"factor1\", \"factor2\"]\n  },\n  \"recomendaciones\": [{\n    \"accion\": \"acción sugerida\",\n    \"responsable\": \"${queryData.context === 'ventas' ? 'asesor_ventas' : 'asesor_servicio'}\"\n  }],\n  \"comentarios_ia\": \"observaciones ${ hasContext ? 'contextualizadas' : 'generales' }\"\n}\n\nSOLO JSON, SIN TEXTO ADICIONAL.\n`;\n\nreturn {\n  query_data: queryData,\n  documents_found: documents.length,\n  prompt,\n  has_context: hasContext\n};"
+      },
+      "id": "build-prompt",
+      "name": "Build AI Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "={{ $vars.GEMINI_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "body": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "={{ [{ \"parts\": [{ \"text\": $json.prompt }] }] }}"
+            },
+            {
+              "name": "generationConfig",
+              "value": "={{ { \"temperature\": 0.1, \"topK\": 40, \"topP\": 0.8, \"maxOutputTokens\": 2048 } }}"
+            }
+          ]
+        }
+      },
+      "id": "gemini-analysis",
+      "name": "Gemini Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/rpc/registrar_consulta_rag",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "body": {
+          "parameters": [
+            {
+              "name": "p_tenant_id",
+              "value": "={{ $('Build AI Prompt').first().json.query_data.tenant_id }}"
+            },
+            {
+              "name": "p_consulta",
+              "value": "={{ $('Build AI Prompt').first().json.query_data.query }}"
+            },
+            {
+              "name": "p_contexto",
+              "value": "={{ $('Build AI Prompt').first().json.query_data.context }}"
+            },
+            {
+              "name": "p_chunks_usados",
+              "value": "={{ $('Build AI Prompt').first().json.documents_found > 0 ? ['rag-chunk'] : [] }}"
+            },
+            {
+              "name": "p_respuesta_ia",
+              "value": "={{ $('Gemini Analysis').first().json.candidates[0]?.content?.parts[0]?.text || 'Error' }}"
+            }
+          ]
+        },
+        "continueOnFail": true
+      },
+      "id": "log-analytics",
+      "name": "Log Analytics",
+      "type": "n8n-nodes-base.httpRequest",  
+      "typeVersion": 4.1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"query\": \"{{ $('Build AI Prompt').first().json.query_data.query }}\",\n  \"context\": \"{{ $('Build AI Prompt').first().json.query_data.context }}\",\n  \"rag_used\": {{ $('Build AI Prompt').first().json.has_context }},\n  \"documents_found\": {{ $('Build AI Prompt').first().json.documents_found }},\n  \"ai_analysis\": {{ $('Gemini Analysis').first().json.candidates[0]?.content?.parts[0]?.text || '{}' }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\",\n  \"tenant_id\": \"{{ $('Build AI Prompt').first().json.query_data.tenant_id }}\"\n}"
+      },
+      "id": "response",
+      "name": "Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1780, 300]
+    }
+  ],
+  "connections": {
+    "RAG Input": {
+      "main": [
+        [
+          {
+            "node": "Validate & Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Normalize": {
+      "main": [
+        [
+          {
+            "node": "Generate Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Embedding": {
+      "main": [
+        [
+          {
+            "node": "Vector Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vector Search": {
+      "main": [
+        [
+          {
+            "node": "Build AI Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Analysis": {
+      "main": [
+        [
+          {
+            "node": "Log Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Analytics": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "rag-simple",
+      "name": "rag-simple"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "reclamos",
+      "name": "reclamos"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "rag-processor-simple",
+  "versionId": "1.0.0"
+}

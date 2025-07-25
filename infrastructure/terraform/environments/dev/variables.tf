@@ -163,47 +163,6 @@ variable "frontend_domain" {
   default     = ""
 }
 
-# Chatwoot service variables
-variable "chatwoot_container_image" {
-  description = "Chatwoot container image"
-  type        = string
-  default     = "chatwoot/chatwoot:latest"
-}
-
-variable "chatwoot_memory" {
-  description = "Memory for Chatwoot service"
-  type        = string
-  default     = "2Gi"
-}
-
-variable "chatwoot_cpu" {
-  description = "CPU for Chatwoot service"
-  type        = string
-  default     = "1"
-}
-
-variable "chatwoot_min_instances" {
-  description = "Minimum instances for Chatwoot"
-  type        = number
-  default     = 1
-}
-
-variable "chatwoot_max_instances" {
-  description = "Maximum instances for Chatwoot"
-  type        = number
-  default     = 3
-}
-
-variable "chatwoot_secret_key_secret" {
-  description = "Secret name for Chatwoot secret key"
-  type        = string
-  default     = "optimacx-chatwoot-secret-key-dev"
-}
-
-variable "chatwoot_domain" {
-  description = "Custom domain for Chatwoot"
-  type        = string
-  default     = ""
-}
+# Chatwoot basic service variables - removed (using multitenant service instead)
 
 # Redis configuration handled by module
