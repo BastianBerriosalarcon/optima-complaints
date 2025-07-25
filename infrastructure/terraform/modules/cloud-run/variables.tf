@@ -118,3 +118,39 @@ variable "max_instance_request_concurrency" {
   type        = number
   default     = 1000
 }
+
+variable "container_command" {
+  description = "Container command override"
+  type        = list(string)
+  default     = []
+}
+
+variable "container_args" {
+  description = "Container args override"
+  type        = list(string)
+  default     = []
+}
+
+variable "startup_probe_failure_threshold" {
+  description = "Number of consecutive failures for the startup probe to be considered failed."
+  type        = number
+  default     = 3
+}
+
+variable "startup_probe_initial_delay_seconds" {
+  description = "Initial delay for the startup probe."
+  type        = number
+  default     = 0
+}
+
+variable "startup_probe_period_seconds" {
+  description = "Period for the startup probe."
+  type        = number
+  default     = 240
+}
+
+variable "startup_probe_timeout_seconds" {
+  description = "Timeout for the startup probe. If 0, no probe is configured."
+  type        = number
+  default     = 0
+}

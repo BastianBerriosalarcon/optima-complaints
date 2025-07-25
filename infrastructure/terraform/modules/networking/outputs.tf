@@ -8,9 +8,19 @@ output "subnet" {
   value       = google_compute_subnetwork.subnet
 }
 
-output "vpc_connector" {
-  description = "VPC connector for Cloud Run"
-  value       = google_vpc_access_connector.connector
+output "vpc_connector_id" {
+  description = "ID of the VPC connector"
+  value       = google_vpc_access_connector.connector.id
+}
+
+output "vpc_connector_name" {
+  description = "Name of the VPC connector"
+  value       = google_vpc_access_connector.connector.name
+}
+
+output "nat_ip_address" {
+  description = "Static egress IP address from Cloud NAT"
+  value       = google_compute_address.nat_ip.address
 }
 
 output "lb_ip" {

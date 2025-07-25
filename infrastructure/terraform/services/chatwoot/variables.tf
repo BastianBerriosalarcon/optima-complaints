@@ -17,7 +17,7 @@ variable "environment" {
 variable "container_image" {
   description = "Chatwoot container image"
   type        = string
-  default     = "chatwoot/chatwoot:latest"
+  default     = "chatwoot/chatwoot:v3.11.0"
 }
 
 variable "service_account_email" {

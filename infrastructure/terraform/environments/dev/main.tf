@@ -94,67 +94,72 @@ module "supabase" {
   region      = var.region
 }
 
-# N8N service
-module "n8n" {
-  source = "../../services/n8n"
+# N8N service - COMMENTED OUT TEMPORARILY (service already deployed)
+# module "n8n" {
+#   source = "../../services/n8n"
+#   # ... configuration commented out for deployment
+# }
 
-  project_id                      = var.project_id
-  region                          = var.region
-  environment                     = var.environment
-  container_image                 = var.n8n_container_image
-  service_account_email           = module.security.n8n_service_account.email
-  memory                          = var.n8n_memory
-  cpu                             = var.n8n_cpu
-  min_instances                   = var.n8n_min_instances
-  max_instances                   = var.n8n_max_instances
-  supabase_db_password_secret     = module.database.database_password_secret
-  n8n_encryption_key_secret       = var.n8n_encryption_key_secret
-  vpc_connector_name              = module.networking.vpc_connector.name
-  supabase_db_host                = var.supabase_db_host
-  supabase_db_user                = var.supabase_db_user
-  supabase_db_password            = var.supabase_db_password
-  custom_domain                   = var.n8n_domain
+# OptimaCX Frontend service - COMMENTED OUT TEMPORARILY (no image available)
+# module "frontend" {
+#   source = "../../services/optimacx-frontend"
+#   # ... configuration commented out until frontend image is built
+# }
+
+# Secret generation for Chatwoot
+resource "google_secret_manager_secret" "chatwoot_secret_key" {
+  project   = var.project_id
+  secret_id = "chatwoot-secret-key-${var.environment}"
+
+  replication {
+    auto {}
+  }
 }
 
-# OptimaCX Frontend service (ready for when developed)
-module "frontend" {
-  source = "../../services/optimacx-frontend"
-
-  project_id                        = var.project_id
-  region                            = var.region
-  environment                       = var.environment
-  container_image                   = var.frontend_container_image
-  service_account_email             = module.security.frontend_service_account.email
-  memory                            = var.frontend_memory
-  cpu                               = var.frontend_cpu
-  min_instances                     = var.frontend_min_instances
-  max_instances                     = var.frontend_max_instances
-  supabase_url_secret               = module.supabase.supabase_url_secret
-  supabase_anon_key_secret          = module.supabase.supabase_anon_key_secret
-  supabase_service_role_key_secret  = module.supabase.supabase_service_role_key_secret
-  vpc_connector_name                = module.networking.vpc_connector.name
-  custom_domain                     = var.frontend_domain
+resource "random_id" "chatwoot_secret_key_value" {
+  byte_length = 64
 }
 
-# Chatwoot service
+resource "google_secret_manager_secret_version" "chatwoot_secret_key" {
+  secret      = google_secret_manager_secret.chatwoot_secret_key.id
+  secret_data = random_id.chatwoot_secret_key_value.hex
+}
+
+# Chatwoot service (simplified single tenant)
 module "chatwoot" {
   source = "../../services/chatwoot"
 
-  project_id                      = var.project_id
-  region                          = var.region
-  environment                     = var.environment
-  container_image                 = var.chatwoot_container_image
-  service_account_email           = module.security.chatwoot_service_account.email
-  memory                          = var.chatwoot_memory
-  cpu                             = var.chatwoot_cpu
-  min_instances                   = var.chatwoot_min_instances
-  max_instances                   = var.chatwoot_max_instances
-  supabase_db_password_secret     = module.database.database_password_secret
-  chatwoot_secret_key_secret      = var.chatwoot_secret_key_secret
-  vpc_connector_name              = module.networking.vpc_connector.name
-  supabase_db_host                = var.supabase_db_host
-  supabase_db_user                = var.supabase_db_user
-  supabase_db_password            = var.supabase_db_password
-  redis_url_secret                = module.redis.redis_url_secret_name
-  custom_domain                   = var.chatwoot_domain
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+  
+  # Resource configuration
+  cpu           = var.chatwoot_cpu
+  memory        = var.chatwoot_memory
+  min_instances = var.chatwoot_min_instances
+  max_instances = var.chatwoot_max_instances
+
+  # Service account
+  service_account_email = module.security.chatwoot_service_account.email
+
+  # VPC networking
+  vpc_connector_name = module.networking.vpc_connector_name
+
+  # Database configuration (Supabase)
+  supabase_db_host     = var.supabase_db_host
+  supabase_db_user     = var.supabase_db_user
+  supabase_db_password = var.supabase_db_password
+
+  # Secrets
+  supabase_db_password_secret = module.database.database_password_secret
+  chatwoot_secret_key_secret  = google_secret_manager_secret.chatwoot_secret_key.secret_id
+  redis_url_secret           = module.redis.redis_url_secret_name
+
+  depends_on = [
+    module.networking,
+    module.security,
+    module.database,
+    module.redis,
+    google_secret_manager_secret_version.chatwoot_secret_key
+  ]
 }

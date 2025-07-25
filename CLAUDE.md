@@ -6,19 +6,45 @@
 
 **Descripción:** Óptima-CX es una plataforma multitenant SaaS de experiencia al cliente diseñada para el sector automotriz. La plataforma integra cuatro módulos principales: **Gestión de Leads y Ventas**, **Encuestas de Ventas**, **Encuestas Post-Venta** y **Gestión de Reclamos con IA**, optimizando todo el ciclo de vida del cliente automotriz desde la prospección hasta el servicio post-venta.
 
-**Arquitectura Actual:** La plataforma utiliza una arquitectura moderna basada en:
-- **Frontend:** Next.js 14 + TypeScript + Tailwind CSS + Supabase Auth
-- **Backend:** Supabase (PostgreSQL con RLS) + N8N workflows en Cloud Run
-- **WhatsApp:** Chatwoot + Redis para gestión conversacional multitenant
-- **Cloud:** Google Cloud Platform con infraestructura Terraform
-- **IA:** Integración con Gemini para análisis de leads y procesamiento de reclamos
-
 La plataforma maneja distintos roles de usuario con permisos y vistas de datos específicos:
 
 * **Super Usuario:** Administra el sistema completo y puede ver todos los concesionarios (siempre separados por concesionario).
 * **Roles por Concesionario:** Gerencia, Jefe de Servicio, Asesor de Servicio, Contact Center, Encargado de Calidad, Jefa de Contact Center, **Jefe de Ventas**, **Asesor de Ventas**, Staff. Estos roles solo acceden a la información de su concesionario y/o sucursal asignada.
 
 Se busca automatizar la comunicación (correos, WhatsApp) y la gestión de datos (leads, encuestas, reclamos) utilizando N8N como motor de automatización, desplegado en Google Cloud Run. La integración y las automatizaciones deben ser totalmente aisladas y configurables por cada concesionario para proteger la privacidad de los datos, asegurar la consistencia de la marca y evitar la mezcla de datos sensibles como números de WhatsApp Business y correos electrónicos corporativos.
+
+### 1.1. Stack Tecnológico
+
+**Frontend:**
+- Next.js 14 con App Router + TypeScript para type safety
+- Tailwind CSS + Radix UI para estilos y componentes
+- Supabase Auth para autenticación + React Hook Form
+
+**Backend:**
+- Supabase PostgreSQL con Row Level Security (RLS)
+- Supabase Realtime para actualizaciones live
+- Supabase Edge Functions para lógica serverless
+- N8N workflows en Cloud Run para automatización
+
+**Infraestructura:**
+- Google Cloud Platform como proveedor principal
+- Cloud Run para servicios containerizados (Frontend + N8N + Chatwoot)
+- Cloud Memorystore (Redis) para sessions de Chatwoot y cache
+- Terraform para Infrastructure as Code
+- Secret Manager para credenciales sensibles
+- Cloud Storage para archivos y documentos
+
+**WhatsApp + Conversacional:**
+- Chatwoot para gestión de conversaciones multitenant
+- WhatsApp Business API para mensajería
+- Redis para gestión de sessions y cache
+- PostgreSQL para historiales de conversación
+
+**IA:**
+- Integración con Gemini 2.5 Pro para análisis de leads y procesamiento de reclamos
+- Gemini Embedding 001 para vectorización de documentos
+- RAG (Retrieval Augmented Generation) con Cohere Rerank
+- Supabase pgvector para base de datos vectorial
 
 ## 2. Principios y Prioridades Clave
 
@@ -44,7 +70,7 @@ Se busca automatizar la comunicación (correos, WhatsApp) y la gestión de datos
   - Modelo de vehículo de interés
   - Urgencia y nivel de interés
   - Datos de contacto y preferencias
-  (todo esto debe ser por concecionario, recordar multitenant)
+  (todo esto debe ser por concesionario, recordar multitenant)
 
 **🎯 Scoring y Clasificación Automática:**
 * **Score de Calidad:** Algoritmo que evalúa la probabilidad de conversión (1-100)
@@ -163,38 +189,32 @@ Se busca automatizar la comunicación (correos, WhatsApp) y la gestión de datos
   - Campo opcional: comentario
   - Escala: 1-10 para todas las preguntas numéricas
 
-  🎯 Automatización por Puntaje:
+#### **Flujo de Automatización Multicanal:**
 
-  - Nota 9-10: Encuesta se registra normalmente
-  - Nota 1-8: Dispara email automático a Jefe Servicio, Asesor
-  Servicio y Encargado de Calidad
+**Canal 1 (Inmediato): Código QR**
+* **Registro por QR:** Se creará un código QR único por concesionario. Al ser escaneado por el cliente en el local, le permitirá responder una breve encuesta. Las respuestas deben registrarse instantáneamente en la base de datos asociadas a su `identificador de concesionario` y además de la sucursal a la cual pertenece la encuesta.
+* El QR debe contener las 4 preguntas, y además debe considerar el nombre, rut, numero de teléfono
 
-  LOS CANALES O FLUJO DE DE LAS ENCUESTAS ES EL SIGUIENTE: 
-1.  **Canal 1 (Inmediato): Código QR**
-    * **Registro por QR:** Se creará un código QR único por concesionario. Al ser escaneado por el cliente en el local, le permitirá responder una breve encuesta. Las respuestas deben registrarse instantáneamente en la base de datos asociadas a su `identificador de concesionario` y además de la sucursal a la cual pertenece la encuesta. 
-    el QR debe contener las 4 preguntas, y ademas debe considerar el nombre, rut, numero de telefono 
+**Canal 2 (Seguimiento Automatizado): WhatsApp**
+* **Carga de Datos:** Al día siguiente, el Responsable de Contact Center o Encargado de Calidad cargará un archivo Excel con la lista completa de clientes atendidos el día anterior.
+* **Filtrado Inteligente:** El sistema **DEBE** verificar esta lista y **excluir automáticamente** a los clientes (usando su número de teléfono como clave) que ya contestaron la encuesta a través del Código QR.
+* **Envío Masivo de WhatsApp:** Inmediatamente después de la carga y el filtrado, el sistema (vía N8N configurado por concesionario) enviará mensajes de WhatsApp con la encuesta a los clientes que **NO** la han contestado aún.
+* **Período de Espera:** Se monitorea un período de 6 horas desde el envío del WhatsApp.
 
-* Si la nota es **9 a 10 (positiva)**, la encuesta simplemente se registra y va al dashboard.
-la nota es de **1 a 8 (baja)**, el sistema debe disparar automáticamente un correo electrónico (vía n8no internamente) al **Jefe de Servicio, Asesor de Servicio y Responsable de Calidad** del mismo concesionario con el detalle de la encuesta para una acción inmediata.
+**Canal 3 (Seguimiento Manual): Llamada de Contact Center**
+* **Asignación Automática:** Transcurrido el período de espera, el sistema identificará a los clientes que aún no han contestado la encuesta (ni por QR ni por WhatsApp).
+* Estas encuestas pendientes deben ser **automáticamente asignadas de forma equitativa** a los usuarios de Contact Center creados del concesionario para que realicen un seguimiento por llamada.
 
+### 2.1. Reglas de Automatización Común (Aplica a Todos los Módulos)
 
-2.  **Canal 2 (Seguimiento Automatizado): WhatsApp**
-    * **Carga de Datos:** Al día siguiente, el Responsable de Contact Center o Encargado de Calidad cargará un archivo Excel con la lista completa de clientes atendidos el día anterior.
-    * **Filtrado Inteligente:** El sistema **DEBE** verificar esta lista y **excluir automáticamente** a los clientes (usando su número de teléfono como clave) que ya contestaron la encuesta a través del Código QR.
-    * **Envío Masivo de WhatsApp:** Inmediatamente después de la carga y el filtrado, el sistema (vía n8ny configurado por concesionario) enviará mensajes de WhatsApp con la encuesta a los clientes que **NO** la han contestado aún.
-* Si la nota es **9 a 10 (positiva)**, la encuesta simplemente se registra y va al dashboard.
-la nota es de **1 a 8 (baja)**, el sistema debe disparar automáticamente un correo electrónico (vía n8no internamente) al **Jefe de Servicio, Asesor de Servicio y Responsable de Calidad** del mismo concesionario con el detalle de la encuesta para una acción inmediata.
-* **Período de Espera:** Se monitorea un período de 6 horas desde el envío del WhatsApp. 
-el disparador de conversación se envía una sola ves, ya que si no contesta pasa al siguiente flujo, el cual es el siguiente:
+**🎯 Automatización por Puntaje:**
+- **Nota 9-10 (positiva):** La encuesta se registra normalmente y va al dashboard.
+- **Nota 1-8 (baja):** Dispara automáticamente un correo electrónico (vía N8N) con el detalle de la encuesta para acción inmediata.
 
-3.  **Canal 3 (Seguimiento Manual): Llamada de Contact Center**
-    * **Asignación Automática:** Transcurrido el período de espera, el sistema identificará a los clientes que aún no han contestado la encuesta (ni por QR ni por WhatsApp).
-    * Estas encuestas pendientes deben ser **automáticamente asignadas de forma equitativa** a los usuarios de Contact Center creados del consecionario para que realicen un seguimiento por llamada.
-
-#### Flujo Secundario (Casos de Baja Calificación por Llamada):
-
-* **Registro por Llamada (Salida):** Cuando un ejecutivo de Contact Center realiza una encuesta por llamada y la nota es de **1 a 8 (baja)**, el sistema debe disparar automáticamente un correo electrónico (vía n8no internamente) al **Jefe de Servicio, Asesor de Servicio y Responsable de Calidad** del mismo concesionario con el detalle de la encuesta para una acción inmediata.
-* Si la nota es **9 a 10 (positiva)**, la encuesta simplemente se registra y va al dashboard.
+**Destinatarios por Módulo:**
+- **Encuestas Post-Venta:** Jefe de Servicio, Asesor de Servicio y Encargado de Calidad
+- **Encuestas de Ventas:** Jefe de Ventas y Asesor de Ventas asignado al lead
+- **Reclamos Black Alert:** Encargado de Calidad, Jefe de Servicio, Asesor de Servicio, Equipos de Venta y Postventa
 
 ### 3.3. Módulo de Encuestas de Ventas (Nuevo)
 
@@ -234,10 +254,7 @@ el disparador de conversación se envía una sola ves, ya que si no contesta pas
   - Campo opcional: `comentario_venta`.
   - Escala: 1-10 para todas las preguntas numéricas.
 
-  **🎯 Automatización por Puntaje:**
-
-  - **Nota 9-10:** La encuesta se registra y se asocia al lead correspondiente.
-  - **Nota 1-8:** Dispara un email automático al **Jefe de Ventas** y al **Asesor de Ventas** asignado al lead, con el detalle de la encuesta para revisión y seguimiento.
+  **🎯 Automatización por Puntaje:** (Sigue las reglas definidas en la sección 2.1)
 
 #### **Flujo de Automatización Multicanal (N8N):**
 
@@ -259,10 +276,10 @@ El sistema orquesta un flujo inteligente y multicanal para maximizar la tasa de 
 
 **Gestión de Respuestas y Alertas (Común a todos los canales):**
 1.  **Recepción de Respuesta:** El cliente completa la encuesta. Las respuestas se guardan en la tabla `encuestas_ventas`.
-2.  **Alerta por Baja Calificación:** Si cualquier pregunta principal recibe una nota de 1 a 8, el sistema ejecuta la automatización de alerta por correo electrónico al **Jefe de Ventas** y al **Asesor de Ventas**.
+2.  **Alerta por Baja Calificación:** Sigue las reglas definidas en la sección 2.1
 3.  **Actualización de Dashboard:** Los resultados actualizan en tiempo real los dashboards de métricas de ventas.
 
-### 4.2. Gestión de Reclamos y Agente IA con n8n
+### 3.4. Gestión de Reclamos y Agente IA con N8N
 
 **Canales de Recepción:** El sistema recibe reclamos desde múltiples canales integrados:
 
@@ -271,40 +288,33 @@ El sistema orquesta un flujo inteligente y multicanal para maximizar la tasa de 
 * **Formularios Web:** Via webhook/API desde sitio web del concesionario
 * **Interface Chatwoot:** Para agentes humanos en casos complejos
 
-Componente de Inteligencia Artificial con RAG (Integrado con n8n): n8nse conectará con servicios externos de PLN/IA (ej., Google Cloud Natural Language API, OpenAI GPT, Claude), pensando bien, como el proyecto esta en GCP y será con Gemini embedding 001 , idealmente será con Gemini 2.5 pro, implementando RAG (Retrieval Augmented Generation) para:
+**Componente de Inteligencia Artificial con RAG (Integrado con N8N):** N8N se conectará con Gemini 2.5 Pro y Gemini Embedding 001, implementando RAG (Retrieval Augmented Generation) para:
 
 
 Procesamiento de lenguaje natural (PLN) Aumentado: El LLM recibirá tanto el reclamo original como el contexto recuperado de la base de conocimiento del concesionario para generar:
 Extracción de datos clave: sucursal, tipo de reclamo, cliente ( patente, vin, marca de vehículo, modelo), descripción resumida, urgencia
 
-Flujo del Proceso de Reclamos (con Agente IA RAG orquestado por n8n):
+**Flujo del Proceso de Reclamos (con Agente IA RAG orquestado por N8N):**
 
-Cliente envía reclamo por su canal preferido (WhatsApp, Email, Formulario Web)
-n8nrecibe el reclamo y extrae el tenant_id correspondiente basado en el canal/webhook específico
-Generación de Embedding y Recuperación RAG:
-
-n8ngenera un embedding vectorial del texto del reclamo
-Consulta la Base de Datos Vectorial filtrada por tenant_id para recuperar fragmentos de documentos relevantes
-Obtiene contexto específico del concesionario (políticas, procedimientos, casos similares)
-
-n8nconstruye un prompt enriquecido que incluye:
-
-Reclamo original del cliente
-Contexto recuperado de la base de conocimiento específica del concesionario
-Custom prompts configurados por el concesionario
-Envía el prompt aumentado al servicio de IA externo (Google gemini 2.5 pro)
-Respuesta IA Contextualizada:
-
-El Agente IA devuelve información estructurada más precisa y contextualizada a n8n:
-Datos extraídos (sucursal, tipo, urgencia, cliente)
-Clasificación automática basada en las políticas específicas del concesionario: (esto que sea personalizable)
-Sugerencias de resolución personalizadas
-Referencias a documentos/procedimientos aplicables
-
-
-n8nvalida los datos extraídos y enriquecidos, y los envía al backend de supabase vía API para su registro
-supabase registra el reclamo enriquecido con la información contextual y lo asigna automáticamente al Jefe de Servicio y Asesor de la sucursal correspondiente (basado en la sucursal extraída por la IA y la lógica de asignación de supabase)
-n8nenvía notificaciones automáticas y personalizadas por rol, utilizando el contexto recuperado para adaptar los mensajes:
+1. Cliente envía reclamo por su canal preferido (WhatsApp, Email, Formulario Web)
+2. N8N recibe el reclamo y extrae el tenant_id correspondiente basado en el canal/webhook específico
+3. **Generación de Embedding y Recuperación RAG:**
+   - N8N genera un embedding vectorial del texto del reclamo
+   - Consulta la Base de Datos Vectorial filtrada por tenant_id para recuperar fragmentos de documentos relevantes
+   - Obtiene contexto específico del concesionario (políticas, procedimientos, casos similares)
+4. **Construcción de Prompt Enriquecido:**
+   - Reclamo original del cliente
+   - Contexto recuperado de la base de conocimiento específica del concesionario
+   - Custom prompts configurados por el concesionario
+   - Envía el prompt aumentado al servicio de IA externo (Gemini 2.5 Pro)
+5. **Respuesta IA Contextualizada:**
+   - Datos extraídos (sucursal, tipo, urgencia, cliente)
+   - Clasificación automática basada en las políticas específicas del concesionario
+   - Sugerencias de resolución personalizadas
+   - Referencias a documentos/procedimientos aplicables
+6. N8N valida los datos extraídos y enriquecidos, y los envía al backend de Supabase vía API para su registro
+7. Supabase registra el reclamo enriquecido con la información contextual y lo asigna automáticamente al Jefe de Servicio y Asesor de la sucursal correspondiente
+8. N8N envía notificaciones automáticas y personalizadas por rol:
 
 - **Al cliente:** Confirmación de recepción con información específica y número de seguimiento, a través del mismo canal de origen si es posible.
 - **Al Asesor de Servicio:** Notificación detallada con el reclamo completo, historial del cliente y sugerencias de resolución para que pueda iniciar la gestión.
@@ -312,10 +322,10 @@ n8nenvía notificaciones automáticas y personalizadas por rol, utilizando el co
 - **Al Encargado de Calidad:** Notificación con foco en la clasificación, sentimiento del cliente y tipo de reclamo para análisis de tendencias y calidad.
 
 
-Automatización de Provisión de Flujos de n8n:
-Capacidad futura de automatizar la creación de flujos de n8npara reclamos (y encuestas) cuando se agregue un nuevo concesionario.
-Inicialización Automática de Base de Conocimiento: Proceso automatizado para crear y configurar la base vectorial específica para nuevos concesionarios.
-Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con variables que se inyectarán con las configuraciones específicas de cada concesionario, incluyendo acceso a su base de conocimiento RAG.
+**Automatización de Provisión de Flujos de N8N:**
+- Capacidad futura de automatizar la creación de flujos de N8N para reclamos (y encuestas) cuando se agregue un nuevo concesionario
+- **Inicialización Automática de Base de Conocimiento:** Proceso automatizado para crear y configurar la base vectorial específica para nuevos concesionarios
+- Esto se logrará utilizando la API de N8N para desplegar flujos "plantilla" con variables que se inyectarán con las configuraciones específicas de cada concesionario, incluyendo acceso a su base de conocimiento RAG
 
 #### Campos Requeridos para Reclamos:
 
@@ -346,7 +356,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
   - Equipos de Venta y Postventa
 
 #### Gestión Manual y Ciclo de Vida:
-* **el reclamo puede caer por whatsapp** respuestas con RAG, ia, solicitando los datos correspondientes. 
+* **El reclamo puede caer por WhatsApp** con respuestas automatizadas usando RAG e IA, solicitando los datos correspondientes. 
 * **Registro y Asignación por Sucursal:** Los usuarios de Contact Center también pueden ingresar reclamos manualmente en la plataforma. Inmediatamente, el sistema debe asignar automáticamente el reclamo tanto al **Asesor de Servicio** como al **Jefe de Servicio** que correspondan a la **sucursal** del cliente via mail.
 * **Estados del Reclamo:** 
   - **Pendiente:** Estado inicial del reclamo
@@ -356,7 +366,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Ciclo de Vida del Reclamo (Resolución):** El reclamo permanecerá en la bandeja de trabajo activa del Asesor y Jefe de Servicio hasta que su estado sea marcado como **"Resuelto"**. Una vez resuelto, se archivará y dejará de estar en la lista de casos pendientes de gestión.
 
 
-## 5. Métricas y Dashboards
+## 4. Métricas y Dashboards
 * **Segregación de Métricas:** Todos los dashboards y métricas (encuestas contestadas, reclamos por tipo/estado, etc.) deben ser filtrados por concesionario y solo mostrar datos relevantes para el rol del usuario logueado.
 * **Origen de la Encuesta:** Es **CRUCIAL** que cada encuesta finalizada registre la fuente de su respuesta: **`QR`**, **`WhatsApp`** (resultado de la carga masiva), o **`Llamada`** (ejecutivo de Contact Center). Esto es fundamental para medir la eficiencia de cada canal.
 * **Dashboard de Canales y Ejecutivos:** Debe existir un dashboard que muestre:
@@ -366,41 +376,11 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Métricas de Reclamos:** Se deben crear dashboards para visualizar métricas de reclamos, tales como: número de reclamos por sucursal, por tipo, por estado, y tiempo promedio de resolución.
 * **Optimización de Consultas:** Al generar código para dashboards, prioriza la eficiencia de las consultas a la base de datos para manejar grandes volúmenes de datos por concesionario de forma rápida.
 
-## 4. Arquitectura Cloud Run y Despliegue en GCP
+## 5. Arquitectura Cloud Run y Despliegue en GCP
 
-### 4.1. Arquitectura Actual Implementada
+### 5.1. Arquitectura Actual Implementada
 
 **Óptima-CX utiliza una arquitectura moderna basada en Supabase + Next.js + N8N + Chatwoot** que optimiza costos, escalabilidad y mantenimiento para un SaaS multi-tenant.
-
-#### **Stack Tecnológico Actual:**
-
-**🎯 Frontend (Implementado):**
-- **Next.js 14** con App Router
-- **TypeScript** para type safety
-- **Tailwind CSS** para estilos
-- **Radix UI** para componentes
-- **Supabase Auth** para autenticación
-- **React Hook Form** para formularios
-
-**🔧 Backend (Implementado):**
-- **Supabase PostgreSQL** con Row Level Security (RLS)
-- **Supabase Realtime** para actualizaciones live
-- **Supabase Edge Functions** para lógica serverless
-- **N8N workflows** en Cloud Run para automatización
-
-**☁️ Infraestructura (Implementado):**
-- **Google Cloud Platform** como proveedor principal
-- **Cloud Run** para servicios containerizados (Frontend + N8N + Chatwoot)
-- **Cloud Memorystore (Redis)** para sessions de Chatwoot y cache
-- **Terraform** para Infrastructure as Code
-- **Secret Manager** para credenciales sensibles
-- **Cloud Storage** para archivos y documentos
-
-**💬 WhatsApp + Conversacional (Implementado):**
-- **Chatwoot** para gestión de conversaciones multitenant
-- **WhatsApp Business API** para mensajería
-- **Redis** para gestión de sessions y cache
-- **PostgreSQL** para historiales de conversación
 
 #### **🏗️ Arquitectura de 3 Cloud Run Services**
 
@@ -413,7 +393,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 └── URL: pendiente
 ```
 
-**☁️ CLOUD RUN #2: n8n-optimacx-supabase**
+**☁️ CLOUD RUN #2: N8N-optimacx-supabase**
 ```
 ├── N8N workflows engine
 ├── Multitenant workflow configuration
@@ -423,7 +403,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 └── URL: pendiente
 ```
 
-**☁️ CLOUD RUN #3: chatwoot-conversations** (NUEVO)
+**☁️ CLOUD RUN #3: chatwoot-conversations**
 ```
 ├── Chatwoot conversation management
 ├── WhatsApp Business API integration
@@ -434,64 +414,14 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 └── URL: pendiente 
 ```
 
-#### **¿Por qué esta es LA MEJOR opción para Óptima-CX?**
-
-**🎯 Razones Técnicas Críticas:**
-
-1. **Multi-tenancy Real Complejo:**
-   ```
-   Concesionario A:
-   ├── WhatsApp: +56912345001 (Business API específica)
-   ├── Chatwoot: account_a + subdomain a.chat.optimacx.com
-   ├── Email SMTP: smtp.concesionario-a.com
-   ├── IA Config: Gemini 2.5 pro específica + prompts personalizados
-   └── BD Schema: tenant_a_* (datos completamente aislados)
-   
-   Concesionario B:  
-   ├── WhatsApp: +56987654002 (Business API diferente)
-   ├── Chatwoot: account_b + subdomain b.chat.optimacx.com
-   ├── Email SMTP: smtp.concesionario-b.com
-   ├── IA Config: Gemini 2.5 pro + prompts diferentes
-   └── BD Schema: tenant_b_* (datos completamente aislados)
-   ```
-
-2. **Aislamiento de Integraciones Crítico:**
-   - n8nseparado permite configuraciones completamente aisladas por tenant
-   - Credenciales sensibles (WhatsApp tokens, SMTP) están encriptadas por tenant
-   - Fallos en integraciones de un concesionario no afectan la aplicación principal
-   - Cada tenant puede usar diferentes proveedores de IA o servicios
-
-3. **Escalabilidad Independiente:**
-   - Óptima-CX escala por usuarios concurrentes
-   - n8n escala por volumen de automatizaciones
-   - Un concesionario con alto volumen no afecta a otros
-
-#### **💡 Flujo Multi-tenant Específico:**
-
-```
-1. Usuario de Concesionario A crea encuesta
-   ↓
-2. Óptima-CX → n8n-hub (tenant_id: "concesionario_a")
-   ↓
-3. n8ncarga config específica de Concesionario A:
-   - WhatsApp API key A
-   - SMTP config A
-   - IA model config A
-   ↓
-4. n8nejecuta workflow con integraciones A
-   ↓
-5. n8n→ callback Óptima-CX con resultados
-   ↓
-6. Óptima-CX procesa y almacena datos específicos del Concesionario A
-   ↓
-7. Dashboard actualizado con métricas filtradas por tenant
-```
-
-**Aislamiento de Configuraciones por Concesionario sin Duplicación de Infraestructura:**
+#### **Ventajas Técnicas:**
+- **Multi-tenancy:** Configuraciones aisladas por concesionario (WhatsApp tokens, SMTP, IA prompts)
+- **Escalabilidad Independiente:** Cada servicio escala según demanda
+- **Aislamiento:** Fallos de un tenant no afectan otros concesionarios
 
 #### **Estructura de Configuración Multi-tenant:**
 ```
-📊 TENANT_CONFIGURATIONS (tabla en n8nDB):
+📊 TENANT_CONFIGURATIONS (tabla en N8N DB):
 ├── tenant_id: "concesionario_001"
 ├── whatsapp_config: 
 │   ├── business_token: "EAAK...encrypted"
@@ -517,7 +447,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
     ├── custom_messages: {"welcome": "...", "followup": "..."}
     └── business_hours: {"start": "09:00", "end": "18:00"}
 ```
-### 4.3. Comunicación Entre Services
+### 5.2. Comunicación Entre Services
 
 #### **Flujo de Comunicación Multi-tenant con RAG:**
 ```
@@ -526,7 +456,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
                                          POST /webhook/trigger-complaint
                                          {tenant_id: "concesionario_a", complaint_text: "..."}
                                               ↓
-                                         n8n-automation-hub
+                                         N8N-automation-hub
                                               ↓ (load tenant config A + RAG setup)
                                          1. Generate embedding (gemini-embedding-001)
                                          2. Query Supabase (pgvector) (tenant filtered)
@@ -537,50 +467,19 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
                                               ↓ (enriched AI response)
                                          External Services (WhatsApp A + enriched response)
                                               ↓ (callback with contextual results)
-                                         POST /api/webhooks/n8n-complaint-callback
+                                         POST /api/webhooks/N8N-complaint-callback
                                          {tenant_id: "concesionario_a", enriched_data: "..."}
                                               ↓
                                          optima-cx-saas (update with contextual data)
 ```
 
+### 5.3. CI/CD y Monitoreo
 
-#### **ROI y Justificación:**
-* **Break-even:** Con 3-4 concesionarios activos
-* **Escalabilidad:** Hasta 100+ concesionarios sin cambios arquitectónicos
-* **Ahorro operacional:** 80% reducción en tiempo de configuración nuevos tenants
+#### **Pipeline:** Git Push → Testing → Deploy workflows via N8N API → Validación
+#### **Métricas:** Response time, workflow success rate, API limits, tenant performance
+#### **Alertas:** Workflow failures >5%, API rate limits, latencia >2s
 
-### 4.5. Versionado y CI/CD para n8nWorkflows
-
-#### **Pipeline de Deployment:**
-1. **Developer** modifica template workflow
-2. **Git Push** → **Cloud Build** trigger
-3. **Automated Testing** en ambiente staging
-4. **Backup** de workflows activos en producción
-5. **Deploy** de nuevos workflows via n8nAPI
-6. **Validation** de workflows deployados
-7. **Rollback automático** si falla validación
-
-### 4.6. Monitoreo y Observabilidad Avanzada
-
-#### **Métricas Clave por Service:**
-**optima-cx-saas:**
-
-
-**n8n-automation-hub:**
-
-#### **Dashboards Especializados:**
-* **Tenant Performance:** Métricas comparativas entre concesionarios
-* **Automation Health:** Estado de integraciones por tenant
-* **Cost Analysis:** Consumo de recursos y costos por concesionario
-* **SLA Monitoring:** Cumplimiento de SLAs por tenant
-
-#### **Alertas Críticas Configuradas:**
-* **Cold Starts:** n8n-hub min-instances monitoring
-* **Workflow Failures:** > 5% failure rate por tenant
-* **API Rate Limits:** Aproximación a límites de WhatsApp/IA
-* **Cross-Service Communication:** Latencia > 2s entre services
-
-### 4.7. Seguridad y Compliance Multi-tenant
+### 5.5. Seguridad y Compliance Multi-tenant
 
 #### **Aislamiento de Datos Estricto:**
 * **Tenant Filtering:** Filtros automáticos por tenant_id en todas las consultas
@@ -589,7 +488,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **API Security:** Rate limiting y authentication por tenant
 
 #### **Seguridad de Red y Perímetro (Defensa en Profundidad):**
-* **Comunicación Interna Segura:** Configurar un **VPC Connector** para los servicios de Cloud Run. Esto fuerza la comunicación entre servicios (SaaS ↔ n8n) y con Cloud SQL a través de la red privada de GCP, minimizando la exposición a la red pública.
+* **Comunicación Interna Segura:** Configurar un **VPC Connector** para los servicios de Cloud Run. Esto fuerza la comunicación entre servicios (SaaS ↔ N8N) y con Cloud SQL a través de la red privada de GCP, minimizando la exposición a la red pública.
 
 #### **Seguridad de Aplicación y Cargas de Trabajo:**
 * **Identidad Segura de Servicios:** Utilizar **Workload Identity** para asociar los servicios de Cloud Run con Cuentas de Servicio de IAM dedicadas. Esto elimina la necesidad de gestionar y rotar claves de servicio, ya que las credenciales se inyectan de forma segura y automática.
@@ -601,68 +500,15 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 * **Tenant onboarding:** Proceso automatizado de 10 minutos
 * **Legacy support:** Compatibilidad con configuraciones existentes
 
-## 5. Infraestructura como Código con Terraform
+## 6. Infraestructura como Código con Terraform
 
-### 5.1. Estrategia de Despliegue con Terraform
+### 6.1. Terraform IaC
 
-**Óptima-CX utiliza Terraform para el manejo completo de la infraestructura en GCP**, garantizando reproducibilidad, versionado y gestión consistente de recursos cloud para el entorno multitenant.
+#### **Estructura:** Módulos por ambiente (dev/staging/prod), estado remoto cifrado en GCS
+#### **Onboarding:** Scripts automatizados para nuevos tenants con configuraciones específicas
+#### **Seguridad:** KMS encryption, VPC privada, Workload Identity, permisos mínimos
 
-#### **Estructura de Terraform Recomendada:**
-* **Organización Modular:** Separación por ambientes (dev/staging/prod) con módulos reutilizables para Cloud Run, Cloud SQL, networking y security
-* **Gestión de Estado:** Backend remoto en Google Cloud Storage con cifrado y versionado habilitado
-* **Configuración por Tenant:** Variables dinámicas que permiten el onboarding automatizado de nuevos concesionarios
-
-#### **Módulos Terraform Específicos para Óptima-CX:**
-
-**Módulo Cloud Run:**
-* Gestiona ambos servicios: optima-cx-saas y n8n-automation-hub
-* Configuración de auto-scaling diferenciada por servicio
-* Variables de ambiente específicas por tenant
-* Etiquetado para monitoreo y facturación por concesionario
-
-
-#### **Configuración por Ambiente:**
-* **Desarrollo:** Recursos mínimos, instancias compartidas, backups de 7 días
-* **Staging:** Configuración similar a producción con menor capacidad
-* **Producción:** Alta disponibilidad, auto-scaling, backups extendidos, always-on para n8n
-
-### 5.2. CI/CD con Terraform
-
-#### **Pipeline de Infraestructura:**
-* **Validación:** terraform fmt, validate y plan automáticos en cada PR
-* **Despliegue:** terraform apply solo en merge a main branch
-* **Rollback:** Capacidad de revertir cambios usando terraform state
-* **Monitoreo:** Integración con Cloud Build para logs centralizados
-
-#### **Gestión de Estado:**
-* **Backend Seguro:** Google Cloud Storage con cifrado KMS
-* **State Locking:** Prevención de modificaciones concurrentes
-* **Versionado:** Historial completo de cambios de infraestructura
-* **Backup:** Respaldos automatizados del estado de Terraform
-
-### 5.3. Provisión Automatizada de Nuevos Tenants
-
-#### **Onboarding de Concesionarios:**
-* **Automatización Completa:** Script que crea base de datos, usuario, secrets y workflows n8n
-* **Configuración Personalizada:** Variables específicas por concesionario (WhatsApp tokens, SMTP, IA)
-* **Validación:** Tests automatizados post-provisión para verificar conectividad
-* **Rollback:** Capacidad de deshacer onboarding en caso de errores
-
-### 5.4. Mejores Prácticas Implementadas
-
-#### **Seguridad:**
-* Estado remoto cifrado con KMS
-* Secrets nunca hardcodeados en archivos Terraform
-* Service Account con permisos mínimos necesarios
-* Network segura con VPC privada y Cloud NAT
-
-#### **Operaciones:**
-* Disaster recovery con scripts automatizados
-* Monitoreo integrado con Cloud Monitoring
-* Gestión de costos con etiquetado automático
-* Cumplimiento con policies como código
-
-## 6. Flujo de Trabajo y Herramientas
+## 7. Flujo de Trabajo y Herramientas
 
 * **Entorno de Desarrollo:** Trabajamos en Cloud Shell con Claude Code en la terminal. Claude tiene acceso completo al sistema de archivos para inspeccionar código existente y entender el contexto antes de realizar cambios.
 
@@ -683,9 +529,7 @@ Esto se logrará utilizando la API de n8npara desplegar flujos "plantilla" con v
 
 * **Pruebas y Calidad:** **SIEMPRE** considerar la adición de pruebas para nueva funcionalidad. El código debe ser legible, seguir estándares SOLID y ser mantenible. Buscar oportunidades de refactorización sin introducir regresiones.
 
-* **Modificación de Archivos:** Claude puede crear o modificar archivos directamente en el entorno de desarrollo, respetando la estructura modular actual del proyecto.
-
-## 6.1. Políticas de Escalación y SLAs (Acuerdos de Nivel de Servicio)
+### 7.1. Políticas de Escalación y SLAs (Acuerdos de Nivel de Servicio)
 
 Para garantizar la operatividad y la respuesta oportuna, el sistema implementa políticas de escalación automáticas gestionadas por los workflows en `utils/`.
 
@@ -705,21 +549,16 @@ Para garantizar la operatividad y la respuesta oportuna, el sistema implementa p
 *   **Objetivo:** Mantener la alta disponibilidad del sistema y detectar problemas de integración o configuración de forma proactiva.
 
 
-#### **Mediana Prioridad:**
-1. Dashboard de métricas avanzado
-2. Testing y QA comprehensivo
-3. Optimización de performance
-4. Documentación técnica completa
 
-## 7. Especificaciones Técnicas RAG para Agente de Reclamos
+## 8. Especificaciones Técnicas RAG para Agente de Reclamos
 
-### 7.1. Arquitectura RAG Multi-tenant
+### 8.1. Arquitectura RAG Multi-tenant
 
 #### **Base de Datos Vectorial:**
 * **Tecnología:** Supabase (extensión pgvector)
 * **Modelo de Embeddings:** gemini-embedding-001 (Google)
 * **Segregación:** Filtros estrictos por tenant_id en todas las consultas
-* **Dimensiones:** 
+* **Dimensiones:** 3,072 dimensiones (Gemini Embedding 001)
 * **Índices:** Un índice por concesionario para máximo aislamiento
 
 #### **Pipeline de Procesamiento de Documentos:**
@@ -748,12 +587,12 @@ Para garantizar la operatividad y la respuesta oportuna, el sistema implementa p
 }
 ```
 
-### 7.2. Flujo RAG Integrado con n8n
+### 8.2. Flujo RAG Integrado con N8N
 
 #### **Procesamiento de Reclamo con RAG (Pipeline Mejorado con Cohere):**
 ```
-1. Cliente envía reclamo → n8n recibe webhook
-2. n8n extrae tenant_id y preprocessa texto
+1. Cliente envía reclamo → N8N recibe webhook
+2. N8N extrae tenant_id y preprocessa texto
 3. Generación de embedding con gemini-embedding-001
 4. **Recuperación (Retrieval):** Query a Supabase (pgvector) para obtener un grupo amplio de chunks relevantes (ej. top 20-50).
 5. **Re-clasificación (Rerank):** Se envía la consulta original y los chunks recuperados a la API de **Cohere Rerank** para obtener los 3-5 resultados más relevantes.
@@ -793,7 +632,7 @@ FORMATO DE RESPUESTA JSON:
 }
 ```
 
-### 7.3. Gestión de Conocimiento por Concesionario
+### 8.3. Gestión de Conocimiento por Concesionario
 
 #### **Portal de Administración de Conocimiento:**
 * **Carga de Documentos:** Interface drag-and-drop para subir documentos
@@ -810,7 +649,7 @@ FORMATO DE RESPUESTA JSON:
 * **Casos Resueltos:** Historial de resoluciones exitosas anonimizadas
 * **Normativas:** Regulaciones específicas del país/región
 
-### 7.4. Optimización y Monitoreo RAG
+### 8.4. Optimización y Monitoreo RAG
 
 #### **Métricas de Calidad RAG:**
 * **Precision@K:** Relevancia de documentos recuperados
@@ -819,41 +658,25 @@ FORMATO DE RESPUESTA JSON:
 * **Latency P95:** Tiempo de respuesta del pipeline RAG completo
 * **Cache Hit Rate:** Eficiencia de cache de embeddings
 
-#### **Optimización de Latencia y Costos con Caching:**
+#### **Optimización:**
+- **Cache Redis:** Embeddings (24h TTL), respuestas RAG (6h TTL), ~40% reducción llamadas IA
+- **Cohere Rerank:** Mejora precisión re-clasificando top chunks para mayor relevancia contextual
 
-
-#### **Mejora de Precisión con Cohere Rerank:**
-* **Justificación:** Mientras que la búsqueda vectorial es eficiente para encontrar documentos semánticamente similares, no siempre garantiza la máxima relevancia contextual. El modelo **Cohere Rerank** está específicamente entrenado para tomar un conjunto de resultados de búsqueda y re-clasificarlos según su relevancia real para la consulta original.
-* **Beneficios:**
-    *   **Mayor Precisión:** Reduce el "ruido" y las "alucinaciones" al proporcionar al LLM final un contexto de mucha mayor calidad.
-    *   **Mejor Experiencia:** Las respuestas generadas son más coherentes y útiles para el usuario.
-    *   **Eficiencia:** Permite realizar una búsqueda inicial más amplia (ej. top 50) y luego refinarla a los mejores 3-5 resultados, mejorando la calidad sin sacrificar el rendimiento.
-
-#### **n8nWorkflow para RAG:**
+#### **N8N Workflow para RAG:**
 ```json
 {
   "nodes": [
-    { "name": "Webhook Trigger" },
-    { "name": "Extract Tenant Config" },
-    { "name": "Generate Embedding (Gemini)" },
-    { "name": "Vector Search (Supabase)" },
-    { "name": "Rerank Documents (Cohere)" },
-    { "name": "Build Enhanced Prompt" },
-    { "name": "Generate Response (Gemini)" },
-    { "name": "Callback to Supabase" }
-  ]
+    { "name": "Webhook Trigger", "type": "webhook" },
+    { "name": "Extract Tenant Config", "type": "function" },
+    { "name": "Generate Embedding (Gemini)", "type": "http" },
+    { "name": "Vector Search (Supabase)", "type": "postgres" },
+    { "name": "Rerank Documents (Cohere)", "type": "http" },
+    { "name": "Build Enhanced Prompt", "type": "function" },
+    { "name": "Generate Response (Gemini)", "type": "http" },
+    { "name": "Callback to Supabase", "type": "http" }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{"node": "Extract Tenant Config", "type": "main", "index": 0}]] },
+    "Extract Tenant Config": { "main": [[{"node": "Generate Embedding (Gemini)", "type": "main", "index": 0}]] }
+  }
 }
-```
-### 7.6. Seguridad y Compliance RAG
-
-#### **Aislamiento de Datos:**
-* **Tenant Filtering:** Todos los queries incluyen filtro tenant_id obligatorio
-* **Embedding Isolation:** Cache separado de embeddings por concesionario
-* **Access Controls:** IAM roles específicos para acceso a documentos
-* **Audit Trail:** Log completo de accesos y modificaciones
-
-#### **Privacidad y Protección de Datos:**
-* **Anonimización:** Removal automático de datos personales en ejemplos
-* **Retención:** Políticas de retención configurable por tipo de documento
-* **Encriptación:** Datos en reposo y en tránsito completamente encriptados
-* **GDPR Compliance:** Derecho al olvido implementado a nivel de tenant

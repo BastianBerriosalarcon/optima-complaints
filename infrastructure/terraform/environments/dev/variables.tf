@@ -25,6 +25,32 @@ variable "domains" {
   default     = []
 }
 
+# WhatsApp Configuration
+variable "whatsapp_webhook_base_url" {
+  description = "Base URL for WhatsApp webhooks"
+  type        = string
+  default     = "https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app"
+}
+
+# Monitoring Configuration
+variable "enable_monitoring" {
+  description = "Enable monitoring and alerting"
+  type        = bool
+  default     = true
+}
+
+variable "notification_channels" {
+  description = "List of notification channels for alerts"
+  type        = list(string)
+  default     = []
+}
+
+variable "log_level" {
+  description = "Log level for services"
+  type        = string
+  default     = "info"
+}
+
 # N8N service variables
 variable "n8n_container_image" {
   description = "N8N container image"

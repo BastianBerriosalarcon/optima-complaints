@@ -6,7 +6,7 @@ locals {
   
   # Chatwoot specific environment variables
   chatwoot_env_vars = {
-    "RAILS_ENV"                = var.environment == "prod" ? "production" : "development"
+    "RAILS_ENV"                = var.environment == "prod" ? "production" : "development"  
     "NODE_ENV"                 = var.environment == "prod" ? "production" : "development"
     "RAILS_LOG_TO_STDOUT"      = "true"
     "USE_INBOX_AVATAR_FOR_BOT" = "true"
@@ -15,11 +15,18 @@ locals {
     "POSTGRES_PORT"            = "5432"
     "POSTGRES_DATABASE"        = "postgres"
     "POSTGRES_USERNAME"        = var.supabase_db_user
-    # DATABASE_URL will be set via secret
+    "DB_SCHEMA"                = "chatwoot_${var.environment}"
     "FRONTEND_URL"             = var.custom_domain != "" ? "https://${var.custom_domain}" : ""
-    "FORCE_SSL"                = "true"
-    "ENABLE_PUSH_RELAY_SERVER" = "true"
+    "FORCE_SSL"                = "false"
+    "ENABLE_PUSH_RELAY_SERVER" = "false"
     "INSTALLATION_ENV"         = "docker"
+    "RAILS_MAX_THREADS"        = "5"
+    "WEB_CONCURRENCY"          = "2"
+    "MAILER_SENDER_EMAIL"      = "chatwoot@${var.environment}.optimacx.net"
+    "SMTP_DOMAIN"              = "optimacx.net"
+    "SMTP_ENABLE_STARTTLS_AUTO" = "true"
+    "SMTP_OPENSSL_VERIFY_MODE" = "none"
+    "RAILS_SERVE_STATIC_FILES" = "true"
   }
 
   # Chatwoot secret environment variables
@@ -27,7 +34,6 @@ locals {
     "POSTGRES_PASSWORD" = var.supabase_db_password_secret
     "SECRET_KEY_BASE"   = var.chatwoot_secret_key_secret
     "REDIS_URL"         = var.redis_url_secret
-    "DATABASE_URL"      = google_secret_manager_secret.chatwoot_database_url.secret_id
   }
 }
 
@@ -46,6 +52,13 @@ module "chatwoot_cloud_run" {
   cpu           = var.cpu
   min_instances = var.min_instances
   max_instances = var.max_instances
+  
+  # Use default Cloud Run port (8080) and let Cloud Run set PORT env var
+  # container_port = 8080  # commented out to use default
+  
+  # Use custom startup command to run database migrations
+  container_command = ["/bin/sh", "-c"]
+  container_args    = ["bundle exec rails db:chatwoot_prepare && bundle exec rails s -p $PORT -b 0.0.0.0"]
   
   # Environment variables
   env_vars        = local.chatwoot_env_vars
@@ -72,26 +85,17 @@ module "chatwoot_cloud_run" {
   # Execution environment
   execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
   
-  # Timeout
-  timeout_seconds = 300
+  # Timeout (increased for Chatwoot startup)
+  timeout_seconds = 600
   
   # Concurrency
   max_instance_request_concurrency = 1000
-}
-
-# Create DATABASE_URL secret for Chatwoot
-resource "google_secret_manager_secret" "chatwoot_database_url" {
-  secret_id = "chatwoot-database-url-${var.environment}"
   
-  replication {
-    auto {}
-  }
+  # Startup probe to allow time for database migrations
+  startup_probe_timeout_seconds = 240
 }
 
-resource "google_secret_manager_secret_version" "chatwoot_database_url" {
-  secret      = google_secret_manager_secret.chatwoot_database_url.id
-  secret_data = "postgresql://${var.supabase_db_user}:${var.supabase_db_password}@${var.supabase_db_host}:5432/postgres?schema=chatwoot_${var.environment}"
-}
+
 
 # Custom domain mapping (if domain is provided)
 resource "google_cloud_run_domain_mapping" "chatwoot_domain" {

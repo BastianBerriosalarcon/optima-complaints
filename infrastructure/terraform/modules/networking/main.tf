@@ -88,3 +88,33 @@ resource "google_compute_security_policy" "security_policy" {
     description = "Rate limiting rule"
   }
 }
+
+# Cloud Router for NAT
+resource "google_compute_router" "router" {
+  name    = "optimacx-router-${var.environment}"
+  network = google_compute_network.vpc.name
+  region  = var.region
+  project = var.project_id
+}
+
+# Cloud NAT for static egress IP
+resource "google_compute_router_nat" "nat" {
+  name                               = "optimacx-nat-${var.environment}"
+  router                             = google_compute_router.router.name
+  region                             = var.region
+  project                            = var.project_id
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+  subnetwork {
+    name                    = google_compute_subnetwork.subnet.id
+    source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
+  }
+  nat_ip_allocate_option             = "MANUAL_ONLY"
+  nat_ips                            = [google_compute_address.nat_ip.self_link]
+}
+
+# Static IP address for Cloud NAT
+resource "google_compute_address" "nat_ip" {
+  name    = "optimacx-nat-ip-${var.environment}"
+  region  = var.region
+  project = var.project_id
+}
