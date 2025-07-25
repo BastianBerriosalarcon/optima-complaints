@@ -1,0 +1,17 @@
+FROM docker.n8n.io/n8nio/n8n:latest
+
+USER root
+
+# Install Cloud SQL Proxy
+RUN wget -O /cloud_sql_proxy https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 \
+    && chmod +x /cloud_sql_proxy
+
+# Create startup script
+COPY startup-proxy.sh /startup-proxy.sh
+RUN chmod +x /startup-proxy.sh
+
+USER node
+
+EXPOSE 5678
+
+ENTRYPOINT ["/bin/sh", "/startup-proxy.sh"]

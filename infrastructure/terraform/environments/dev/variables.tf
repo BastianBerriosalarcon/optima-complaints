@@ -94,6 +94,18 @@ variable "n8n_domain" {
   default     = ""
 }
 
+variable "n8n_version" {
+  description = "N8N version"
+  type        = string
+  default     = "1.103.2"
+}
+
+variable "n8n_allow_unauthenticated" {
+  description = "Allow unauthenticated access to N8N"
+  type        = bool
+  default     = true
+}
+
 # Supabase configuration
 variable "supabase_db_host" {
   description = "Supabase database host"

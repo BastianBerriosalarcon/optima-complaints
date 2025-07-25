@@ -1,0 +1,142 @@
+{
+  "name": "Leads - Enviador WhatsApp de Prospección",
+  "description": "Envía un mensaje de WhatsApp masivo a una lista de clientes potenciales para iniciar una campaña de prospección.",
+  "tags": ["leads", "prospeccion", "whatsapp", "masivo", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "enviador-whatsapp-prospeccion"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "id": "batch-clients",
+      "name": "1. Agrupar Clientes en Lotes",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const batch = $input.first().json;\nconst campaignName = $('Trigger del Workflow').first().json.campaign_name;\nconst tenantId = $('Trigger del Workflow').first().json.tenant_id;\n\nconst messages = batch.map(client => {\n  return {\n    to: client.telefono,\n    message: `¡Hola ${client.nombre}! Somos de Óptima-CX. ¿Estás interesado en un nuevo vehículo? Responde SÍ para más información.`\n  };\n});\n\nreturn {\n  messages_to_send: messages,\n  tenant_id: tenantId,\n  campaign_name: campaignName\n};"
+      },
+      "id": "prepare-messages",
+      "name": "2. Preparar Mensajes del Lote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v17.0/{{ $json.tenant_config.whatsapp_phone_id }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $json.tenant_config.whatsapp_token }}"
+            }
+          ]
+        },
+        "body": {
+          "parameters": [
+            {
+              "name": "messaging_product",
+              "value": "whatsapp"
+            },
+            {
+              "name": "to",
+              "value": "={{ $json.to }}"
+            },
+            {
+              "name": "type",
+              "value": "text"
+            },
+            {
+              "name": "text",
+              "value": "={{ { body: $json.message } }}"
+            }
+          ]
+        }
+      },
+      "id": "send-whatsapp-message",
+      "name": "3. Enviar Mensaje WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "prospeccion_whatsapp_log",
+        "columns": "tenant_id, campaign_name, telefono_cliente, mensaje_enviado, estado, whatsapp_message_id",
+        "additionalFields": {
+          "values": "={{ [$json.tenant_id, $json.campaign_name, $json.to, $json.message, 'enviado', $node[\"3. Enviar Mensaje WhatsApp\"].json.messages[0].id] }}"
+        }
+      },
+      "id": "log-sent-message",
+      "name": "4. Registrar Envío",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "1. Agrupar Clientes en Lotes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Agrupar Clientes en Lotes": {
+      "main": [
+        [
+          {
+            "node": "2. Preparar Mensajes del Lote",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Preparar Mensajes del Lote": {
+      "main": [
+        [
+          {
+            "node": "3. Enviar Mensaje WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Enviar Mensaje WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "4. Registrar Envío",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": { "saveExecutionProgress": true }
+}

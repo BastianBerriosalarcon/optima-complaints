@@ -74,11 +74,7 @@ variable "supabase_db_user" {
   type        = string
 }
 
-variable "supabase_db_password" {
-  description = "Supabase database password"
-  type        = string
-  sensitive   = true
-}
+
 
 variable "redis_url_secret" {
   description = "Secret name for Redis URL"

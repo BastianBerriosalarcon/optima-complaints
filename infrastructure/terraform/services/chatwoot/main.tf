@@ -77,7 +77,7 @@ module "chatwoot_cloud_run" {
   custom_domain = var.custom_domain
   
   # Health check
-  health_check_path = "/api/v1/accounts"
+  health_check_path = "/healthz"
   
   # Ingress
   ingress = "INGRESS_TRAFFIC_ALL"

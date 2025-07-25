@@ -1,0 +1,90 @@
+{
+  "name": "Leads - Filtro de Leads Existentes",
+  "description": "Recibe una lista de clientes y la filtra para excluir aquellos que ya son leads activos en el sistema.",
+  "tags": ["leads", "prospeccion", "filtro", "duplicados", "srp"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "filtro-leads-existentes"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT telefono_cliente FROM leads WHERE concesionario_id = $1 AND telefono_cliente = ANY($2::text[]) AND estado IN ('nuevo', 'contactado', 'cotizado')",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.tenant_id, $json.clients_from_excel.map(c => c.telefono)] }}"
+        }
+      },
+      "id": "query-existing-leads",
+      "name": "1. Consultar Leads Activos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const allClients = $('Trigger del Workflow').first().json.clients_from_excel;\nconst existingLeads = $input.first().json;\n\nconst existingPhones = new Set(existingLeads.map(lead => lead.telefono_cliente));\n\nconst newClients = allClients.filter(client => !existingPhones.has(client.telefono));\n\nreturn {\n  tenant_id: $('Trigger del Workflow').first().json.tenant_id,\n  campaign_name: $('Trigger del Workflow').first().json.campaign_name,\n  uploaded_by: $('Trigger del Workflow').first().json.uploaded_by,\n  unique_clients_to_contact: newClients,\n  stats: {\n    received: allClients.length,\n    duplicates_found: existingPhones.size,\n    to_contact: newClients.length\n  }\n};"
+      },
+      "id": "filter-clients",
+      "name": "2. Filtrar Clientes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "enviador-whatsapp-prospeccion",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-sender-workflow",
+      "name": "3. Disparar Envío WhatsApp",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Trigger del Workflow": {
+      "main": [
+        [
+          {
+            "node": "1. Consultar Leads Activos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Consultar Leads Activos": {
+      "main": [
+        [
+          {
+            "node": "2. Filtrar Clientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Filtrar Clientes": {
+      "main": [
+        [
+          {
+            "node": "3. Disparar Envío WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": { "saveExecutionProgress": true }
+}

@@ -94,11 +94,42 @@ module "supabase" {
   region      = var.region
 }
 
-# N8N service - COMMENTED OUT TEMPORARILY (service already deployed)
-# module "n8n" {
-#   source = "../../services/n8n"
-#   # ... configuration commented out for deployment
-# }
+# N8N service
+module "n8n" {
+  source = "../../services/n8n"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+  
+  # Resource configuration
+  cpu           = var.n8n_cpu
+  memory        = var.n8n_memory
+  min_instances = var.n8n_min_instances
+  max_instances = var.n8n_max_instances
+  n8n_version   = var.n8n_version
+
+  # Service account
+  service_account_email = module.security.n8n_service_account.email
+
+  # VPC networking
+  vpc_connector_name = module.networking.vpc_connector_name
+
+  # Database secrets
+  database_host_secret     = "n8n-database-host-${var.environment}"
+  database_name_secret     = "n8n-database-name-${var.environment}"
+  database_user_secret     = "n8n-database-user-${var.environment}"
+  database_password_secret = "n8n-database-password-${var.environment}"
+  encryption_key_secret    = "n8n-encryption-key-${var.environment}"
+
+  # Access configuration
+  allow_unauthenticated = var.n8n_allow_unauthenticated
+
+  depends_on = [
+    module.networking,
+    module.security
+  ]
+}
 
 # OptimaCX Frontend service - COMMENTED OUT TEMPORARILY (no image available)
 # module "frontend" {
@@ -148,7 +179,7 @@ module "chatwoot" {
   # Database configuration (Supabase)
   supabase_db_host     = var.supabase_db_host
   supabase_db_user     = var.supabase_db_user
-  supabase_db_password = var.supabase_db_password
+  
 
   # Secrets
   supabase_db_password_secret = module.database.database_password_secret
