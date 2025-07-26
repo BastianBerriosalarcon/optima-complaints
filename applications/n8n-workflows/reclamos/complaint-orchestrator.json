@@ -1,0 +1,96 @@
+{
+  "name": "Complaint - Orchestrator",
+  "description": "Orquesta el procesamiento completo de reclamos: recepción, análisis RAG, asignación y notificaciones.",
+  "tags": ["complaint", "orchestrator", "main"],
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/complaint/orchestrator",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-complaint-input",
+      "name": "Complaint Input Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "complaint-rag-processor",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-rag-processor",
+      "name": "Disparar Procesador RAG",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={
+  \"status\": \"success\",
+  \"message\": \"Reclamo recibido y en proceso de orquestación.\",
+  \"timestamp\": \"{{ new Date().toISOString() }}\"
+}"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={
+  \"status\": \"error\",
+  \"message\": \"Error al recibir el reclamo.\",
+  \"error_details\": \"{{ $json.error?.message || 'Error desconocido' }}\",
+  \"timestamp\": \"{{ new Date().toISOString() }}\"
+}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error-response",
+      "name": "Respuesta de Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [400, 480]
+    }
+  ],
+  "connections": {
+    "Webhook Complaint Input": {
+      "main": [
+        [
+          {
+            "node": "Disparar Procesador RAG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disparar Procesador RAG": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

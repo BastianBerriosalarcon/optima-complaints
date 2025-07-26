@@ -22,9 +22,9 @@ import {
   PaginatedResponse,
   WorkflowContext,
 } from '../../types/core';
-import { LeadValidator } from './helpers/LeadValidator';
-import { AdvisorAssignmentHelper } from './helpers/AdvisorAssignmentHelper';
-import { LeadAuditHelper } from './helpers/LeadAuditHelper';
+import { LeadValidator } from '../helpers/LeadValidator';
+import { AdvisorAssignmentHelper } from '../helpers/AdvisorAssignmentHelper';
+import { LeadAuditHelper } from '../helpers/LeadAuditHelper';
 
 export class LeadService implements ILeadService {
   private leadValidator: LeadValidator;
@@ -47,7 +47,7 @@ export class LeadService implements ILeadService {
     try {
       const validationResult = await this.leadValidator.validateCreateLead(data, context);
       if (!validationResult.success) {
-        return validationResult as ServiceResponse<Lead>;
+        return { success: false, error: validationResult.error };
       }
 
       const leadData = {
@@ -68,10 +68,11 @@ export class LeadService implements ILeadService {
       }
 
       return result;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: `Error al crear lead: ${error.message}`
+        error: `Error al crear lead: ${errorMessage}`
       };
     }
   }
@@ -84,6 +85,13 @@ export class LeadService implements ILeadService {
       }
       const currentLead = validationResult.data;
 
+      if (!currentLead) {
+        return {
+          success: false,
+          error: 'No se pudo obtener el lead actual para actualizar.'
+        };
+      }
+
       const result = await this.leadRepository.update(id, data, context);
 
       if (result.success && result.data) {
@@ -91,10 +99,11 @@ export class LeadService implements ILeadService {
       }
 
       return result;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: `Error al actualizar lead: ${error.message}`
+        error: `Error al actualizar lead: ${errorMessage}`
       };
     }
   }
@@ -108,10 +117,11 @@ export class LeadService implements ILeadService {
       }
       
       return result;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: `Error al obtener lead: ${error.message}`
+        error: `Error al obtener lead: ${errorMessage}`
       };
     }
   }
@@ -140,10 +150,11 @@ export class LeadService implements ILeadService {
       }
 
       return result as any;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: `Error al obtener leads: ${error.message}`
+        error: `Error al obtener leads: ${errorMessage}`
       };
     }
   }
@@ -151,10 +162,11 @@ export class LeadService implements ILeadService {
   async assignAdvisor(leadId: string, advisorId: string, context: WorkflowContext): Promise<ServiceResponse<Lead>> {
     try {
       return await this.advisorAssignmentHelper.assignAdvisorToLead(leadId, advisorId, context);
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: `Error al asignar asesor: ${error.message}`
+        error: `Error al asignar asesor: ${errorMessage}`
       };
     }
   }
@@ -163,10 +175,11 @@ export class LeadService implements ILeadService {
     try {
       const result = await this.leadRepository.updateStatus(leadId, newStatus, context);
       return result as ServiceResponse<Lead>;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: `Error al actualizar estado: ${error.message}`
+        error: `Error al actualizar estado: ${errorMessage}`
       };
     }
   }
@@ -180,10 +193,11 @@ export class LeadService implements ILeadService {
       };
 
       return await this.leadRepository.findByPhone(phone, tenantId, context);
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: `Error al buscar lead existente: ${error.message}`
+        error: `Error al buscar lead existente: ${errorMessage}`
       };
     }
   }
@@ -191,10 +205,11 @@ export class LeadService implements ILeadService {
   async getLeadHistory(leadId: string): Promise<ServiceResponse<any[]>> {
     try {
       return await this.leadAuditHelper.getLeadHistory(leadId);
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         success: false,
-        error: `Error al obtener historial: ${error.message}`
+        error: `Error al obtener historial: ${errorMessage}`
       };
     }
   }

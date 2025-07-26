@@ -38,7 +38,7 @@ export class InterestLevelCalculator {
 
             return { success: true, data: interestLevel };
         } catch (error) {
-            return { success: false, error: `Error calculando nivel de interés: ${error.message}` };
+            return { success: false, error: `Error calculando nivel de interés: ${error instanceof Error ? error.message : 'Error desconocido'}` };
         }
     }
 }

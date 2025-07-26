@@ -10,7 +10,7 @@ export class EntityExtractionHandler {
             const entityTypes = ['nombre', 'email', 'vehiculo', 'presupuesto', 'fecha'];
             return await this.aiService.extractEntities(messageText, entityTypes, context);
         } catch (error) {
-            return { success: false, error: `Error extrayendo entidades: ${error.message}` };
+            return { success: false, error: `Error extrayendo entidades: ${error instanceof Error ? error.message : 'Error desconocido'}` };
         }
     }
 }
