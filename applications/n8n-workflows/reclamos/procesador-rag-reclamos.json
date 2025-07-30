@@ -212,7 +212,20 @@
     },
     {
       "parameters": {
-        "jsCode": "// Preparar prompt enriquecido con contexto RAG (si hay conocimiento)\nconst complaintData = $('Normalize Complaint').first().json;\nconst tenantConfig = $('Load Tenant Config').first().json[0];\nconst knowledgeResults = $('Vector Search').first().json;\n\n// Extraer contexto más relevante (top 3)\nconst topDocuments = knowledgeResults\n  .slice(0, 3)\n  .map(doc => doc.contenido || doc.content)\n  .join('\\n\\n---\\n\\n');\n\n// Prompt enriquecido con RAG (siguiendo patrón de IA de leads)\nconst enhancedPrompt = `\nEres un especialista en atención al cliente de ${tenantConfig.nombre_concesionario || 'nuestro concesionario'}.\n\nCONTEXTO DE CONOCIMIENTO ESPECÍFICO:\n${topDocuments}\n\nRECLAMO DEL CLIENTE:\n\"${complaintData.complaint_text}\"\n\nINFORMACIÓN DISPONIBLE:\n- Cliente: ${complaintData.cliente_nombre}\n- Canal: ${complaintData.canal_origen}\n${complaintData.vehiculo_patente ? `- Vehículo: ${complaintData.vehiculo_patente}` : ''}\n${complaintData.vehiculo_marca ? `- Marca/Modelo: ${complaintData.vehiculo_marca} ${complaintData.vehiculo_modelo || ''}` : ''}\n\nINSTRUCCIONES:\nAnaliza el reclamo usando las políticas específicas de nuestro concesionario. Clasifica y extrae información según nuestros procedimientos internos.\n\nRESPONDE EN FORMATO JSON:\n{\n  \"clasificacion\": {\n    \"tipo_reclamo\": \"garantia|servicio_tecnico|atencion_cliente|producto_defectuoso|facturacion|otro\",\n    \"categoria\": \"categoría específica según políticas\",\n    \"subcategoria\": \"subcategoría específica\",\n    \"urgencia\": \"alta|media|baja\",\n    \"black_alert\": true/false\n  },\n  \"datos_extraidos\": {\n    \"sucursal_detectada\": \"sucursal mencionada o null\",\n    \"vehiculo\": {\n      \"patente\": \"patente detectada o null\",\n      \"vin\": \"vin detectado o null\",\n      \"marca\": \"marca detectada\",\n      \"modelo\": \"modelo detectado\",\n      \"año\": \"año si se menciona\"\n    },\n    \"fecha_incidente\": \"fecha del problema si se menciona\",\n    \"fecha_compra_estimada\": \"fecha de compra si se menciona\"\n  },\n  \"analisis\": {\n    \"resumen_problema\": \"resumen conciso del problema\",\n    \"factores_criticos\": [\"factor1\", \"factor2\"],\n    \"nivel_satisfaccion_estimado\": 1-10,\n    \"requiere_black_alert\": true/false,\n    \"dias_desde_compra\": \"número de días si se puede calcular\"\n  },\n  \"sugerencias_resolucion\": [\n    {\n      \"accion\": \"acción recomendada\",\n      \"responsable\": \"jefe_servicio|asesor_servicio|encargado_calidad\",\n      \"plazo\": \"plazo recomendado\",\n      \"prioridad\": \"alta|media|baja\"\n    }\n  ],\n  \"referencias_politicas\": [\"política aplicable del contexto\"],\n  \"comentarios_ia\": \"observaciones adicionales del análisis contextualizado\"\n}\n\nSOLO RESPONDE CON EL JSON, SIN TEXTO ADICIONAL.\n`;\n\nreturn {\n  complaint_data: complaintData,\n  tenant_config: tenantConfig,\n  enhanced_prompt: enhancedPrompt,\n  rag_context: {\n    documents_found: knowledgeResults.length,\n    context_used: true,\n    top_similarity: knowledgeResults[0]?.similarity || 0\n  }\n};"
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "rerank-cohere-documentos",
+        "data": "={{ JSON.stringify({ query: $('Normalize Complaint').first().json.complaint_text, documents: $input.all().map(i => i.json), tenant_id: $('Normalize Complaint').first().json.tenant_id }) }}"
+      },
+      "id": "rerank-cohere-documents",
+      "name": "Rerank Documents (Cohere)",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 1,
+      "position": [1680, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar prompt enriquecido con contexto RAG (si hay conocimiento)\nconst complaintData = $('Normalize Complaint').first().json;\nconst tenantConfig = $('Load Tenant Config').first().json[0];\nconst knowledgeResults = $('Rerank Documents (Cohere)').first().json.high_quality_documents;\n\n// Extraer contexto más relevante (top 3)\nconst topDocuments = knowledgeResults\n  .slice(0, 3)\n  .map(doc => doc.contenido || doc.content)\n  .join('\\n\\n---\\n\\n');\n\n// Prompt enriquecido con RAG (siguiendo patrón de IA de leads)\nconst enhancedPrompt = `\nEres un especialista en atención al cliente de ${tenantConfig.nombre_concesionario || 'nuestro concesionario'}.\n\nCONTEXTO DE CONOCIMIENTO ESPECÍFICO:\n${topDocuments}\n\nRECLAMO DEL CLIENTE:\n\"${complaintData.complaint_text}\"\n\nINFORMACIÓN DISPONIBLE:\n- Cliente: ${complaintData.cliente_nombre}\n- Canal: ${complaintData.canal_origen}\n${complaintData.vehiculo_patente ? `- Vehículo: ${complaintData.vehiculo_patente}` : ''}\n${complaintData.vehiculo_marca ? `- Marca/Modelo: ${complaintData.vehiculo_marca} ${complaintData.vehiculo_modelo || ''}` : ''}\n\nINSTRUCCIONES:\nAnaliza el reclamo usando las políticas específicas de nuestro concesionario. Clasifica y extrae información según nuestros procedimientos internos.\n\nRESPONDE EN FORMATO JSON:\n{\n  \"clasificacion\": {\n    \"tipo_reclamo\": \"garantia|servicio_tecnico|atencion_cliente|producto_defectuoso|facturacion|otro\",\n    \"categoria\": \"categoría específica según políticas\",\n    \"subcategoria\": \"subcategoría específica\",\n    \"urgencia\": \"alta|media|baja\",\n    \"black_alert\": true/false\n  },\n  \"datos_extraidos\": {\n    \"sucursal_detectada\": \"sucursal mencionada o null\",\n    \"vehiculo\": {\n      \"patente\": \"patente detectada o null\",\n      \"vin\": \"vin detectado o null\",\n      \"marca\": \"marca detectada\",\n      \"modelo\": \"modelo detectado\",\n      \"año\": \"año si se menciona\"\n    },\n    \"fecha_incidente\": \"fecha del problema si se menciona\",\n    \"fecha_compra_estimada\": \"fecha de compra si se menciona\"\n  },\n  \"analisis\": {\n    \"resumen_problema\": \"resumen conciso del problema\",\n    \"factores_criticos\": [\"factor1\", \"factor2\"],\n    \"nivel_satisfaccion_estimado\": 1-10,\n    \"requiere_black_alert\": true/false,\n    \"dias_desde_compra\": \"número de días si se puede calcular\"\n  },\n  \"sugerencias_resolucion\": [\n    {\n      \"accion\": \"acción recomendada\",\n      \"responsable\": \"jefe_servicio|asesor_servicio|encargado_calidad\",\n      \"plazo\": \"plazo recomendado\",\n      \"prioridad\": \"alta|media|baja\"\n    }\n  ],\n  \"referencias_politicas\": [\"política aplicable del contexto\"],\n  \"comentarios_ia\": \"observaciones adicionales del análisis contextualizado\"\n}\n\nSOLO RESPONDE CON EL JSON, SIN TEXTO ADICIONAL.\n`;\n\nreturn {\n  complaint_data: complaintData,\n  tenant_config: tenantConfig,\n  enhanced_prompt: enhancedPrompt,\n  rag_context: {\n    documents_found: knowledgeResults.length,\n    context_used: true,\n    top_similarity: knowledgeResults[0]?.similarity || 0\n  }\n};"
       },
       "id": "build-enhanced-prompt",
       "name": "Build Enhanced Prompt",
@@ -394,7 +407,7 @@
       "main": [
         [
           {
-            "node": "Build Enhanced Prompt",
+            "node": "Rerank Documents (Cohere)",
             "type": "main",
             "index": 0
           }
@@ -402,6 +415,17 @@
         [
           {
             "node": "Build Basic Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rerank Documents (Cohere)": {
+      "main": [
+        [
+          {
+            "node": "Build Enhanced Prompt",
             "type": "main",
             "index": 0
           }
