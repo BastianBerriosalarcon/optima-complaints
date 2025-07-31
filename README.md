@@ -165,7 +165,7 @@ REDIS_URL=redis://10.129.0.4:6379
 RAILS_ENV=development
 
 # Google Cloud
-PROJECT_ID=burnished-data-463915-d8
+PROJECT_ID=optima-cx-467616
 REGION=southamerica-west1
 ```
 

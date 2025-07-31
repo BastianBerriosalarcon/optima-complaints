@@ -3,7 +3,7 @@
 variable "project_id" {
   description = "GCP Project ID"
   type        = string
-  default     = "burnished-data-463915-d8"
+  default     = "optima-cx-467616"
 }
 
 variable "region" {
@@ -130,7 +130,7 @@ variable "supabase_db_password" {
 variable "frontend_container_image" {
   description = "Frontend container image"
   type        = string
-  default     = "gcr.io/burnished-data-463915-d8/optimacx-frontend:latest"
+  default     = "gcr.io/optima-cx-467616/optimacx-frontend:latest"
 }
 
 variable "frontend_memory" {

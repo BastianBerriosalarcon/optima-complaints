@@ -111,11 +111,11 @@ N8N_WEBHOOK_URL=https://n8n-optima-cx-e6nurdtj6a-tl.a.run.app
 
 # Google Cloud
 GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
-GCP_PROJECT_ID=burnished-data-463915-d8
+GCP_PROJECT_ID=optima-cx-467616
 
 # AI/ML
 GEMINI_API_KEY=***
-VERTEX_AI_PROJECT=burnished-data-463915-d8
+VERTEX_AI_PROJECT=optima-cx-467616
 ```
 
 ## 🚀 Comandos Útiles

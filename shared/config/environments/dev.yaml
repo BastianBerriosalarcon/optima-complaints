@@ -4,7 +4,7 @@ extends: "../base.yaml"
 environment: "development"
 
 gcp:
-  project_id: "burnished-data-463915-d8"
+  project_id: "optima-cx-467616"
   region: "southamerica-west1"  # Santiago, Chile
 
 database:

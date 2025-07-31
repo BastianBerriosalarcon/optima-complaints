@@ -4,7 +4,7 @@
 .PHONY: help setup dev deploy status logs clean test
 
 # Variables
-PROJECT_ID := burnished-data-463915-d8
+PROJECT_ID := optima-cx-467616
 REGION := southamerica-west1
 SERVICE_NAME := n8n-optima-cx
 

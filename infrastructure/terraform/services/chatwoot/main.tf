@@ -11,7 +11,7 @@ resource "google_cloud_run_v2_service" "main" {
     }
 
     containers {
-      image = "southamerica-west1-docker.pkg.dev/burnished-data-463915-d8/optimacx-images/chatwoot:latest"
+      image = "southamerica-west1-docker.pkg.dev/optima-cx-467616/optimacx-images/chatwoot:latest"
 
       env {
         name = "DATABASE_URL"
@@ -170,7 +170,7 @@ resource "google_cloud_run_v2_job" "db_migrate" {
       }
 
       containers {
-        image = "southamerica-west1-docker.pkg.dev/burnished-data-463915-d8/optimacx-images/chatwoot:latest"
+        image = "southamerica-west1-docker.pkg.dev/optima-cx-467616/optimacx-images/chatwoot:latest"
         command = ["bundle", "exec", "rake", "db:chatwoot_prepare"]
 
         env {

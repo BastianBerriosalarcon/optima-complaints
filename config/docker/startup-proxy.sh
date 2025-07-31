@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Start Cloud SQL Proxy in background
-/cloud_sql_proxy -instances=burnished-data-463915-d8:southamerica-west1:n8n-postgres=tcp:5432 &
+/cloud_sql_proxy -instances=optima-cx-467616:southamerica-west1:n8n-postgres-instance=tcp:5432 &
 
 # Wait for proxy to be ready
 sleep 10
