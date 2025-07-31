@@ -27,6 +27,19 @@
         "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkbmxvZHd3bXZiZ2F5enp1ZGl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDYyMjIsImV4cCI6MjA2ODA4MjIyMn0.j4WztRRhuj-h0z7fxPhWd1pDyPmb-ouSjmbadfTxK3M",
         "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkbmxvZHd3bXZiZ2F5enp1ZGl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjUwNjIyMiwiZXhwIjoyMDY4MDgyMjIyfQ.G1TkMLmYVrk6R8ZmoakK6mvwqWsV8Crctc74iW5sh7c"
       }
+    },
+    "cloud-run": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "https://github.com/GoogleCloudPlatform/cloud-run-mcp"
+      ],
+      "env": {
+        "GOOGLE_CLOUD_PROJECT": "burnished-data-463915-d8",
+        "GOOGLE_CLOUD_REGION": "southamerica-west1",
+        "DEFAULT_SERVICE_NAME": "n8n-optimacx-supabase",
+        "SKIP_IAM_CHECK": "false"
+      }
     }
   }
 }

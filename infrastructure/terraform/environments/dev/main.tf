@@ -74,7 +74,7 @@ module "redis" {
   project_id        = var.project_id
   instance_name     = "chatwoot-redis-${var.environment}"
   region           = var.region
-  tier             = "STANDARD_HA"
+  tier             = "BASIC"
   memory_size_gb   = 1
   vpc_network_id   = module.networking.vpc_network.id
   project_services = keys(google_project_service.required_apis)
@@ -94,42 +94,7 @@ module "supabase" {
   region      = var.region
 }
 
-# N8N service
-module "n8n" {
-  source = "../../services/n8n"
 
-  project_id  = var.project_id
-  region      = var.region
-  environment = var.environment
-  
-  # Resource configuration
-  cpu           = var.n8n_cpu
-  memory        = var.n8n_memory
-  min_instances = var.n8n_min_instances
-  max_instances = var.n8n_max_instances
-  n8n_version   = var.n8n_version
-
-  # Service account
-  service_account_email = module.security.n8n_service_account.email
-
-  # VPC networking
-  vpc_connector_name = module.networking.vpc_connector_name
-
-  # Database secrets
-  database_host_secret     = "n8n-database-host-${var.environment}"
-  database_name_secret     = "n8n-database-name-${var.environment}"
-  database_user_secret     = "n8n-database-user-${var.environment}"
-  database_password_secret = "n8n-database-password-${var.environment}"
-  encryption_key_secret    = "n8n-encryption-key-${var.environment}"
-
-  # Access configuration
-  allow_unauthenticated = var.n8n_allow_unauthenticated
-
-  depends_on = [
-    module.networking,
-    module.security
-  ]
-}
 
 # OptimaCX Frontend service - COMMENTED OUT TEMPORARILY (no image available)
 # module "frontend" {
@@ -138,3 +103,25 @@ module "n8n" {
 # }
 
 # Chatwoot basic service removed - using multitenant service instead
+
+# Chatwoot service
+module "chatwoot" {
+  source = "../../services/chatwoot"
+
+  project_id        = var.project_id
+  environment       = var.environment
+  region            = var.region
+
+  service_account_email = module.security.chatwoot_service_account.email
+  vpc_connector_name    = module.networking.vpc_connector_id
+
+  database_url_secret_name    = "chatwoot-database-url-dev"
+  secret_key_base_secret_name = "chatwoot-secret-key-base-dev"
+  redis_url_secret_name       = module.redis.redis_url_secret_name
+
+  depends_on = [
+    module.redis,
+    module.security,
+    module.networking
+  ]
+}

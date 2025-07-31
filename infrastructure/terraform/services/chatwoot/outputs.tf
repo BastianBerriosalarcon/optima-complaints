@@ -1,19 +1,9 @@
 output "service_name" {
-  description = "Chatwoot service name"
-  value       = module.chatwoot_cloud_run.service_name
+  description = "Name of the Chatwoot service"
+  value       = google_cloud_run_v2_service.main.name
 }
 
 output "service_url" {
-  description = "Chatwoot service URL"
-  value       = module.chatwoot_cloud_run.service_url
-}
-
-output "service_id" {
-  description = "Chatwoot service ID"
-  value       = module.chatwoot_cloud_run.service_id
-}
-
-output "custom_domain_url" {
-  description = "Custom domain URL (if configured)"
-  value       = var.custom_domain != "" ? "https://${var.custom_domain}" : ""
+  description = "URL of the Chatwoot service"
+  value       = google_cloud_run_v2_service.main.uri
 }

@@ -25,7 +25,7 @@ resource "google_redis_instance" "main" {
   project        = var.project_id
 
   location_id             = var.location_id
-  alternative_location_id = var.alternative_location_id
+  
 
   authorized_network = var.vpc_network_id
   connect_mode       = var.connect_mode
