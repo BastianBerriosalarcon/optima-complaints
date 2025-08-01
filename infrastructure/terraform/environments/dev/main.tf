@@ -10,10 +10,10 @@ terraform {
     }
   }
 
-  backend "gcs" {
-    bucket = "optimacx-terraform-state"
-    prefix = "terraform/dev"
-  }
+  # backend "gcs" {
+  #   bucket = "optimacx-terraform-state"
+  #   prefix = "terraform/dev"
+  # }
 }
 
 # Provider configuration
@@ -67,6 +67,24 @@ module "database" {
   project_services = keys(google_project_service.required_apis)
 }
 
+# N8N service
+module "n8n" {
+  source = "../../services/n8n"
+
+  project_id        = var.project_id
+  region            = var.region
+  environment       = var.environment
+  service_account_email = module.security.n8n_service_account.email
+  db_connection_name = "optima-cx-467616:southamerica-west1:n8n-postgres-instance"
+  container_image   = "southamerica-west1-docker.pkg.dev/optima-cx-467616/n8n/n8n-multitenant:latest"
+
+  depends_on = [
+    module.database,
+    module.security,
+    module.networking
+  ]
+}
+
 # Redis module for Chatwoot sessions
 module "redis" {
   source = "../../modules/redis"
@@ -105,23 +123,23 @@ module "supabase" {
 # Chatwoot basic service removed - using multitenant service instead
 
 # Chatwoot service
-module "chatwoot" {
-  source = "../../services/chatwoot"
-
-  project_id        = var.project_id
-  environment       = var.environment
-  region            = var.region
-
-  service_account_email = module.security.chatwoot_service_account.email
-  vpc_connector_name    = module.networking.vpc_connector_id
-
-  database_url_secret_name    = "chatwoot-database-url-dev"
-  secret_key_base_secret_name = "chatwoot-secret-key-base-dev"
-  redis_url_secret_name       = module.redis.redis_url_secret_name
-
-  depends_on = [
-    module.redis,
-    module.security,
-    module.networking
-  ]
-}
+# module "chatwoot" {
+  #   source = "../../services/chatwoot"
+# 
+#   project_id        = var.project_id
+#   environment       = var.environment
+#   region            = var.region
+# 
+#   service_account_email = module.security.chatwoot_service_account.email
+#   vpc_connector_name    = module.networking.vpc_connector_id
+# 
+#   database_url_secret_name    = "chatwoot-database-url-dev"
+#   secret_key_base_secret_name = "chatwoot-secret-key-base-dev"
+#   redis_url_secret_name       = module.redis.redis_url_secret_name
+# 
+#   depends_on = [
+#     module.redis,
+#     module.security,
+#     module.networking
+#   ]
+# }

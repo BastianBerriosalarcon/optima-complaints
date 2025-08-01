@@ -56,16 +56,13 @@ resource "google_cloud_run_v2_service" "service" {
       }
 
       # Startup probe (optional)
-      dynamic "startup_probe" {
-        for_each = var.startup_probe_timeout_seconds > 0 ? [1] : []
-        content {
-          initial_delay_seconds = var.startup_probe_initial_delay_seconds
-          timeout_seconds       = var.startup_probe_timeout_seconds
-          period_seconds        = var.startup_probe_period_seconds
-          failure_threshold     = var.startup_probe_failure_threshold
-          tcp_socket {
-            port = var.container_port
-          }
+      startup_probe {
+        initial_delay_seconds = var.startup_probe_initial_delay_seconds
+        timeout_seconds       = var.startup_probe_timeout_seconds
+        period_seconds        = var.startup_probe_period_seconds
+        failure_threshold     = var.startup_probe_failure_threshold
+        tcp_socket {
+          port = var.container_port
         }
       }
     }

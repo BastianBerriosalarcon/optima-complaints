@@ -33,7 +33,7 @@ output "ssl_certificate" {
   value       = length(google_compute_managed_ssl_certificate.ssl_cert) > 0 ? google_compute_managed_ssl_certificate.ssl_cert[0] : null
 }
 
-output "security_policy" {
-  description = "Cloud Armor security policy"
-  value       = google_compute_security_policy.security_policy
-}
+# output "security_policy" {
+#   description = "Cloud Armor security policy"
+#   value       = google_compute_security_policy.security_policy
+# }

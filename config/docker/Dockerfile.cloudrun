@@ -1,0 +1,15 @@
+FROM docker.n8n.io/n8nio/n8n:latest
+
+USER root
+
+# Copy the startup script into the container
+COPY startup-cloudrun.sh /startup-cloudrun.sh
+RUN chmod +x /startup-cloudrun.sh
+
+USER node
+
+# The EXPOSE command is good practice for documentation, but Cloud Run will use the PORT env var.
+EXPOSE 8080
+
+# Set the new startup script as the entrypoint
+ENTRYPOINT ["/bin/sh", "/startup-cloudrun.sh"]

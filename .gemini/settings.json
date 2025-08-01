@@ -35,10 +35,10 @@
         "https://github.com/GoogleCloudPlatform/cloud-run-mcp"
       ],
       "env": {
-        "GOOGLE_CLOUD_PROJECT": "burnished-data-463915-d8",
+        "GOOGLE_CLOUD_PROJECT": "optima-cx-467616",
         "GOOGLE_CLOUD_REGION": "southamerica-west1",
         "DEFAULT_SERVICE_NAME": "n8n-optimacx-supabase",
-        "SKIP_IAM_CHECK": "false"
+        "SKIP_IAM_CHECK": "true"
       }
     }
   }

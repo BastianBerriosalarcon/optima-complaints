@@ -47,47 +47,47 @@ resource "google_compute_managed_ssl_certificate" "ssl_cert" {
 }
 
 # Cloud Armor Security Policy
-resource "google_compute_security_policy" "security_policy" {
-  name        = "optimacx-security-policy-${var.environment}"
-  description = "Security policy for OptimaCX platform"
-  project     = var.project_id
-
-  # Default rule - allow all
-  rule {
-    action   = "allow"
-    priority = "2147483647"
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = ["*"]
-      }
-    }
-    description = "default rule"
-  }
-
-  # Rate limiting rule
-  rule {
-    action   = "rate_based_ban"
-    priority = "1000"
-    match {
-      versioned_expr = "SRC_IPS_V1"
-      config {
-        src_ip_ranges = ["*"]
-      }
-    }
-    rate_limit_options {
-      conform_action = "allow"
-      exceed_action  = "deny(429)"
-      enforce_on_key = "IP"
-      rate_limit_threshold {
-        count        = 100
-        interval_sec = 60
-      }
-      ban_duration_sec = 300
-    }
-    description = "Rate limiting rule"
-  }
-}
+# resource "google_compute_security_policy" "security_policy" {
+  
+  #   description = "Security policy for OptimaCX platform"
+#   project     = var.project_id
+# 
+#   # Default rule - allow all
+#   rule {
+#     action   = "allow"
+#     priority = "2147483647"
+#     match {
+#       versioned_expr = "SRC_IPS_V1"
+#       config {
+#         src_ip_ranges = ["*"]
+#       }
+#     }
+#     description = "default rule"
+#   }
+# 
+#   # Rate limiting rule
+#   rule {
+#     action   = "rate_based_ban"
+#     priority = "1000"
+#     match {
+#       versioned_expr = "SRC_IPS_V1"
+#       config {
+#         src_ip_ranges = ["*"]
+#       }
+#     }
+#     rate_limit_options {
+#       conform_action = "allow"
+#       exceed_action  = "deny(429)"
+#       enforce_on_key = "IP"
+#       rate_limit_threshold {
+#         count        = 100
+#         interval_sec = 60
+#       }
+#       ban_duration_sec = 300
+#     }
+#     description = "Rate limiting rule"
+#   }
+# }
 
 # Cloud Router for NAT
 resource "google_compute_router" "router" {
