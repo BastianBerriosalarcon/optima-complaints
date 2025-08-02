@@ -11,7 +11,16 @@
       "env": {
         "N8N_HOST": "https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app",
         "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNTIyYzQ1Ny0zMTkxLTQ1OTAtOGNiMi0yM2FmOTNmYjZhOWUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUzODQ3NTM4fQ.-k3vQzfiMSYvfHRQ33eZ78p7pU7zB8G13X3777SSVL0"
-      }
+      },
+      "timeout": 30000,
+      "trust": false,
+      "includeTools": [
+        "create_workflow",
+        "get_workflow",
+        "execute_workflow",
+        "list_workflows",
+        "update_workflow"
+      ]
     },
     "supabase": {
       "command": "npx",
@@ -26,7 +35,17 @@
         "SUPABASE_URL": "https://gdnlodwwmvbgayzzudiu.supabase.co",
         "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkbmxvZHd3bXZiZ2F5enp1ZGl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDYyMjIsImV4cCI6MjA2ODA4MjIyMn0.j4WztRRhuj-h0z7fxPhWd1pDyPmb-ouSjmbadfTxK3M",
         "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkbmxvZHd3bXZiZ2F5enp1ZGl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjUwNjIyMiwiZXhwIjoyMDY4MDgyMjIyfQ.G1TkMLmYVrk6R8ZmoakK6mvwqWsV8Crctc74iW5sh7c"
-      }
+      },
+      "timeout": 45000,
+      "trust": false,
+      "includeTools": [
+        "query_database",
+        "insert_data",
+        "update_data",
+        "create_table",
+        "list_tables",
+        "get_schema"
+      ]
     },
     "cloud-run": {
       "command": "npx",
@@ -39,7 +58,73 @@
         "GOOGLE_CLOUD_REGION": "southamerica-west1",
         "DEFAULT_SERVICE_NAME": "n8n-optimacx-supabase",
         "SKIP_IAM_CHECK": "true"
-      }
+      },
+      "timeout": 60000,
+      "trust": false,
+      "includeTools": [
+        "deploy_service",
+        "get_service_status",
+        "list_services",
+        "update_service",
+        "get_logs"
+      ]
+    },
+    "terraform-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@terrapilot/terraform-mcp-server"
+      ],
+      "cwd": "/workspaces/optimacx-GCP/infrastructure/terraform",
+      "env": {
+        "TF_VAR_project_id": "optima-cx-467616",
+        "TF_VAR_region": "southamerica-west1",
+        "GOOGLE_CLOUD_PROJECT": "optima-cx-467616"
+      },
+      "timeout": 120000,
+      "trust": false,
+      "includeTools": [
+        "terraform_plan",
+        "terraform_apply",
+        "terraform_destroy",
+        "terraform_state",
+        "terraform_validate"
+      ]
+    },
+    "database-schema": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "postgresql://postgres.gdnlodwwmvbgayzzudiu:${SUPABASE_DB_PASSWORD}@aws-0-sa-east-1.pooler.supabase.com:6543/postgres"
+      },
+      "timeout": 30000,
+      "trust": false,
+      "includeTools": [
+        "query",
+        "list_tables",
+        "describe_table",
+        "list_schemas"
+      ]
+    },
+    "git-operations": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-git"
+      ],
+      "cwd": "/workspaces/optimacx-GCP",
+      "timeout": 30000,
+      "trust": false,
+      "includeTools": [
+        "git_status",
+        "git_log",
+        "git_diff",
+        "git_commit",
+        "git_push"
+      ]
     }
   }
 }

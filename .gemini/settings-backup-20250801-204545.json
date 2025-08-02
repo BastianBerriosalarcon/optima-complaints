@@ -1,0 +1,45 @@
+{
+  "selectedAuthType": "cloud-shell",
+  "theme": "Default",
+  "mcpServers": {
+    "n8n-workflow-builder": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@makafeli/n8n-workflow-builder"
+      ],
+      "env": {
+        "N8N_HOST": "https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app",
+        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNTIyYzQ1Ny0zMTkxLTQ1OTAtOGNiMi0yM2FmOTNmYjZhOWUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUzODQ3NTM4fQ.-k3vQzfiMSYvfHRQ33eZ78p7pU7zB8G13X3777SSVL0"
+      }
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--read-only",
+        "--project-ref=gdnlodwwmvbgayzzudiu"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "sbp_60c60e0997c9c5e50f1dfb0fb484b3183d3e4172",
+        "SUPABASE_URL": "https://gdnlodwwmvbgayzzudiu.supabase.co",
+        "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkbmxvZHd3bXZiZ2F5enp1ZGl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDYyMjIsImV4cCI6MjA2ODA4MjIyMn0.j4WztRRhuj-h0z7fxPhWd1pDyPmb-ouSjmbadfTxK3M",
+        "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkbmxvZHd3bXZiZ2F5enp1ZGl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjUwNjIyMiwiZXhwIjoyMDY4MDgyMjIyfQ.G1TkMLmYVrk6R8ZmoakK6mvwqWsV8Crctc74iW5sh7c"
+      }
+    },
+    "cloud-run": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "https://github.com/GoogleCloudPlatform/cloud-run-mcp"
+      ],
+      "env": {
+        "GOOGLE_CLOUD_PROJECT": "optima-cx-467616",
+        "GOOGLE_CLOUD_REGION": "southamerica-west1",
+        "DEFAULT_SERVICE_NAME": "n8n-optimacx-supabase",
+        "SKIP_IAM_CHECK": "true"
+      }
+    }
+  }
+}
