@@ -16,21 +16,21 @@ output "load_balancer_ip" {
   value       = module.networking.lb_ip
 }
 
-# N8N service outputs - COMMENTED OUT TEMPORARILY
-# output "n8n_service_name" {
-#   description = "N8N service name"
-#   value       = module.n8n.service_name
-# }
+# N8N service outputs
+output "n8n_service_name" {
+  description = "N8N service name"
+  value       = module.n8n.service_name
+}
 
-# output "n8n_service_url" {
-#   description = "N8N service URL"
-#   value       = module.n8n.service_url
-# }
+output "n8n_service_url" {
+  description = "N8N service URL"
+  value       = module.n8n.service_url
+}
 
-# output "n8n_custom_domain_url" {
-#   description = "N8N custom domain URL"
-#   value       = module.n8n.custom_domain_url
-# }
+output "n8n_service_location" {
+  description = "N8N service location"
+  value       = module.n8n.service_location
+}
 
 # Frontend service outputs - COMMENTED OUT TEMPORARILY
 # output "frontend_service_name" {

@@ -165,4 +165,26 @@ variable "frontend_domain" {
 
 # Chatwoot basic service variables - removed (using multitenant service instead)
 
+# N8N Configuration Variables
+variable "n8n_db_password" {
+  description = "Database password for N8N"
+  type        = string
+  sensitive   = true
+  default     = "n8n_secure_password_2024"
+}
+
+variable "n8n_encryption_key" {
+  description = "N8N encryption key"
+  type        = string
+  sensitive   = true
+  default     = "n8n-encryption-key-optimacx-2024"
+}
+
+variable "n8n_basic_auth_password" {
+  description = "N8N basic auth password"
+  type        = string
+  sensitive   = true
+  default     = "OptimaCX2024!"
+}
+
 # Redis configuration handled by module

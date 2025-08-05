@@ -71,12 +71,19 @@ module "database" {
 module "n8n" {
   source = "../../services/n8n"
 
-  project_id        = var.project_id
-  region            = var.region
-  environment       = var.environment
+  project_id            = var.project_id
+  region                = var.region
+  environment           = var.environment
   service_account_email = module.security.n8n_service_account.email
-  db_connection_name = "optima-cx-467616:southamerica-west1:n8n-postgres-instance"
-  container_image   = "southamerica-west1-docker.pkg.dev/optima-cx-467616/n8n/n8n-multitenant:latest"
+  db_connection_name    = "optima-cx-467616:southamerica-west1:n8n-postgres-instance"
+  container_image       = "southamerica-west1-docker.pkg.dev/optima-cx-467616/n8n/n8n-multitenant:latest"
+  
+  # Database credentials
+  db_password = var.n8n_db_password
+  
+  # N8N configuration
+  encryption_key         = var.n8n_encryption_key
+  basic_auth_password   = var.n8n_basic_auth_password
 
   depends_on = [
     module.database,
