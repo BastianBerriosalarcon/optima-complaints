@@ -3,7 +3,7 @@ FROM docker.n8n.io/n8nio/n8n:latest
 USER root
 
 # Copy the startup script into the container
-COPY startup-cloudrun.sh /startup-cloudrun.sh
+COPY config/docker/startup-cloudrun.sh /startup-cloudrun.sh
 RUN chmod +x /startup-cloudrun.sh
 
 USER node

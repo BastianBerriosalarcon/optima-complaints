@@ -32,7 +32,7 @@ variable "chatwoot_image" {
 variable "cpu" {
   description = "CPU allocation"
   type        = string
-  default     = "2"
+  default     = "2000m"
 }
 
 variable "memory" {
@@ -51,6 +51,18 @@ variable "max_instances" {
   description = "Maximum instances"
   type        = string
   default     = "10"
+}
+
+variable "max_concurrency" {
+  description = "Maximum concurrent requests per instance"
+  type        = number
+  default     = 80
+}
+
+variable "timeout_seconds" {
+  description = "Request timeout in seconds"
+  type        = number
+  default     = 300
 }
 
 # Networking

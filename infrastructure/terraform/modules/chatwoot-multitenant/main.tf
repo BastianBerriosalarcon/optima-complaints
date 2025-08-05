@@ -18,35 +18,77 @@ terraform {
 locals {
   service_name = "chatwoot-multitenant-${var.environment}"
   
+  # Dynamic service URL for multitenant setup
+  service_url = "https://${local.service_name}-${var.project_id}.${var.region}.run.app"
+  
   # Basic required environment variables for Chatwoot
   base_env_vars = {
     "RAILS_ENV"                = "production"
     "NODE_ENV"                 = "production" 
     "RAILS_LOG_TO_STDOUT"      = "true"
     "RAILS_LOG_LEVEL"          = "info"
-    "FRONTEND_URL"             = "https://${local.service_name}-1008284849803.southamerica-west1.run.app"
+    "FRONTEND_URL"             = local.service_url
     
     # Required Chatwoot settings
     "INSTALLATION_ENV"         = "docker"
     "RAILS_SERVE_STATIC_FILES" = "true"
     "EXECJS_RUNTIME"           = "Disabled"
+    
+    # Multitenant Configuration
+    "ENABLE_ACCOUNT_SIGNUP"    = "false"  # Only admin can create accounts
+    "ACCOUNT_SIGNUP_METHOD"    = "invite_only"
+    "MAILER_SENDER_EMAIL"      = "noreply@optimacx.net"
+    "SUPPORT_EMAIL"            = "support@optimacx.net"
+    
+    # WhatsApp Configuration - Optimizado para Chile
+    "WHATSAPP_CLOUD_BASE_URL"  = "https://graph.facebook.com"
+    "WHATSAPP_CLOUD_VERSION"   = "v18.0"
+    
+    # N8N Integration
+    "N8N_WEBHOOK_BASE_URL"     = var.n8n_webhook_base_url
+    "WEBHOOK_MAX_PAYLOAD_SIZE" = "20971520"  # 20MB
+    
+    # Security
+    "FORCE_SSL"                = "true"
+    "RAILS_ASSUME_SSL"         = "true"
+    "ALLOWED_HOSTS"            = "*"
+    
+    # Performance Optimization para Chile/Sudamérica
+    "RAILS_MAX_THREADS"        = "10"      # Más threads para mejor concurrencia
+    "WEB_CONCURRENCY"          = "2"       # Procesos worker optimizados
+    "MALLOC_ARENA_MAX"         = "2"       # Control de memoria
+    "RUBY_GC_HEAP_GROWTH_FACTOR" = "1.1"   # GC optimizado
+    "RUBY_GC_HEAP_GROWTH_MAX_SLOTS" = "40000"
+    
+    # Timezone Chile
+    "TZ"                       = "America/Santiago"
+    "RAILS_TIMEZONE"           = "America/Santiago"
   }
 
   # Database configuration
   database_env_vars = {
-    "POSTGRES_HOST"     = var.postgres_host
+    "POSTGRES_HOST"     = var.supabase_host
     "POSTGRES_PORT"     = "5432"
     "POSTGRES_DATABASE" = "postgres"  # Use default postgres database
-    "POSTGRES_USERNAME" = var.postgres_username
+    "POSTGRES_USERNAME" = var.supabase_username
   }
 
-  # Redis configuration
+  # Redis configuration - Optimizado para Chile/Sudamérica
   redis_env_vars = {
     "REDIS_HOST"        = var.redis_host
     "REDIS_PORT"        = var.redis_port
     "REDIS_SSL_VERIFY"  = "false"
-    "REDIS_TIMEOUT"     = "5"
-    "REDIS_PASSWORD"    = ""  # Redis auth disabled for now
+    "REDIS_TIMEOUT"     = "2"      # Timeout reducido para baja latencia
+    "REDIS_PASSWORD"    = ""       # Redis auth disabled for now
+    
+    # Redis Performance Optimization
+    "REDIS_POOL_SIZE"   = "10"     # Pool de conexiones más grande
+    "REDIS_DB"          = "0"      # Base de datos Redis
+    "REDIS_KEEPALIVE"   = "true"   # Mantener conexiones vivas
+    
+    # Session Management optimizado
+    "SESSION_TIMEOUT"   = "3600"   # 1 hora de timeout de sesión
+    "RAILS_CACHE_STORE" = "redis_cache_store"
   }
 }
 

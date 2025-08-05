@@ -12,11 +12,33 @@ terraform {
 
 # Local values for DRY principle
 locals {
-  # Example tenant configuration - should be moved to variables
+  # Tenant configuration - Production ready domains
   tenant_domains = {
     "concesionario_001" = "concesionario1.chat.optimacx.net"
     "concesionario_002" = "concesionario2.chat.optimacx.net"
     "concesionario_003" = "concesionario3.chat.optimacx.net"
+  }
+
+  # WhatsApp Business API configuration per tenant
+  whatsapp_configs = {
+    "concesionario_001" = {
+      phone_number_id = "PLACEHOLDER_001"
+      access_token    = "PLACEHOLDER_TOKEN_001"
+      verify_token    = "verify_token_001"
+      webhook_secret  = "webhook_secret_001"
+    }
+    "concesionario_002" = {
+      phone_number_id = "PLACEHOLDER_002"
+      access_token    = "PLACEHOLDER_TOKEN_002"
+      verify_token    = "verify_token_002"
+      webhook_secret  = "webhook_secret_002"
+    }
+    "concesionario_003" = {
+      phone_number_id = "PLACEHOLDER_003"
+      access_token    = "PLACEHOLDER_TOKEN_003"
+      verify_token    = "verify_token_003"
+      webhook_secret  = "webhook_secret_003"
+    }
   }
 
   common_labels = {
@@ -63,22 +85,24 @@ module "chatwoot_multitenant" {
   region      = var.region
   environment = var.environment
 
-  # Container configuration
-  container_image = var.chatwoot_image
+  # Container configuration - Optimizado para Chile
+  container_image = "chatwoot/chatwoot:v4.4.0"
   cpu            = var.cpu
   memory         = var.memory
   min_instances  = var.min_instances
   max_instances  = var.max_instances
+  max_concurrency = var.max_concurrency
+  timeout_seconds = var.timeout_seconds
 
-  # Networking
+  # Networking optimizado para Sudamérica
   vpc_connector_name      = var.vpc_connector_name
   allow_unauthenticated  = true
   service_account_email  = google_service_account.chatwoot_service_account.email
 
   # Database configuration
-  postgres_host     = var.supabase_host
-  postgres_username = var.supabase_username
-  postgres_password = var.supabase_password
+  supabase_host     = var.supabase_host
+  supabase_username = var.supabase_username
+  supabase_password = var.supabase_password
 
   # Redis configuration (using existing Redis instance)
   redis_host = var.redis_host

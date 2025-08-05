@@ -18,7 +18,7 @@ resource "google_secret_manager_secret" "postgres_password" {
 
 resource "google_secret_manager_secret_version" "postgres_password" {
   secret      = google_secret_manager_secret.postgres_password.id
-  secret_data = var.postgres_password
+  secret_data = var.supabase_password
 }
 
 # Redis URL secret
@@ -118,5 +118,5 @@ resource "google_secret_manager_secret" "database_url" {
 
 resource "google_secret_manager_secret_version" "database_url" {
   secret      = google_secret_manager_secret.database_url.id
-  secret_data = "postgresql://${var.postgres_username}:${var.postgres_password}@${var.postgres_host}:5432/postgres"
+  secret_data = "postgresql://${var.supabase_username}:${var.supabase_password}@${var.supabase_host}:5432/postgres"
 }

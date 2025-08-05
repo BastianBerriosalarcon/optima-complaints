@@ -85,18 +85,18 @@ variable "service_account_email" {
 }
 
 # Database Configuration
-variable "postgres_host" {
-  description = "PostgreSQL host"
+variable "supabase_host" {
+  description = "Supabase PostgreSQL host"
   type        = string
 }
 
-variable "postgres_username" {
-  description = "PostgreSQL username"
+variable "supabase_username" {
+  description = "Supabase PostgreSQL username"
   type        = string
 }
 
-variable "postgres_password" {
-  description = "PostgreSQL password (will be stored in Secret Manager)"
+variable "supabase_password" {
+  description = "Supabase PostgreSQL password (will be stored in Secret Manager)"
   type        = string
   sensitive   = true
 }
@@ -117,12 +117,23 @@ variable "redis_port" {
 variable "tenant_domains" {
   description = "Map of tenant IDs to their custom domains"
   type        = map(string)
-  default     = {}
+  default = {
+    "concesionario_001" = "concesionario1.chat.optimacx.net"
+    "concesionario_002" = "concesionario2.chat.optimacx.net"
+    "concesionario_003" = "concesionario3.chat.optimacx.net"
+  }
 }
 
 variable "whatsapp_webhook_base_url" {
   description = "Base URL for WhatsApp webhooks"
   type        = string
+  default     = "https://n8n-optimacx-supabase-dev-1008284849803.southamerica-west1.run.app"
+}
+
+variable "n8n_webhook_base_url" {
+  description = "N8N webhook base URL for integrations"
+  type        = string
+  default     = "https://n8n-optimacx-supabase-dev-1008284849803.southamerica-west1.run.app"
 }
 
 # Monitoring
@@ -146,4 +157,25 @@ variable "notification_channels" {
   description = "List of notification channels for alerting"
   type        = list(string)
   default     = []
+}
+
+# Cloud SQL Santiago Variables
+variable "use_cloud_sql_santiago" {
+  description = "Whether to use Cloud SQL Santiago instead of Supabase"
+  type        = bool
+  default     = false
+}
+
+variable "chatwoot_db_password" {
+  description = "Password for Chatwoot database user"
+  type        = string
+  sensitive   = true
+  default     = "chatwoot_secure_password_123"
+}
+
+variable "supabase_database_url" {
+  description = "Complete Supabase database URL"
+  type        = string
+  sensitive   = true
+  default     = ""
 }

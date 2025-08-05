@@ -1,0 +1,340 @@
+{
+  "name": "Chatwoot Multitenant Webhook Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot/{{$parameter[\"tenant_id\"]}}",
+        "options": {}
+      },
+      "id": "webhook-receiver",
+      "name": "Webhook Chatwoot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "chatwoot-multitenant"
+    },
+    {
+      "parameters": {
+        "functionCode": "// 🎯 Identificación de Tenant desde Chatwoot\n// Extrae tenant_id basado en account.id del payload\n\nconst payload = $input.first().json;\n\n// Log para debugging\nconsole.log('Chatwoot Webhook Payload:', JSON.stringify(payload, null, 2));\n\n// Extraer account.id del payload de Chatwoot\nconst accountId = payload.account?.id;\nif (!accountId) {\n  throw new Error('Account ID no encontrado en payload de Chatwoot');\n}\n\n// Mapeo de account.id a tenant_id (esto debe venir de BD)\nconst tenantMapping = {\n  '1': 'concesionario_001',\n  '2': 'concesionario_002', \n  '3': 'concesionario_003'\n};\n\nconst tenantId = tenantMapping[accountId.toString()];\nif (!tenantId) {\n  throw new Error(`Tenant no encontrado para account.id: ${accountId}`);\n}\n\n// Preparar datos para procesamiento\nreturn {\n  tenant_id: tenantId,\n  account_id: accountId,\n  message_type: payload.message_type || 'incoming',\n  conversation_id: payload.conversation?.id,\n  contact_id: payload.sender?.id,\n  message_content: payload.content,\n  phone_number: payload.conversation?.meta?.sender?.phone_number,\n  timestamp: payload.created_at || new Date().toISOString(),\n  event_type: payload.event,\n  raw_payload: payload\n};"
+      },
+      "id": "tenant-identifier",
+      "name": "Identificar Tenant",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "select",
+        "schema": "public",
+        "table": "tenant_config",
+        "where": {
+          "conditions": [
+            {
+              "column": "concesionario_id",
+              "operation": "=",
+              "value": "={{$json.tenant_id}}"
+            }
+          ]
+        }
+      },
+      "id": "load-tenant-config",
+      "name": "Cargar Config Tenant",
+      "type": "n8n-nodes-base.supabase", 
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-optimacx",
+          "name": "Supabase OptimaCX"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event_type}}",
+              "operation": "equal",
+              "value2": "message_created"
+            }
+          ]
+        }
+      },
+      "id": "check-message-type",
+      "name": "¿Es Mensaje Nuevo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// 🤖 Análisis IA de Mensaje - Específico por Tenant\n// Procesa mensaje con configuración específica del concesionario\n\nconst tenantConfig = $input.first().json;\nconst messageData = $('Identificar Tenant').first().json;\n\n// Configuración IA específica del tenant\nconst aiConfig = {\n  provider: tenantConfig.ai_provider || 'gemini',\n  model: tenantConfig.ai_model || 'gemini-2.5-pro',\n  api_key: tenantConfig.ai_api_key,\n  prompts: tenantConfig.prompts_ventas || {}\n};\n\n// Prompt específico para análisis de leads\nconst analysisPrompt = `\nAnaliza el siguiente mensaje de WhatsApp para el concesionario ${tenantConfig.concesionario_id}:\n\nMensaje: \"${messageData.message_content}\"\nTeléfono: ${messageData.phone_number}\n\nExtrae y clasifica:\n1. Intención (compra, información, servicio, cotización, reclamo)\n2. Modelo de vehículo de interés (si aplica)\n3. Urgencia (alta, media, baja)\n4. Score de calidad (1-100)\n5. Datos del cliente detectados\n\nResponde en formato JSON válido.\n`;\n\n// Preparar request para IA\nreturn {\n  tenant_id: messageData.tenant_id,\n  conversation_id: messageData.conversation_id,\n  phone_number: messageData.phone_number,\n  message_content: messageData.message_content,\n  ai_config: aiConfig,\n  analysis_prompt: analysisPrompt,\n  timestamp: messageData.timestamp\n};"
+      },
+      "id": "ai-analysis",
+      "name": "Análisis IA",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "insert",
+        "schema": "public", 
+        "table": "leads",
+        "columns": "tenant_id, telefono_cliente, mensaje_original, intencion_detectada, score_calidad, nivel_interes, fuente_lead, fecha_creacion",
+        "values": "={{$json.tenant_id}}, {{$json.phone_number}}, {{$json.message_content}}, {{$json.ai_analysis.intencion}}, {{$json.ai_analysis.score}}, {{$json.ai_analysis.urgencia}}, 'whatsapp', NOW()"
+      },
+      "id": "create-lead",
+      "name": "Crear Lead",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-optimacx",
+          "name": "Supabase OptimaCX"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.ai_analysis.score}}",
+              "operation": "largerEqual",
+              "value2": 70
+            }
+          ]
+        }
+      },
+      "id": "check-lead-quality",
+      "name": "¿Lead Caliente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "resource": "database",
+        "operation": "select",
+        "schema": "public",
+        "table": "usuarios",
+        "where": {
+          "conditions": [
+            {
+              "column": "concesionario_id", 
+              "operation": "=",
+              "value": "={{$json.tenant_id}}"
+            },
+            {
+              "column": "rol",
+              "operation": "=", 
+              "value": "asesor_ventas"
+            },
+            {
+              "column": "activo",
+              "operation": "=",
+              "value": true
+            }
+          ]
+        },
+        "options": {
+          "orderBy": "RANDOM()",
+          "limit": 1
+        }
+      },
+      "id": "assign-advisor",
+      "name": "Asignar Asesor",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1780, 120],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-optimacx",
+          "name": "Supabase OptimaCX"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "to": "={{$json.email}}",
+        "subject": "🔥 Nuevo Lead Caliente - {{$('Identificar Tenant').first().json.tenant_id}}",
+        "message": "Se ha detectado un nuevo lead de alta calidad:\\n\\nTeléfono: {{$('Identificar Tenant').first().json.phone_number}}\\nMensaje: {{$('Identificar Tenant').first().json.message_content}}\\nScore: {{$('Análisis IA').first().json.ai_analysis.score}}/100\\n\\nAccede al sistema para gestionar este lead.",
+        "options": {}
+      },
+      "id": "notify-advisor",
+      "name": "Notificar Asesor",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [2000, 120],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-optimacx",
+          "name": "SMTP OptimaCX"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// 📊 Log y Respuesta Final\n// Registra el procesamiento y prepara respuesta\n\nconst processedData = $input.all();\nconst originalMessage = $('Identificar Tenant').first().json;\n\nconsole.log('✅ Procesamiento completado para tenant:', originalMessage.tenant_id);\nconsole.log('📱 Teléfono procesado:', originalMessage.phone_number);\nconsole.log('🎯 Tipo de evento:', originalMessage.event_type);\n\nreturn {\n  status: 'success',\n  tenant_id: originalMessage.tenant_id,\n  conversation_id: originalMessage.conversation_id,\n  processed_at: new Date().toISOString(),\n  actions_taken: processedData.map(item => item.json?.action || 'processed'),\n  webhook_response: {\n    message: 'Mensaje procesado correctamente',\n    tenant: originalMessage.tenant_id\n  }\n};"
+      },
+      "id": "final-response",
+      "name": "Respuesta Final",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [2220, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Identificar Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identificar Tenant": {
+      "main": [
+        [
+          {
+            "node": "Cargar Config Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Config Tenant": {
+      "main": [
+        [
+          {
+            "node": "¿Es Mensaje Nuevo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es Mensaje Nuevo?": {
+      "main": [
+        [
+          {
+            "node": "Análisis IA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Análisis IA": {
+      "main": [
+        [
+          {
+            "node": "Crear Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Lead": {
+      "main": [
+        [
+          {
+            "node": "¿Lead Caliente?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Lead Caliente?": {
+      "main": [
+        [
+          {
+            "node": "Asignar Asesor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asignar Asesor": {
+      "main": [
+        [
+          {
+            "node": "Notificar Asesor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar Asesor": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "timezone": "America/Santiago",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "chatwoot-multitenant-optimacx"
+  },
+  "id": "chatwoot-multitenant-webhook",
+  "tags": [
+    {
+      "name": "chatwoot",
+      "id": "chatwoot"
+    },
+    {
+      "name": "multitenant",
+      "id": "multitenant"
+    },
+    {
+      "name": "whatsapp",
+      "id": "whatsapp"
+    },
+    {
+      "name": "leads",
+      "id": "leads"
+    }
+  ]
+}
