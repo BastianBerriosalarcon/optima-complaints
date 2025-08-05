@@ -31,6 +31,12 @@ variable "supabase_username" {
   default     = "postgres.bvwgmqzxlxvbvyqwmmrr"
 }
 
+variable "supabase_port" {
+  description = "Supabase PostgreSQL port"
+  type        = number
+  default     = 6543
+}
+
 variable "supabase_password" {
   description = "Supabase PostgreSQL password for Chatwoot"
   type        = string
@@ -74,7 +80,7 @@ variable "min_instances" {
 variable "max_instances" {
   description = "Maximum number of instances"
   type        = number
-  default     = 10       # Auto-scaling hasta 10 instancias en peak
+  default     = 5        # Ajustado según quota disponible
 }
 
 variable "max_concurrency" {
@@ -88,4 +94,27 @@ variable "timezone" {
   description = "Timezone for Chatwoot"
   type        = string
   default     = "America/Santiago"
+}
+
+# Multitenant Configuration
+variable "tenant_configs" {
+  description = "Configuration for each tenant"
+  type = list(object({
+    name            = string
+    subdomain       = string
+    whatsapp_number = string
+  }))
+  default = []
+}
+
+variable "domains" {
+  description = "List of domains for SSL certificates"
+  type        = list(string)
+  default     = []
+}
+
+variable "chatwoot_image" {
+  description = "Chatwoot Docker image"
+  type        = string
+  default     = "chatwoot/chatwoot:v4.4.0"
 }

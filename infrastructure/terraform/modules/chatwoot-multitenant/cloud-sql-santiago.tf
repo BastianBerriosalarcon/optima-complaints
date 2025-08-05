@@ -1,40 +1,20 @@
-# Cloud SQL Santiago Module for Chatwoot
+# Cloud SQL Santiago Module for Chatwoot - CONFIGURACIÓN ECONÓMICA
 resource "google_sql_database_instance" "chatwoot_santiago" {
   count            = var.use_cloud_sql_santiago ? 1 : 0
-  name             = "${var.project_id}-chatwoot-postgres-santiago"
-  region           = "southamerica-west1"
+  name             = "chatwoot-postgres-santiago-${var.environment}"
+  region           = "southamerica-west1"  # Santiago, Chile
   database_version = "POSTGRES_15"
   
   settings {
-    tier              = "db-n1-standard-2"  # 2 vCPU, 7.5GB RAM
-    disk_size         = 100
+    tier              = "db-g1-small"  # INTERMEDIO: ~$20-25 USD/mes - 1 vCPU, 1.7GB RAM
+    disk_size         = 10              # Mínimo para reducir costos
     disk_type         = "PD_SSD"
-    availability_type = "ZONAL"  # Para reducir costos
+    availability_type = "ZONAL"         # Más económico que REGIONAL
     
-    # Optimizaciones para chat tiempo real
-    database_flags {
-      name  = "shared_preload_libraries"
-      value = "pg_stat_statements"
-    }
-    
+    # Configuraciones optimizadas para db-g1-small
     database_flags {
       name  = "max_connections"
-      value = "200"
-    }
-    
-    database_flags {
-      name  = "work_mem"
-      value = "64MB"
-    }
-    
-    database_flags {
-      name  = "checkpoint_completion_target"
-      value = "0.9"
-    }
-    
-    database_flags {
-      name  = "wal_buffers"
-      value = "16MB"
+      value = "150"  # Aumentado para db-g1-small
     }
     
     backup_configuration {
@@ -43,7 +23,7 @@ resource "google_sql_database_instance" "chatwoot_santiago" {
       location   = "southamerica-west1"
       
       backup_retention_settings {
-        retained_backups = 7
+        retained_backups = 3  # Solo 3 días para reducir costos
       }
     }
     

@@ -118,5 +118,5 @@ resource "google_secret_manager_secret" "database_url" {
 
 resource "google_secret_manager_secret_version" "database_url" {
   secret      = google_secret_manager_secret.database_url.id
-  secret_data = "postgresql://${var.supabase_username}:${var.supabase_password}@${var.supabase_host}:5432/postgres"
+  secret_data = "postgresql://${var.supabase_username}:${var.supabase_password}@${var.supabase_host}:6543/postgres"
 }

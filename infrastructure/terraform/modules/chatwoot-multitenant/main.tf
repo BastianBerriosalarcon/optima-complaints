@@ -53,6 +53,9 @@ locals {
     "RAILS_ASSUME_SSL"         = "true"
     "ALLOWED_HOSTS"            = "*"
     
+    # Database table prefix to avoid conflicts
+    "DATABASE_TABLE_PREFIX"    = "chatwoot_"
+    
     # Performance Optimization para Chile/Sudamérica
     "RAILS_MAX_THREADS"        = "10"      # Más threads para mejor concurrencia
     "WEB_CONCURRENCY"          = "2"       # Procesos worker optimizados
@@ -65,12 +68,9 @@ locals {
     "RAILS_TIMEZONE"           = "America/Santiago"
   }
 
-  # Database configuration
+  # Database configuration - Solo usar DATABASE_URL
   database_env_vars = {
-    "POSTGRES_HOST"     = var.supabase_host
-    "POSTGRES_PORT"     = "5432"
-    "POSTGRES_DATABASE" = "postgres"  # Use default postgres database
-    "POSTGRES_USERNAME" = var.supabase_username
+    # Removed individual variables to avoid conflicts with DATABASE_URL
   }
 
   # Redis configuration - Optimizado para Chile/Sudamérica
@@ -115,6 +115,26 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
 
       containers {
         image = "chatwoot/chatwoot:v4.4.0"
+        
+        # Custom startup command for Chatwoot
+        command = ["/bin/sh"]
+        args = ["-c", "bundle exec rails db:create || true && bundle exec rails db:prepare && bundle exec rails server -b 0.0.0.0 -p 3000"]
+
+        ports {
+          container_port = 3000
+        }
+
+        # Health check configuration
+        startup_probe {
+          http_get {
+            path = "/"
+            port = 3000
+          }
+          initial_delay_seconds = 60
+          timeout_seconds       = 10
+          period_seconds        = 10
+          failure_threshold     = 10
+        }
 
         resources {
           limits = {
@@ -175,11 +195,6 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
               key  = "latest"
             }
           }
-        }
-
-        # Ports
-        ports {
-          container_port = 3000
         }
 
         # Temporary: Remove health checks for debugging
