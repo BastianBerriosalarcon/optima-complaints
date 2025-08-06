@@ -114,6 +114,32 @@ variable "redis_port" {
 }
 
 # Multitenant Configuration
+variable "tenant_configs" {
+  description = "List of tenant configurations with detailed settings"
+  type = list(object({
+    name            = string
+    subdomain       = string
+    whatsapp_number = string
+  }))
+  default = [
+    {
+      name            = "concesionario_001"
+      subdomain       = "concesionario1.chat.optimacx.net"
+      whatsapp_number = "+56912345001"
+    },
+    {
+      name            = "concesionario_002"
+      subdomain       = "concesionario2.chat.optimacx.net"
+      whatsapp_number = "+56912345002"
+    },
+    {
+      name            = "concesionario_003"
+      subdomain       = "concesionario3.chat.optimacx.net"
+      whatsapp_number = "+56912345003"
+    }
+  ]
+}
+
 variable "tenant_domains" {
   description = "Map of tenant IDs to their custom domains"
   type        = map(string)

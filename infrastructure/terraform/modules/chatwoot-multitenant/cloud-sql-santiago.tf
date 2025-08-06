@@ -29,7 +29,7 @@ resource "google_sql_database_instance" "chatwoot_santiago" {
     
     ip_configuration {
       ipv4_enabled = true
-      require_ssl  = true
+      ssl_mode     = "ENCRYPTED_ONLY"  # Reemplaza require_ssl deprecated
       
       authorized_networks {
         name  = "chatwoot-cloud-run"

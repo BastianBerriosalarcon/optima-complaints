@@ -65,13 +65,18 @@ module "chatwoot" {
   redis_host = data.google_redis_instance.redis.host
   redis_port = data.google_redis_instance.redis.port
   
-  # Database configuration (using Supabase SA-East-1)
-  supabase_host     = var.supabase_host
-  supabase_username = var.supabase_username
-  supabase_password = var.supabase_password
+  # Database configuration (Cloud SQL Santiago vs Supabase SA-East-1)
+  use_cloud_sql_santiago = var.use_cloud_sql_santiago
+  chatwoot_db_password   = var.chatwoot_db_password
+  supabase_host          = var.supabase_host
+  supabase_username      = var.supabase_username
+  supabase_password      = var.supabase_password
   
   # N8N Integration - Santiago Region
   whatsapp_webhook_base_url = var.n8n_webhook_url
+  
+  # Multitenant Configuration
+  tenant_configs = var.tenant_configs
   
   # Monitoring
   enable_monitoring = true

@@ -18,6 +18,20 @@ variable "environment" {
   default     = "dev"
 }
 
+# Cloud SQL Configuration - Santiago para mínima latencia en Chile
+variable "use_cloud_sql_santiago" {
+  description = "Use Cloud SQL Santiago instead of Supabase"
+  type        = bool
+  default     = true
+}
+
+variable "chatwoot_db_password" {
+  description = "Password for Cloud SQL Chatwoot database"
+  type        = string
+  sensitive   = true
+  default     = "ChatwootSantiago2025!"
+}
+
 # Database Configuration - Supabase SA-East-1 (São Paulo) para Sudamérica
 variable "supabase_host" {
   description = "Supabase PostgreSQL host for Chatwoot"

@@ -12,9 +12,9 @@ supabase_port     = 6543
 # Chatwoot Configuration
 chatwoot_image = "chatwoot/chatwoot:v4.4.0"
 
-# Cloud SQL Configuration - Habilitado para usar Cloud SQL en lugar de Supabase
+# Cloud SQL Santiago Configuration - Económico y optimizado para Chile
 use_cloud_sql_santiago = true
-chatwoot_db_password = "ChatwootSecure2024!"
+chatwoot_db_password   = "Junio.0706"
 
 # Domains for SSL certificates
 domains = [
@@ -39,5 +39,10 @@ tenant_configs = [
     name        = "concesionario3"
     subdomain   = "concesionario3.chat.optimacx.net"
     whatsapp_number = "+56912345003"
+  },
+  {
+    name        = "concesionario4"
+    subdomain   = "concesionario4.chat.optimacx.net"
+    whatsapp_number = "+56912345004"
   }
 ]

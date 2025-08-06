@@ -105,6 +105,8 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
         "autoscaling.knative.dev/maxScale"    = var.max_instances
         "run.googleapis.com/vpc-access-connector" = var.vpc_connector_name
         "run.googleapis.com/execution-environment" = "gen2"
+        # Cloud SQL Auth Proxy - cuando use_cloud_sql_santiago = true
+        "run.googleapis.com/cloudsql-instances" = var.use_cloud_sql_santiago ? "${var.project_id}:${var.region}:chatwoot-postgres-santiago-${var.environment}" : ""
       }
     }
 
@@ -124,16 +126,16 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
           container_port = 3000
         }
 
-        # Health check configuration
+        # Health check configuration - Tiempos extendidos para inicialización de BD
         startup_probe {
           http_get {
             path = "/"
             port = 3000
           }
-          initial_delay_seconds = 60
-          timeout_seconds       = 10
-          period_seconds        = 10
-          failure_threshold     = 10
+          initial_delay_seconds = 120  # Aumentado: más tiempo para db:prepare
+          timeout_seconds       = 10   # Timeout por probe
+          period_seconds        = 30   # Intervalo entre checks
+          failure_threshold     = 15   # Más intentos antes de fallar
         }
 
         resources {

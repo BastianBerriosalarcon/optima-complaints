@@ -74,3 +74,48 @@ output "service_account_email" {
   description = "Service account email used by Chatwoot"
   value       = var.service_account_email
 }
+
+# Load Balancer outputs - TEMPORALMENTE COMENTADO
+/*
+output "load_balancer_ip" {
+  description = "Global IP address for the load balancer"
+  value       = length(google_compute_global_address.chatwoot_ip) > 0 ? google_compute_global_address.chatwoot_ip[0].address : null
+}
+
+output "ssl_certificate_ids" {
+  description = "Map of tenant IDs to their SSL certificate IDs"
+  value = {
+    for tenant_id, cert in google_compute_managed_ssl_certificate.tenant_ssl_certs :
+    tenant_id => cert.id
+  }
+}
+
+output "ssl_certificate_status" {
+  description = "Map of tenant IDs to their SSL certificate domains"
+  value = {
+    for tenant_id, cert in google_compute_managed_ssl_certificate.tenant_ssl_certs :
+    tenant_id => cert.managed[0].domains
+  }
+}
+*/
+
+# Valores temporales para desarrollo sin Load Balancer
+output "load_balancer_ip" {
+  description = "Load Balancer temporalmente desactivado - usando Cloud Run directo"
+  value       = null
+}
+
+output "ssl_certificate_ids" {
+  description = "SSL certificates temporalmente desactivados"
+  value       = {}
+}
+
+output "ssl_certificate_status" {
+  description = "SSL certificates temporalmente desactivados"
+  value       = {}
+}
+
+output "tenant_domains" {
+  description = "List of all tenant domains configured"
+  value       = [for config in var.tenant_configs : config.subdomain]
+}

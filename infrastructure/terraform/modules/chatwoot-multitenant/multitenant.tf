@@ -2,6 +2,9 @@
 # Following SOLID: Single Responsibility - Manages only multitenant infrastructure
 
 # Domain mappings for each tenant
+# NOTA: Domain mappings no están disponibles en southamerica-west1
+# Usaremos Load Balancer para custom domains en una versión futura
+/*
 resource "google_cloud_run_domain_mapping" "tenant_domains" {
   for_each = var.tenant_domains
 
@@ -21,8 +24,10 @@ resource "google_cloud_run_domain_mapping" "tenant_domains" {
     route_name = google_cloud_run_service.chatwoot_multitenant.name
   }
 }
+*/
 
-# Load balancer for multitenant routing (if needed)
+# Load balancer for multitenant routing (if needed) - TEMPORALMENTE COMENTADO
+/*
 resource "google_compute_global_address" "chatwoot_ip" {
   count = length(var.tenant_domains) > 0 ? 1 : 0
 
@@ -31,7 +36,7 @@ resource "google_compute_global_address" "chatwoot_ip" {
   address_type = "EXTERNAL"
 }
 
-# SSL certificates for tenant domains
+# SSL certificates for tenant domains - TEMPORALMENTE COMENTADO  
 resource "google_compute_managed_ssl_certificate" "tenant_ssl_certs" {
   for_each = var.tenant_domains
 
@@ -45,6 +50,7 @@ resource "google_compute_managed_ssl_certificate" "tenant_ssl_certs" {
     create_before_destroy = true
   }
 }
+*/
 
 # Cloud Armor security policy - Comentado por límites de quota
 # resource "google_compute_security_policy" "chatwoot_security_policy" {
