@@ -56,7 +56,7 @@ resource "google_sql_user" "chatwoot_user" {
   password = var.chatwoot_db_password
 }
 
-# Connection string output
+# Connection string output - ROLLBACK TEMPORAL a Cloud SQL Auth Proxy
 output "chatwoot_database_url" {
-  value = var.use_cloud_sql_santiago ? "postgresql://${google_sql_user.chatwoot_user[0].name}:${var.chatwoot_db_password}@${google_sql_database_instance.chatwoot_santiago[0].connection_name}/${google_sql_database.chatwoot_db[0].name}?host=/cloudsql/${google_sql_database_instance.chatwoot_santiago[0].connection_name}" : var.supabase_database_url
+  value = var.use_cloud_sql_santiago ? "postgresql://${google_sql_user.chatwoot_user[0].name}:${var.chatwoot_db_password}@localhost//${google_sql_database.chatwoot_db[0].name}?host=/cloudsql/${google_sql_database_instance.chatwoot_santiago[0].connection_name}&sslmode=disable" : var.supabase_database_url
 }

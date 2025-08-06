@@ -16,14 +16,13 @@ chatwoot_image = "chatwoot/chatwoot:v4.4.0"
 use_cloud_sql_santiago = true
 chatwoot_db_password   = "Junio.0706"
 
-# Domains for SSL certificates
+# Domains for SSL certificates (Solo para pruebas iniciales)
 domains = [
   "concesionario1.chat.optimacx.net",
-  "concesionario2.chat.optimacx.net", 
-  "concesionario3.chat.optimacx.net"
+  "concesionario2.chat.optimacx.net"
 ]
 
-# Multitenant Configuration
+# Multitenant Configuration (Solo 2 concesionarios de prueba)
 tenant_configs = [
   {
     name        = "concesionario1"
@@ -34,15 +33,5 @@ tenant_configs = [
     name        = "concesionario2"
     subdomain   = "concesionario2.chat.optimacx.net"
     whatsapp_number = "+56912345002"
-  },
-  {
-    name        = "concesionario3"
-    subdomain   = "concesionario3.chat.optimacx.net"
-    whatsapp_number = "+56912345003"
-  },
-  {
-    name        = "concesionario4"
-    subdomain   = "concesionario4.chat.optimacx.net"
-    whatsapp_number = "+56912345004"
   }
 ]

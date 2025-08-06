@@ -56,12 +56,36 @@ locals {
     # Database table prefix to avoid conflicts
     "DATABASE_TABLE_PREFIX"    = "chatwoot_"
     
-    # Performance Optimization para Chile/Sudamérica
-    "RAILS_MAX_THREADS"        = "10"      # Más threads para mejor concurrencia
-    "WEB_CONCURRENCY"          = "2"       # Procesos worker optimizados
+    # Performance Optimization para Chile/Sudamérica - ULTRA AGRESIVO
+    "RAILS_MAX_THREADS"        = "20"      # Más threads para mejor concurrencia
+    "WEB_CONCURRENCY"          = "1"       # 1 worker para evitar memory overhead
+    
+    # Skip Migraciones - CRÍTICO para velocidad startup
+    "RAILS_SKIP_MIGRATIONS"    = "true"    # No ejecutar migraciones en startup
+    "DATABASE_READY"           = "true"     # Asumir BD ya configurada
+    "SKIP_DB_MIGRATE"          = "true"     # Skip migrate completo
+    
+    # Database Performance Critical - ULTRA OPTIMIZADO
+    "DB_POOL"                  = "20"      # Pool aumentado para concurrencia
+    "DB_TIMEOUT"               = "2000"    # 2 segundos timeout (ultra agresivo)
+    "DATABASE_PREPARED_STATEMENTS" = "true"   # HABILITADO para mejor performance
+    
+    # Rails Performance Tuning - ULTRA AGRESIVO
+    "RAILS_LOG_LEVEL"          = "error"   # Solo errores para máxima velocidad  
+    "BOOTSNAP_CACHE_DIR"       = "/tmp"    # Cache de boot en tmpfs
     "MALLOC_ARENA_MAX"         = "2"       # Control de memoria
-    "RUBY_GC_HEAP_GROWTH_FACTOR" = "1.1"   # GC optimizado
-    "RUBY_GC_HEAP_GROWTH_MAX_SLOTS" = "40000"
+    "RUBY_GC_HEAP_GROWTH_FACTOR" = "1.03"  # GC más agresivo
+    "RUBY_GC_HEAP_GROWTH_MAX_SLOTS" = "10000"  # Menor overhead GC
+    
+    # Precompilación y Cache Ultra Agresivo
+    "RAILS_PRECOMPILE_ASSETS"  = "true"    # Precompilar assets
+    "RAILS_ASSET_PIPELINE"     = "sprockets" # Pipeline optimizado
+    "RAILS_AUTOLOAD_PATHS"     = "false"   # Deshabilitar autoload en runtime
+    
+    # Rails Caching Performance
+    "RAILS_ASSET_HOST"         = local.service_url  # CDN-like behavior
+    "RAILS_CACHE_CLASSES"      = "true"    # Cache classes en production
+    "RAILS_EAGER_LOAD"         = "true"    # Preload todo el código
     
     # Timezone Chile
     "TZ"                       = "America/Santiago"
@@ -73,22 +97,32 @@ locals {
     # Removed individual variables to avoid conflicts with DATABASE_URL
   }
 
-  # Redis configuration - Optimizado para Chile/Sudamérica
+  # Redis configuration - TEMPORAL: Usar Redis interno para evitar problemas ActionCable
   redis_env_vars = {
-    "REDIS_HOST"        = var.redis_host
-    "REDIS_PORT"        = var.redis_port
+    # Comentamos Redis externo temporalmente
+    # "REDIS_HOST"        = var.redis_host
+    # "REDIS_PORT"        = var.redis_port
     "REDIS_SSL_VERIFY"  = "false"
     "REDIS_TIMEOUT"     = "2"      # Timeout reducido para baja latencia
     "REDIS_PASSWORD"    = ""       # Redis auth disabled for now
     
     # Redis Performance Optimization
-    "REDIS_POOL_SIZE"   = "10"     # Pool de conexiones más grande
+    "REDIS_POOL_SIZE"   = "5"      # Pool más pequeño para Redis interno
     "REDIS_DB"          = "0"      # Base de datos Redis
     "REDIS_KEEPALIVE"   = "true"   # Mantener conexiones vivas
     
+    # ActionCable Redis Configuration - SOLUCION SIMPLE
+    "ACTION_CABLE_ADAPTER" = "async"  # Usar adaptador async en lugar de Redis
+    "REDIS_SENTINELS_DISABLED" = "true"
+    
+    # Deshabilitar ActionCable temporalmente para resolver conectividad
+    "FORCE_SSL" = "false"
+    "ENABLE_ACCOUNT_SIGNUP" = "false"
+    "RAILS_LOG_TO_STDOUT" = "enabled"
+    
     # Session Management optimizado
     "SESSION_TIMEOUT"   = "3600"   # 1 hora de timeout de sesión
-    "RAILS_CACHE_STORE" = "redis_cache_store"
+    "RAILS_CACHE_STORE" = "memory_store"  # Usar memoria en lugar de Redis
   }
 }
 
@@ -105,7 +139,7 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
         "autoscaling.knative.dev/maxScale"    = var.max_instances
         "run.googleapis.com/vpc-access-connector" = var.vpc_connector_name
         "run.googleapis.com/execution-environment" = "gen2"
-        # Cloud SQL Auth Proxy - cuando use_cloud_sql_santiago = true
+        # Cloud SQL Auth Proxy - REACTIVADO TEMPORALMENTE para estabilidad
         "run.googleapis.com/cloudsql-instances" = var.use_cloud_sql_santiago ? "${var.project_id}:${var.region}:chatwoot-postgres-santiago-${var.environment}" : ""
       }
     }
@@ -118,24 +152,24 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
       containers {
         image = "chatwoot/chatwoot:v4.4.0"
         
-        # Custom startup command for Chatwoot
+        # Custom startup command for Chatwoot - ULTRA OPTIMIZADO
         command = ["/bin/sh"]
-        args = ["-c", "bundle exec rails db:create || true && bundle exec rails db:prepare && bundle exec rails server -b 0.0.0.0 -p 3000"]
+        args = ["-c", "bundle exec rails server -b 0.0.0.0 -p 3000 --skip-bundle-check"]  # Skip bundle check para startup más rápido
 
         ports {
           container_port = 3000
         }
 
-        # Health check configuration - Tiempos extendidos para inicialización de BD
+        # Health check configuration - ULTRARRÁPIDO para máximo rendimiento
         startup_probe {
           http_get {
-            path = "/"
+            path = "/"  # Volvemos a la raíz pero con config optimizada
             port = 3000
           }
-          initial_delay_seconds = 120  # Aumentado: más tiempo para db:prepare
-          timeout_seconds       = 10   # Timeout por probe
-          period_seconds        = 30   # Intervalo entre checks
-          failure_threshold     = 15   # Más intentos antes de fallar
+          initial_delay_seconds = 45   # Incrementado levemente para dar tiempo
+          timeout_seconds       = 5    # Timeout menos agresivo
+          period_seconds        = 15   # Period menos agresivo  
+          failure_threshold     = 10   # Más intentos
         }
 
         resources {
@@ -169,15 +203,16 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
           }
         }
 
-        env {
-          name = "REDIS_URL"
-          value_from {
-            secret_key_ref {
-              name = google_secret_manager_secret.redis_url.secret_id
-              key  = "latest"
-            }
-          }
-        }
+        # REDIS_URL comentado temporalmente - usando Redis interno
+        # env {
+        #   name = "REDIS_URL"
+        #   value_from {
+        #     secret_key_ref {
+        #       name = google_secret_manager_secret.redis_url.secret_id
+        #       key  = "latest"
+        #     }
+        #   }
+        # }
 
         env {
           name = "SECRET_KEY_BASE"
