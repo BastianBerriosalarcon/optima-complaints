@@ -1,0 +1,196 @@
+{
+  "name": "Chatwoot Multitenant Webhook Handler - Updated",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/chatwoot/{{$parameter[\"tenant_id\"]}}",
+        "options": {}
+      },
+      "id": "webhook-receiver",
+      "name": "Webhook Chatwoot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "chatwoot-multitenant"
+    },
+    {
+      "parameters": {
+        "functionCode": "// 🎯 Identificación de Tenant desde Chatwoot - ACTUALIZADO\n// Extrae tenant_id basado en account.id del payload\n\nconst payload = $input.first().json;\n\n// Log para debugging\nconsole.log('🔍 Chatwoot Webhook Payload:', JSON.stringify(payload, null, 2));\n\n// Extraer account.id del payload de Chatwoot\nconst accountId = payload.account?.id;\nif (!accountId) {\n  console.error('❌ Account ID no encontrado en payload');\n  throw new Error('Account ID no encontrado en payload de Chatwoot');\n}\n\n// Mapeo de account.id a tenant_id - ACTUALIZADO con IDs reales\nconst tenantMapping = {\n  '1': 'concesionario_001',\n  '2': 'concesionario_002',\n  '3': 'concesionario_003'\n};\n\nconst tenantId = tenantMapping[accountId.toString()];\nif (!tenantId) {\n  console.error(`❌ Tenant no encontrado para account.id: ${accountId}`);\n  throw new Error(`Tenant no encontrado para account.id: ${accountId}`);\n}\n\nconsole.log(`✅ Tenant identificado: ${tenantId} (account.id: ${accountId})`);\n\n// Preparar datos para procesamiento\nreturn {\n  tenant_id: tenantId,\n  account_id: accountId,\n  message_type: payload.message_type || 'incoming',\n  conversation_id: payload.conversation?.id,\n  contact_id: payload.sender?.id,\n  message_content: payload.content,\n  phone_number: payload.conversation?.meta?.sender?.phone_number,\n  timestamp: payload.created_at || new Date().toISOString(),\n  event_type: payload.event,\n  raw_payload: payload\n};"
+      },
+      "id": "tenant-identifier",
+      "name": "Identificar Tenant",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "message_created",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.message_type }}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combineOperation": "all"
+        }
+      },
+      "id": "check-message-type",
+      "name": "¿Es Mensaje Nuevo Entrante?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-optimacx-supabase-dev-wfzra4ruxq-tl.a.run.app/webhook/lead-processor",
+        "authentication": "headerAuth",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ {\n  \"tenant_id\": $json.tenant_id,\n  \"phone_number\": $json.phone_number,\n  \"message_content\": $json.message_content,\n  \"conversation_id\": $json.conversation_id,\n  \"contact_id\": $json.contact_id,\n  \"timestamp\": $json.timestamp,\n  \"source\": \"chatwoot_webhook\"\n} }}",
+        "options": {}
+      },
+      "id": "forward-to-lead-processor",
+      "name": "Enviar a Procesador Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "n8n-internal-auth",
+          "name": "N8N Internal Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-optimacx-supabase-dev-wfzra4ruxq-tl.a.run.app/webhook/conversation-logger",
+        "authentication": "headerAuth",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ {\n  \"tenant_id\": $json.tenant_id,\n  \"conversation_id\": $json.conversation_id,\n  \"event_type\": $json.event_type,\n  \"raw_payload\": $json.raw_payload,\n  \"timestamp\": $json.timestamp\n} }}",
+        "options": {}
+      },
+      "id": "log-conversation",
+      "name": "Log Conversación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "n8n-internal-auth",
+          "name": "N8N Internal Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"tenant_id\": $json.tenant_id,\n  \"processed_at\": new Date().toISOString(),\n  \"message\": \"Webhook procesado correctamente\"\n} }}"
+      },
+      "id": "webhook-response",
+      "name": "Respuesta Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Identificar Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Identificar Tenant": {
+      "main": [
+        [
+          {
+            "node": "¿Es Mensaje Nuevo Entrante?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es Mensaje Nuevo Entrante?": {
+      "main": [
+        [
+          {
+            "node": "Enviar a Procesador Leads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Conversación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar a Procesador Leads": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Conversación": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "chatwoot-integration",
+      "name": "Chatwoot Integration"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+}

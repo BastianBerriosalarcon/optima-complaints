@@ -1,0 +1,112 @@
+{
+  "name": "Chatwoot Multi-Tenant Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST", 
+        "path": "chatwoot/concesionario_001",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Webhook 001",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [120, 200]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot/concesionario_002", 
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-002",
+      "name": "Webhook 002", 
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [120, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot/concesionario_003",
+        "responseMode": "responseNode", 
+        "options": {}
+      },
+      "id": "webhook-003",
+      "name": "Webhook 003",
+      "type": "n8n-nodes-base.webhook", 
+      "typeVersion": 1,
+      "position": [120, 600]
+    },
+    {
+      "parameters": {
+        "functionCode": "// 🎯 Handler Multi-Tenant Chatwoot → N8N\n// Procesa webhooks de cualquier tenant con identificación automática\n\nconst inputData = $input.all();\nconst results = [];\n\nfor (const item of inputData) {\n  const data = item.json;\n  \n  // Identificar tenant por el nodo que activó el webhook\n  let tenant_id = 'default';\n  const nodeName = $runIndex > 0 ? 'tenant_002' : \n                   $runIndex > 1 ? 'tenant_003' : 'tenant_001';\n  \n  // Mapeo dinámico basado en account_id si está disponible\n  const account_id = data.account?.id || null;\n  if (account_id) {\n    tenant_id = `concesionario_${String(account_id).padStart(3, '0')}`;\n  }\n  \n  // Datos del webhook de Chatwoot\n  const event_type = data.event || 'unknown';\n  const conversation_id = data.conversation?.id || null;\n  const message_content = data.content || '';\n  const contact_info = data.conversation?.meta?.sender || {};\n  \n  // Preparar datos estructurados\n  const processedData = {\n    // Identificación\n    tenant_id: tenant_id,\n    account_id: account_id,\n    event_type: event_type,\n    timestamp: new Date().toISOString(),\n    \n    // Datos del evento\n    conversation: {\n      id: conversation_id,\n      status: data.conversation?.status || 'open'\n    },\n    \n    // Mensaje (si aplica)\n    message: {\n      content: message_content,\n      message_type: data.message_type || 'incoming'\n    },\n    \n    // Contacto\n    contact: {\n      phone_number: contact_info.phone_number || null,\n      name: contact_info.name || null,\n      email: contact_info.email || null\n    },\n    \n    // Raw data para debugging\n    raw_webhook_data: data,\n    \n    // Flags de procesamiento\n    requires_ai_response: event_type === 'message_created' && message_content.length > 0,\n    is_customer_message: data.message_type !== 'outgoing',\n    \n    // Metadatos\n    processing_status: 'received',\n    webhook_source: 'chatwoot',\n    node_trigger: nodeName\n  };\n  \n  results.push({\n    json: processedData\n  });\n}\n\nreturn results;"
+      },
+      "id": "process-multi",
+      "name": "Process Multi-Tenant",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"received\",\n  \"tenant_id\": \"{{ $json.tenant_id }}\",\n  \"event_type\": \"{{ $json.event_type }}\",\n  \"timestamp\": \"{{ $json.timestamp }}\",\n  \"conversation_id\": {{ $json.conversation.id || 'null' }}\n}"
+      },
+      "id": "response-multi",
+      "name": "Response Multi",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [660, 400]
+    }
+  ],
+  "connections": {
+    "Webhook 001": {
+      "main": [
+        [
+          {
+            "node": "Process Multi-Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook 002": {
+      "main": [
+        [
+          {
+            "node": "Process Multi-Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook 003": {
+      "main": [
+        [
+          {
+            "node": "Process Multi-Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Multi-Tenant": {
+      "main": [
+        [
+          {
+            "node": "Response Multi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

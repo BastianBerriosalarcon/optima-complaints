@@ -1,0 +1,67 @@
+{
+  "name": "Test Webhook - API Direct",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-test-direct",
+        "options": {}
+      },
+      "id": "webhook-test-direct",
+      "name": "Webhook Test Direct",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "chatwoot-test-direct"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Test simple de conectividad usando API directa\nconst payload = $input.first().json;\nconsole.log('🔍 Payload recibido via API directa:', JSON.stringify(payload, null, 2));\n\nreturn {\n  status: 'SUCCESS_API_DIRECT',\n  timestamp: new Date().toISOString(),\n  payload_received: true,\n  message: 'API directa funcionando correctamente'\n};"
+      },
+      "id": "process-test-direct",
+      "name": "Process Test Direct",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"status\": \"API_DIRECT_SUCCESS\",\n  \"message\": \"Webhook creado via API directa funcionando\",\n  \"processed_at\": $json.timestamp\n} }}"
+      },
+      "id": "response-direct",
+      "name": "Response Direct",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Test Direct": {
+      "main": [
+        [
+          {
+            "node": "Process Test Direct",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Test Direct": {
+      "main": [
+        [
+          {
+            "node": "Response Direct",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}
