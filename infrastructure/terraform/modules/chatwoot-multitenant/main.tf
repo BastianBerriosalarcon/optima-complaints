@@ -59,6 +59,9 @@ locals {
     # Performance Optimization para Chile/Sudamérica - ULTRA AGRESIVO
     "RAILS_MAX_THREADS"        = "20"      # Más threads para mejor concurrencia
     "WEB_CONCURRENCY"          = "1"       # 1 worker para evitar memory overhead
+    "PUMA_WORKERS"             = "1"       # Optimización Puma para Cloud Run
+    "PUMA_MAX_THREADS"         = "20"      # Max threads Puma
+    "PUMA_MIN_THREADS"         = "5"       # Min threads Puma
     
     # Skip Migraciones - CRÍTICO para velocidad startup
     "RAILS_SKIP_MIGRATIONS"    = "true"    # No ejecutar migraciones en startup
@@ -66,9 +69,10 @@ locals {
     "SKIP_DB_MIGRATE"          = "true"     # Skip migrate completo
     
     # Database Performance Critical - ULTRA OPTIMIZADO
-    "DB_POOL"                  = "20"      # Pool aumentado para concurrencia
+    "DB_POOL"                  = "25"      # Pool aumentado para concurrencia
     "DB_TIMEOUT"               = "2000"    # 2 segundos timeout (ultra agresivo)
     "DATABASE_PREPARED_STATEMENTS" = "true"   # HABILITADO para mejor performance
+    "DATABASE_POOL_SIZE"       = "25"      # Pool específico para Chatwoot
     
     # Rails Performance Tuning - ULTRA AGRESIVO
     "RAILS_LOG_LEVEL"          = "error"   # Solo errores para máxima velocidad  
@@ -97,17 +101,16 @@ locals {
     # Removed individual variables to avoid conflicts with DATABASE_URL
   }
 
-  # Redis configuration - TEMPORAL: Usar Redis interno para evitar problemas ActionCable
+  # Redis configuration - REACTIVADO temporalmente para evitar errores de conexión
   redis_env_vars = {
-    # Comentamos Redis externo temporalmente
-    # "REDIS_HOST"        = var.redis_host
-    # "REDIS_PORT"        = var.redis_port
+    "REDIS_HOST"        = var.redis_host
+    "REDIS_PORT"        = var.redis_port
     "REDIS_SSL_VERIFY"  = "false"
     "REDIS_TIMEOUT"     = "2"      # Timeout reducido para baja latencia
     "REDIS_PASSWORD"    = ""       # Redis auth disabled for now
     
     # Redis Performance Optimization
-    "REDIS_POOL_SIZE"   = "5"      # Pool más pequeño para Redis interno
+    "REDIS_POOL_SIZE"   = "10"     # Pool optimizado
     "REDIS_DB"          = "0"      # Base de datos Redis
     "REDIS_KEEPALIVE"   = "true"   # Mantener conexiones vivas
     
@@ -115,15 +118,45 @@ locals {
     "ACTION_CABLE_ADAPTER" = "async"  # Usar adaptador async en lugar de Redis
     "REDIS_SENTINELS_DISABLED" = "true"
     
-    # Deshabilitar ActionCable temporalmente para resolver conectividad
-    "FORCE_SSL" = "false"
-    "ENABLE_ACCOUNT_SIGNUP" = "false"
-    "RAILS_LOG_TO_STDOUT" = "enabled"
-    
     # Session Management optimizado
     "SESSION_TIMEOUT"   = "3600"   # 1 hora de timeout de sesión
-    "RAILS_CACHE_STORE" = "memory_store"  # Usar memoria en lugar de Redis
+    "RAILS_CACHE_STORE" = "redis_cache_store"  # Usar Redis para cache
   }
+
+  # === ULTRA PERFORMANCE OPTIMIZATIONS ===
+  ultra_env_vars = {
+    # Cold Start Prevention
+    "RAILS_SERVE_STATIC_FILES" = "true"
+    "RAILS_FORCE_SSL"          = "false"   
+    "RUBY_YJIT_ENABLE"         = "1"       # JIT compiler
+    
+    # Ultra DB Pool (para 2+ instancias)
+    "DATABASE_POOL_SIZE"       = "40" 
+    "DB_POOL"                  = "40"
+    "DB_TIMEOUT"               = "1200"    # 1.2s ultra rápido
+    
+    # Puma Ultra Workers
+    "PUMA_WORKERS"             = "2"       # 2 workers por instancia
+    "PUMA_MAX_THREADS"         = "30"      # 30 threads por worker  
+    "PUMA_MIN_THREADS"         = "15"      # Threads siempre activos
+    "PUMA_PRELOAD_APP"         = "true"    # Preload app
+    
+    # Memory & GC Tuning
+    "RUBY_GC_HEAP_INIT_SLOTS"  = "15000"   # GC heap grande
+    "RUBY_GC_HEAP_FREE_SLOTS"  = "3000"    # Menos GC frecuente
+    "MALLOC_TRIM_THRESHOLD_"   = "50000"   # Memoria aggressive
+  }
+
+  # Combinar todas las variables
+  final_env_vars = merge(
+    local.base_env_vars,
+    local.redis_env_vars,
+    local.ultra_env_vars,  # <- NUEVAS OPTIMIZACIONES
+    {
+      for tenant_name, config in var.tenant_configs :
+      "TENANT_${upper(tenant_name)}_WHATSAPP" => config.whatsapp_number
+    }
+  )
 }
 
 # Chatwoot multitenant Cloud Run service
@@ -138,8 +171,11 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
         "autoscaling.knative.dev/minScale"    = var.min_instances
         "autoscaling.knative.dev/maxScale"    = var.max_instances
         "run.googleapis.com/vpc-access-connector" = var.vpc_connector_name
+        "run.googleapis.com/vpc-access-egress" = "private-ranges-only"  # Solo tráfico privado para DB
         "run.googleapis.com/execution-environment" = "gen2"
-        # Cloud SQL Auth Proxy - REACTIVADO TEMPORALMENTE para estabilidad
+        "run.googleapis.com/cpu-throttling" = "false"  # OPTIMIZACIÓN: No throttling de CPU
+        "run.googleapis.com/startup-cpu-boost" = "true"  # OPTIMIZACIÓN: CPU boost en startup
+        # Cloud SQL Auth Proxy - Solo cuando NO hay IP privada disponible
         "run.googleapis.com/cloudsql-instances" = var.use_cloud_sql_santiago ? "${var.project_id}:${var.region}:chatwoot-postgres-santiago-${var.environment}" : ""
       }
     }
@@ -152,24 +188,24 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
       containers {
         image = "chatwoot/chatwoot:v4.4.0"
         
-        # Custom startup command for Chatwoot - ULTRA OPTIMIZADO
+                # Custom startup command for Chatwoot - CORREGIDO
         command = ["/bin/sh"]
-        args = ["-c", "bundle exec rails server -b 0.0.0.0 -p 3000 --skip-bundle-check"]  # Skip bundle check para startup más rápido
+        args = ["-c", "bundle exec rails server -b 0.0.0.0 -p 3000"]  # Comando básico sin argumentos problemáticos
 
         ports {
           container_port = 3000
         }
 
-        # Health check configuration - ULTRARRÁPIDO para máximo rendimiento
+                # Health check configuration - OPTIMIZADO para 2 instancias mínimas
         startup_probe {
           http_get {
-            path = "/"  # Volvemos a la raíz pero con config optimizada
+            path = "/api/v1/accounts"  # Endpoint conocido que funciona
             port = 3000
           }
-          initial_delay_seconds = 45   # Incrementado levemente para dar tiempo
-          timeout_seconds       = 5    # Timeout menos agresivo
-          period_seconds        = 15   # Period menos agresivo  
-          failure_threshold     = 10   # Más intentos
+          initial_delay_seconds = 45   # Reducido para startup más rápido
+          timeout_seconds       = 8    # Timeout más agresivo
+          period_seconds        = 10   # Verificación más frecuente
+          failure_threshold     = 8    # Menos tolerante para fallos rápidos
         }
 
         resources {
@@ -181,11 +217,7 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
 
         # Base environment variables
         dynamic "env" {
-          for_each = merge(
-            local.base_env_vars,
-            local.database_env_vars,
-            local.redis_env_vars
-          )
+          for_each = local.final_env_vars
           content {
             name  = env.key
             value = env.value
@@ -203,16 +235,16 @@ resource "google_cloud_run_service" "chatwoot_multitenant" {
           }
         }
 
-        # REDIS_URL comentado temporalmente - usando Redis interno
-        # env {
-        #   name = "REDIS_URL"
-        #   value_from {
-        #     secret_key_ref {
-        #       name = google_secret_manager_secret.redis_url.secret_id
-        #       key  = "latest"
-        #     }
-        #   }
-        # }
+        # REDIS_URL reactivado temporalmente para evitar errores de conexión
+        env {
+          name = "REDIS_URL"
+          value_from {
+            secret_key_ref {
+              name = google_secret_manager_secret.redis_url.secret_id
+              key  = "latest"
+            }
+          }
+        }
 
         env {
           name = "SECRET_KEY_BASE"

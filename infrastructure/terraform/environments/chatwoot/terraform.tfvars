@@ -35,3 +35,17 @@ tenant_configs = [
     whatsapp_number = "+56912345002"
   }
 ]
+
+# === OPTIMIZACIONES DE RENDIMIENTO ULTRA-AGRESIVAS ===
+
+# Instancias mínimas para evitar cold starts (ajustado a quota disponible)
+min_instances = "2"
+max_instances = "5"  # Límite de quota actual
+max_concurrency = 120
+
+# Recursos optimizados para Rails
+cpu = "4000m"  # 4 CPU cores para boot más rápido
+memory = "6Gi"  # Más memoria para caching Rails
+
+# Timeouts optimizados
+timeout_seconds = 900  # 15 minutos para requests largos
