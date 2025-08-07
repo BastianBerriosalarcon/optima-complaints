@@ -135,3 +135,6 @@ README-cloudshell.txt
 # Archivos temporales o específicos de tu entorno
 supabase/.temp/
 terraform_*.zip
+
+# Terraform cache
+.terraform.d/
