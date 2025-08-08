@@ -13,7 +13,7 @@
       "id": "webhook-trigger-ventas",
       "name": "Trigger Asignación Contact Center Ventas",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
       "webhookId": "sales-survey-call-center-assignment"
     },
@@ -58,7 +58,7 @@
       },
       "id": "get-contact-center-agents-ventas",
       "name": "Obtener Agentes Contact Center Ventas",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [460, 300]
     },
@@ -155,7 +155,7 @@
       },
       "id": "register-sales-assignments",
       "name": "Registrar Asignaciones Ventas",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [1120, 300]
     },
@@ -215,7 +215,7 @@
       },
       "id": "send-sales-notification",
       "name": "Enviar Notificación Ventas",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [1560, 300]
     },
@@ -236,7 +236,7 @@
       "id": "success-response-ventas",
       "name": "Respuesta Éxito Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [2000, 300]
     }
   ],

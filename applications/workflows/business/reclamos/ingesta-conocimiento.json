@@ -13,7 +13,7 @@
       "id": "webhook-knowledge-input",
       "name": "Knowledge Upload Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "knowledge-ingestion"
     },
@@ -22,8 +22,8 @@
       },
       "id": "validate-document-input",
       "name": "Validar Entrada de Documento",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [460, 300]
     },
     {
@@ -45,8 +45,8 @@
       },
       "id": "prepare-for-chunking",
       "name": "Preparar para Chunking",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [900, 300]
     },
     {
@@ -59,7 +59,7 @@
       "id": "trigger-chunking-workflow",
       "name": "Iniciar Chunking",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1120, 300]
     },
     {
@@ -70,7 +70,7 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1340, 300]
     },
     {
@@ -84,7 +84,7 @@
       "id": "error-response",
       "name": "Respuesta de Error",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [460, 500]
     }
   ],

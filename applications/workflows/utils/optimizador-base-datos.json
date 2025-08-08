@@ -10,7 +10,7 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
@@ -18,8 +18,8 @@
       },
       "id": "analyze-optimization",
       "name": "Analizar Optimización",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [460, 300]
     },
     {
@@ -37,7 +37,7 @@
       "id": "check-bulk-operation",
       "name": "¿Operación Masiva?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [680, 300]
     },
     {
@@ -45,8 +45,8 @@
       },
       "id": "execute-bulk-operations",
       "name": "Ejecutar Operaciones Masivas",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [900, 200]
     },
     {
@@ -54,8 +54,8 @@
       },
       "id": "execute-query-operations",
       "name": "Ejecutar Operaciones Consulta",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [900, 400]
     },
     {
@@ -63,8 +63,8 @@
       },
       "id": "consolidate-optimization-results",
       "name": "Consolidar Resultados Optimización",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1120, 300]
     }
   ],

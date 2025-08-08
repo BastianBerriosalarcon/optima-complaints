@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "Black Alert Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
       "webhookId": "complaint-black-alert"
     },
@@ -56,13 +56,13 @@
       },
       "id": "get-black-alert-recipients",
       "name": "Get Black Alert Recipients",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "/*** COMPLAINT BLACK ALERT - SRP: Solo notificación masiva por ley del consumidor ***/\nconst alertData = $('Black Alert Trigger').first().json;\nconst recipients = $('Get Black Alert Recipients').first().json;\n\nconst complaintData = alertData.complaint_data;\nconst aiAnalysis = alertData.ai_analysis;\nconst tenantConfig = alertData.tenant_config;\n\n// Validar que hay destinatarios\nif (!recipients || recipients.length === 0) {\n  throw new Error(`No hay destinatarios para Black Alert en concesionario: ${alertData.tenant_id}`);\n}\n\n// Preparar email masivo según CLAUDE.md:\n// \"Encargado de Calidad + Jefe de Servicio + Asesor de Servicio + Equipos de Venta y Postventa\"\nconst emailSubject = `🚨 BLACK ALERT - LEY DEL CONSUMIDOR - Reclamo ID: ${alertData.complaint_id}`;\n\n// Template crítico de Black Alert\nconst emailContent = `\n<div style=\"background: #7f1d1d; color: white; padding: 20px; text-align: center; font-size: 24px; font-weight: bold;\">\n  🚨 BLACK ALERT - LEY DEL CONSUMIDOR 🚨\n</div>\n\n<div style=\"background: #fee2e2; border: 2px solid #dc2626; padding: 20px; margin: 20px 0; border-radius: 8px;\">\n  <h2 style=\"color: #dc2626; margin-top: 0;\">⚠️ ATENCIÓN INMEDIATA REQUERIDA</h2>\n  <p><strong>Este reclamo puede acogerse a la LEY DEL CONSUMIDOR por falla en vehículo dentro de los 6 meses posteriores a la compra.</strong></p>\n  <p style=\"font-size: 18px; color: #7f1d1d;\"><strong>RECLAMO ID:</strong> ${alertData.complaint_id}</p>\n</div>\n\n<div style=\"background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n  <h3>👤 Información del Cliente</h3>\n  <p><strong>Nombre:</strong> ${complaintData.cliente_nombre}</p>\n  <p><strong>Teléfono:</strong> ${complaintData.cliente_telefono}</p>\n  <p><strong>Email:</strong> ${complaintData.cliente_email || 'No proporcionado'}</p>\n  <p><strong>RUT:</strong> ${complaintData.cliente_rut || 'No proporcionado'}</p>\n</div>\n\n<div style=\"background: #fffbeb; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n  <h3>🚗 Información del Vehículo</h3>\n  <p><strong>Patente:</strong> ${complaintData.vehiculo_patente || 'No especificada'}</p>\n  <p><strong>VIN:</strong> ${complaintData.vehiculo_vin || 'No especificado'}</p>\n  <p><strong>Marca/Modelo:</strong> ${complaintData.vehiculo_marca || ''} ${complaintData.vehiculo_modelo || ''}</p>\n  <p><strong>Sucursal:</strong> ${complaintData.sucursal}</p>\n</div>\n\n<div style=\"background: #f0f9ff; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n  <h3>📝 Detalle del Reclamo</h3>\n  <p style=\"font-style: italic; background: white; padding: 15px; border-left: 4px solid #2563eb;\">\n    ${complaintData.detalle}\n  </p>\n</div>\n\n<div style=\"background: #ecfdf5; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n  <h3>🤖 Análisis Automático IA</h3>\n  <p><strong>Tipo:</strong> ${complaintData.tipo_reclamo}</p>\n  <p><strong>Categoría:</strong> ${complaintData.categoria}</p>\n  <p><strong>Urgencia:</strong> ${complaintData.urgencia}</p>\n  ${aiAnalysis.analisis?.resumen_problema ? `<p><strong>Resumen:</strong> ${aiAnalysis.analisis.resumen_problema}</p>` : ''}\n</div>\n\n${aiAnalysis.sugerencias_resolucion ? `\n<div style=\"background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0;\">\n  <h3>💡 Sugerencias de Resolución Inmediata</h3>\n  <ul>\n  ${aiAnalysis.sugerencias_resolucion.map(sug => `\n    <li><strong>${sug.accion}</strong> - Responsable: ${sug.responsable} - Plazo: ${sug.plazo}</li>\n  `).join('')}\n  </ul>\n</div>\n` : ''}\n\n<div style=\"background: #7f1d1d; color: white; padding: 20px; border-radius: 8px; margin: 30px 0;\">\n  <h3 style=\"color: white; margin-top: 0;\">⚖️ ACCIONES LEGALES INMEDIATAS REQUERIDAS:</h3>\n  <ol style=\"color: white;\">\n    <li><strong>Contactar al cliente INMEDIATAMENTE</strong> (plazo máximo: 2 horas)</li>\n    <li><strong>Documentar toda comunicación</strong> con el cliente</li>\n    <li><strong>Evaluar garantía y cobertura</strong> legal del problema</li>\n    <li><strong>Coordinar respuesta unificada</strong> entre ventas y servicio</li>\n    <li><strong>Escalar a Gerencia</strong> para decisiones críticas</li>\n    <li><strong>Preparar documentación</strong> para posible proceso legal</li>\n  </ol>\n</div>\n\n<div style=\"text-align: center; margin: 30px 0;\">\n  <a href=\"${tenantConfig.dashboard_url || 'https://app.optimacx.com'}/reclamos/${alertData.complaint_id}\" \n     style=\"background: #dc2626; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-size: 18px; font-weight: bold;\">\n     🚨 VER RECLAMO EN PLATAFORMA - ACCIÓN INMEDIATA\n  </a>\n</div>\n\n<div style=\"background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center;\">\n  <p style=\"margin: 0; font-size: 12px; color: #6b7280;\">\n    Sistema Óptima-CX - Black Alert Automático | ${new Date().toLocaleString('es-CL')}<br>\n    Este es un email automático de alta prioridad - NO RESPONDER\n  </p>\n</div>\n`;\n\n// Preparar lista de destinatarios para envío masivo\nconst massEmailTargets = recipients.map(recipient => ({\n  to: recipient.email,\n  nombre: recipient.nombre,\n  rol: recipient.rol,\n  subject: emailSubject,\n  html: emailContent\n}));\n\nreturn {\n  complaint_id: alertData.complaint_id,\n  tenant_id: alertData.tenant_id,\n  email_targets: massEmailTargets,\n  alert_metadata: {\n    triggered_at: new Date().toISOString(),\n    total_recipients: massEmailTargets.length,\n    complaint_urgency: complaintData.urgencia,\n    vehicle_info: `${complaintData.vehiculo_marca || ''} ${complaintData.vehiculo_modelo || ''} - ${complaintData.vehiculo_patente || 'Sin patente'}`.trim()\n  }\n};"
+        "jsCode": "/*** COMPLAINT BLACK ALERT - SRP: Solo notificación masiva por ley del consumidor ***/\nconst alertData = $('Black Alert Trigger').first().json;\nconst recipients = $('Get Black Alert Recipients').first().json;\n\nconst complaintData = alertData.complaint_data;\nconst aiAnalysis = alertData.ai_analysis;\nconst tenantConfig = alertData.tenant_config;\n\n
       },
       "id": "prepare-mass-alert",
       "name": "Prepare Mass Alert",
@@ -128,13 +128,13 @@
       },
       "id": "send-black-alert-email",
       "name": "Send Black Alert Email",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [1120, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Generar reporte de Black Alert enviado\nconst alertData = $('Prepare Mass Alert').first().json;\nconst emailResults = $input.all();\n\n// Contar envíos exitosos y fallidos\nconst successfulEmails = emailResults.filter(result => \n  result.json?.message_id || result.json?.status === 'sent'\n).length;\nconst failedEmails = emailResults.length - successfulEmails;\n\nconst blackAlertReport = {\n  alert_type: 'black_alert',\n  complaint_id: alertData.complaint_id,\n  tenant_id: alertData.tenant_id,\n  \n  // Estadísticas de envío\n  email_stats: {\n    total_recipients: alertData.email_targets.length,\n    successful_sends: successfulEmails,\n    failed_sends: failedEmails,\n    success_rate: Math.round((successfulEmails / alertData.email_targets.length) * 100)\n  },\n  \n  // Metadatos del alert\n  alert_metadata: alertData.alert_metadata,\n  \n  // Timestamp de finalización\n  completed_at: new Date().toISOString(),\n  status: 'completed'\n};\n\nreturn blackAlertReport;"
+        "jsCode": "
       },
       "id": "generate-alert-report",
       "name": "Generate Alert Report",
@@ -150,7 +150,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1560, 300]
     }
   ],

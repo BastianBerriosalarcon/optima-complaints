@@ -10,7 +10,7 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
@@ -18,8 +18,8 @@
       },
       "id": "categorize-error",
       "name": "Categorizar Error",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [460, 300]
     },
     {
@@ -37,7 +37,7 @@
       "id": "check-high-severity",
       "name": "¿Severidad Alta?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [680, 300]
     },
     {
@@ -66,7 +66,7 @@
       "id": "trigger-urgent-notification",
       "name": "Disparar Alerta Urgente",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1120, 200]
     },
     {
@@ -74,8 +74,8 @@
       },
       "id": "generate-recovery-plan",
       "name": "Generar Plan Recuperación",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1120, 400]
     },
     {
@@ -93,7 +93,7 @@
       "id": "check-auto-recoverable",
       "name": "¿Recuperación Automática?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1340, 400]
     },
     {
@@ -106,7 +106,7 @@
       "id": "trigger-auto-recovery",
       "name": "Iniciar Recuperación Automática",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1560, 300]
     },
     {
@@ -114,8 +114,8 @@
       },
       "id": "prepare-manual-escalation",
       "name": "Preparar Escalación Manual",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1560, 500]
     },
     {
@@ -128,7 +128,7 @@
       "id": "trigger-incident-notification",
       "name": "Notificar Incidente",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1780, 500]
     },
     {
@@ -136,8 +136,8 @@
       },
       "id": "generate-final-response",
       "name": "Generar Respuesta Final",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [2000, 400]
     }
   ],

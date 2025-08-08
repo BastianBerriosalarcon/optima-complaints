@@ -13,7 +13,7 @@
       "id": "webhook-bulk-send",
       "name": "Webhook Envío Masivo",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [200, 300]
     },
     {
@@ -38,7 +38,7 @@
       "id": "set-initial-data",
       "name": "Set Initial Data",
       "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [300, 300]
     },
     {
@@ -51,17 +51,17 @@
       "id": "trigger-tenant-loader",
       "name": "Cargar Configuración Tenant",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [400, 300]
     },
     {
       "parameters": {
-        "functionCode": "// Prepara los datos para la iteración, asegurando que 'recipients' sea un array.\nconst input = $input.all()[0].json;\nconst recipients = input.recipients || [];\n\n// Asegúrate de que cada destinatario tenga al menos un número de teléfono.\nconst validRecipients = recipients.filter(r => r.phone_number);\n\nreturn validRecipients.map(recipient => ({\n  json: {\n    ...input,\n    current_recipient: recipient\n  }\n}));"
+        "jsCode": "
       },
       "id": "prepare-recipients",
       "name": "Preparar Destinatarios",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [600, 300]
     },
     {
@@ -71,17 +71,17 @@
       "id": "iterate-recipients",
       "name": "Iterar Destinatarios",
       "type": "n8n-nodes-base.itemLists",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [800, 300]
     },
     {
       "parameters": {
-        "functionCode": "// Prepara el payload para el envío de WhatsApp.\nconst input = $input.all()[0].json;\nconst tenantConfig = input.tenant_config;\nconst recipient = input.current_recipient;\nconst messageContent = input.original_message_content;\n\nconst whatsappPayload = {\n  to: recipient.phone_number,\n  type: 'text',\n  text: { body: messageContent },\n  tenant_id: tenantConfig.tenant_id,\n  campaign_id: input.campaign_id || 'manual_bulk_send',\n  recipient_id: recipient.id || recipient.phone_number\n};\n\nreturn [{ json: { ...whatsappPayload, original_message_content: messageContent } }];"
+        "jsCode": "
       },
       "id": "prepare-whatsapp-message",
       "name": "Preparar Mensaje WhatsApp",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1000, 300]
     },
     {
@@ -100,7 +100,7 @@
       },
       "id": "send-whatsapp-message",
       "name": "Enviar Mensaje WhatsApp",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [1200, 300]
     },
@@ -128,7 +128,7 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1600, 300]
     }
   ],

@@ -43,7 +43,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Algoritmo de asignación y preparación de datos\nconst leadData = $('Trigger del Workflow').first().json;\nconst advisors = $('Obtener Asesores Disponibles').first().json;\nconst salesManager = $('Obtener Jefe de Ventas').first().json[0];\n\nif (!advisors || advisors.length === 0) {\n  throw new Error(`No hay asesores disponibles para el concesionario: ${leadData.tenant_config.tenant_id}`);\n}\n\n// Lógica de asignación (Round Robin basado en carga actual)\nadvisors.sort((a, b) => (a.carga_actual || 0) - (b.carga_actual || 0));\nconst selectedAdvisor = advisors[0];\n\n// Preparar datos para las notificaciones\nconst notificationPayload = {\n  lead_data: leadData,\n  assigned_advisor: selectedAdvisor,\n  sales_manager: salesManager, // Puede ser undefined si no se encuentra\n  tenant_config: leadData.tenant_config\n};\n\nreturn notificationPayload;"
+        "jsCode": "
       },
       "id": "assign-advisor-and-prep-data",
       "name": "Asignar Asesor y Preparar Datos",
@@ -53,7 +53,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Preparar notificación para el ASESOR\nconst data = $input.first().json;\nconst lead = data.lead_data;\nconst advisor = data.assigned_advisor;\n\nconst subject = `Nuevo Lead Asignado: ${lead.original_message.contact_name || lead.original_message.from}`\nconst body = `Hola ${advisor.nombre},<br><br>Se te ha asignado un nuevo lead:<br><b>Cliente:</b> ${lead.original_message.contact_name || lead.original_message.from}<br><b>Teléfono:</b> ${lead.original_message.from}<br><b>Score:</b> ${lead.lead_score}/100<br><b>Intención:</b> ${lead.intencion}<br><b>Mensaje:</b> \"${lead.original_message.body}\" <br><br>Por favor, haz seguimiento a la brevedad.";\n\nreturn {\n  to: advisor.email,\n  subject: subject,\n  html: body\n};"
+        "jsCode": "
       },
       "id": "prepare-advisor-notification",
       "name": "Preparar Email Asesor",
@@ -73,7 +73,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email", // URL genérica para enviar email
+        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email", 
         "bodyParameters": {
           "parameters": [
             {

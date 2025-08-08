@@ -33,7 +33,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Función enfocada en preparar datos para CREAR nuevo lead\n// Principio SRP: Una sola responsabilidad - preparar datos de creación\n\nconst analysis = $input.all()[0].json;\nconst message = analysis.original_message;\nconst entities = analysis.entidades_extraidas;\n\n// Mapear intención a estado inicial\nconst estadoMap = {\n  'compra': 'calificado',\n  'informacion': 'nuevo', \n  'servicio': 'nuevo',\n  'reclamo': 'nuevo',\n  'otro': 'nuevo'\n};\n\n// Preparar datos del nuevo lead\nconst newLeadData = {\n  // Identificación\n  concesionario_id: analysis.tenant_config.tenant_id,\n  telefono_cliente: message.from,\n  \n  // Información del cliente (extraída por IA)\n  nombre_cliente: entities.nombre || message.contact_name || null,\n  email_cliente: entities.email || null,\n  \n  // Estado y clasificación
+        "functionCode": "
   estado: estadoMap[analysis.intencion] || 'nuevo',
   origen: 'whatsapp',
   intencion_detectada: analysis.intencion,
@@ -47,7 +47,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Función enfocada en preparar datos para ACTUALIZAR lead existente\n// Principio SRP: Una sola responsabilidad - preparar datos de actualización\n\nconst analysis = $input.all()[0].json;\nconst message = analysis.original_message;\nconst entities = analysis.entidades_extraidas;\nconst existingLeadId = analysis.context.existing_lead_id;\n\n// Preparar datos de actualización (solo campos que han cambiado)\nconst updateData = {\n  lead_id: existingLeadId,\n  \n  // Actualizar información si se detectó nueva\n  nombre_cliente: entities.nombre || undefined,\n  email_cliente: entities.email || undefined,\n  \n  // Actualizar nivel de interés si cambió significativamente
+        "functionCode": "
   nivel_interes: analysis.nivel_interes,
       },
       "id": "prepare-update-lead",

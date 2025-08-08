@@ -10,17 +10,17 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
       "parameters": {
-        "functionCode": "// Función enfocada en validar y normalizar respuesta de encuesta\n// Principio SRP: Una sola responsabilidad - validación de respuesta\n\nconst surveyResponse = $input.first().json;\n\n// Validaciones críticas siguiendo patrón de otros workflows\nconst requiredFields = ['concesionario_id', 'cliente_telefono', 'recomendacion', 'satisfaccion', 'lavado', 'asesor'];\nfor (const field of requiredFields) {\n  if (surveyResponse[field] === undefined || surveyResponse[field] === null) {\n    throw new Error(`Campo requerido faltante: ${field}`);\n  }\n}\n\n// Validar que las calificaciones estén en el rango 1-10\nconst scoreFields = ['recomendacion', 'satisfaccion', 'lavado', 'asesor'];\nfor (const field of scoreFields) {\n  const score = surveyResponse[field];\n  if (typeof score !== 'number' || score < 1 || score > 10) {\n    throw new Error(`Calificación inválida para ${field}: ${score}. Debe ser un número entre 1 y 10.`);\n  }\n}\n\n// Validar UUID de concesionario\nconst uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nif (!uuidRegex.test(surveyResponse.concesionario_id)) {\n  throw new Error('concesionario_id debe ser un UUID válido');\n}\n\n// Calcular promedio de las calificaciones\nconst totalScore = scoreFields.reduce((sum, field) => sum + surveyResponse[field], 0);\nconst averageScore = totalScore / scoreFields.length;\n\n// Normalizar datos para la base de datos\nconst normalizedSurvey = {\n  concesionario_id: surveyResponse.concesionario_id,\n  sucursal_id: surveyResponse.sucursal_id || null,\n  cliente_nombre: surveyResponse.cliente_nombre || null,\n  cliente_rut: surveyResponse.cliente_rut || null,\n  cliente_telefono: surveyResponse.cliente_telefono,\n  recomendacion: surveyResponse.recomendacion,\n  satisfaccion: surveyResponse.satisfaccion,\n  lavado: surveyResponse.lavado,\n  asesor: surveyResponse.asesor,\n  comentario: surveyResponse.comentario || null,\n  origen: surveyResponse.origen || 'unknown',\n  estado: 'completado',\n  fecha_creacion: new Date().toISOString(),\n  \n  // Campos calculados\n  average_score: Math.round(averageScore * 10) / 10, // redondear a 1 decimal\n  \n  // Clasificación para lógica de negocio\n  score_category: averageScore >= 9 ? 'excelente' : averageScore >= 7 ? 'bueno' : averageScore >= 5 ? 'regular' : 'bajo',\n  requires_notification: averageScore <= 8 // Notas 1-8 requieren notificación\n};\n\nreturn [{ json: normalizedSurvey }];"
+        "jsCode": "
       },
       "id": "validate-survey-response",
       "name": "Validar Respuesta Encuesta",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [460, 300]
     },
     {
@@ -52,7 +52,7 @@
       "id": "check-notification-required",
       "name": "¿Requiere Notificación?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [900, 300]
     },
     {
@@ -60,8 +60,8 @@
       },
       "id": "prepare-notification-data",
       "name": "Preparar Datos Notificación",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1120, 200]
     },
     {
@@ -74,7 +74,7 @@
       "id": "trigger-low-score-notification",
       "name": "Disparar Notificación Baja Calificación",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1340, 200]
     },
     {
@@ -82,8 +82,8 @@
       },
       "id": "generate-success-response",
       "name": "Generar Respuesta Éxito",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1340, 400]
     }
   ],

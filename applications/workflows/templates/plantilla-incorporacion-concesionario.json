@@ -20,7 +20,7 @@
       "id": "webhook-onboarding-trigger",
       "name": "Webhook Nuevo Tenant",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [250, 300]
     },
     {
@@ -85,7 +85,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Crear tabla RAG específica para el tenant\nconst tenantData = $input.first().json;\nconst tenantId = tenantData.tenant_id;\n\n// SQL para crear tabla de vectores RAG específica del tenant\nconst createRagTableSQL = `\n-- Crear tabla de documentos RAG para el tenant\nCREATE TABLE IF NOT EXISTS rag_documents_${tenantId.replace(/-/g, '_')} (\n  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n  tenant_id VARCHAR(255) NOT NULL DEFAULT '${tenantId}',\n  document_id VARCHAR(255) NOT NULL,\n  title TEXT NOT NULL,\n  content TEXT NOT NULL,\n  chunk_index INTEGER NOT NULL,\n  total_chunks INTEGER NOT NULL,\n  embedding vector(768), -- gemini-embedding-001 dimensions\n  metadata JSONB DEFAULT '{}',\n  category VARCHAR(100),\n  tags TEXT[],\n  version VARCHAR(50) DEFAULT '1.0.0',\n  status VARCHAR(50) DEFAULT 'active',\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  \n  -- Índices para optimización\n  CONSTRAINT unique_tenant_doc_chunk UNIQUE (tenant_id, document_id, chunk_index)\n);\n\n-- Crear índice vectorial para búsqueda semántica\nCREATE INDEX IF NOT EXISTS idx_rag_${tenantId.replace(/-/g, '_')}_embedding \nON rag_documents_${tenantId.replace(/-/g, '_')} \nUSING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);\n\n-- Crear índices adicionales\nCREATE INDEX IF NOT EXISTS idx_rag_${tenantId.replace(/-/g, '_')}_tenant \nON rag_documents_${tenantId.replace(/-/g, '_')} (tenant_id);\n\nCREATE INDEX IF NOT EXISTS idx_rag_${tenantId.replace(/-/g, '_')}_status \nON rag_documents_${tenantId.replace(/-/g, '_')} (status);\n\nCREATE INDEX IF NOT EXISTS idx_rag_${tenantId.replace(/-/g, '_')}_category \nON rag_documents_${tenantId.replace(/-/g, '_')} (category);\n`;\n\nreturn {\n  ...tenantData,\n  rag_table_sql: createRagTableSQL,\n  rag_table_name: `rag_documents_${tenantId.replace(/-/g, '_')}`\n};"
+        "jsCode": "
       },
       "id": "prepare-rag-tables",
       "name": "Preparar Tablas RAG",
@@ -134,7 +134,7 @@
       },
       "id": "send-welcome-email",
       "name": "Enviar Email Bienvenida",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.2,
       "position": [2230, 300]
     },
@@ -160,7 +160,7 @@
       "id": "respond-success",
       "name": "Respuesta Final",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [2670, 300]
     }
   ],

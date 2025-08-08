@@ -11,7 +11,7 @@
       "id": "webhook-node",
       "name": "Webhook Universal",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
@@ -22,17 +22,17 @@
       "id": "response-node", 
       "name": "Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [760, 300]
     },
     {
       "parameters": {
-        "functionCode": "// 🎯 Handler Universal Chatwoot → N8N\n// Procesa webhooks de cualquier tenant dinámicamente\n\nconst inputData = $input.all();\nconst results = [];\n\nfor (const item of inputData) {\n  const data = item.json;\n  \n  // Extraer tenant_id del path del webhook\n  const webhookPath = $node[\"Webhook Universal\"].parameter.path;\n  const tenantMatch = webhookPath.match(/chatwoot\\/(.+)$/);\n  const tenant_id = tenantMatch ? tenantMatch[1] : 'default';\n  \n  // Datos del webhook de Chatwoot\n  const event_type = data.event || 'unknown';\n  const account_id = data.account?.id || null;\n  const conversation_id = data.conversation?.id || null;\n  const message_content = data.content || '';\n  const contact_info = data.conversation?.meta?.sender || {};\n  \n  // Preparar datos estructurados\n  const processedData = {\n    // Identificación\n    tenant_id: tenant_id,\n    account_id: account_id,\n    event_type: event_type,\n    timestamp: new Date().toISOString(),\n    \n    // Datos del evento\n    conversation: {\n      id: conversation_id,\n      status: data.conversation?.status || 'open'\n    },\n    \n    // Mensaje (si aplica)\n    message: {\n      content: message_content,\n      message_type: data.message_type || 'incoming'\n    },\n    \n    // Contacto\n    contact: {\n      phone_number: contact_info.phone_number || null,\n      name: contact_info.name || null,\n      email: contact_info.email || null\n    },\n    \n    // Raw data para debugging\n    raw_webhook_data: data,\n    \n    // Flags de procesamiento\n    requires_ai_response: event_type === 'message_created' && message_content.length > 0,\n    is_customer_message: data.message_type !== 'outgoing',\n    \n    // Metadatos\n    processing_status: 'received',\n    webhook_source: 'chatwoot'\n  };\n  \n  results.push({\n    json: processedData\n  });\n}\n\nreturn results;"
+        "jsCode": "
       },
       "id": "process-node",
       "name": "Process Universal",
-      "type": "n8n-nodes-base.function", 
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code", 
+      "typeVersion": 2,
       "position": [480, 300]
     },
     {
@@ -50,7 +50,7 @@
       "id": "filter-node",
       "name": "Requires AI?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [480, 500]
     },
     {
@@ -72,7 +72,7 @@
       "id": "log-node",
       "name": "Log to Supabase",
       "type": "n8n-nodes-base.supabase",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [720, 500],
       "credentials": {
         "supabaseApi": {

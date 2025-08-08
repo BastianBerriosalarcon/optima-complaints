@@ -10,12 +10,12 @@
       "id": "webhook-input",
       "name": "RAG Input",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Validar y normalizar entrada\nconst data = $input.first().json;\n\nif (!data.tenant_id || !data.query) {\n  throw new Error('tenant_id y query requeridos');\n}\n\nreturn {\n  tenant_id: data.tenant_id,\n  query: data.query.trim(),\n  context: data.context || 'post_venta',\n  usar_cohere: data.usar_cohere !== false\n};"
+        "jsCode": "
       },
       "id": "validate-normalize",
       "name": "Validate & Normalize",
@@ -26,7 +26,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "url": "https:
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headers": {
@@ -56,7 +56,7 @@
       },
       "id": "generate-embedding",
       "name": "Generate Embedding",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [680, 300]
     },
@@ -117,13 +117,13 @@
       },
       "id": "vector-search",
       "name": "Vector Search",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [900, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Construir prompt con contexto RAG\nconst queryData = $('Validate & Normalize').first().json;\nconst documents = $input.first().json;\n\n// Contexto de documentos (top 3)\nconst context = documents\n  .slice(0, 3)\n  .map(doc => doc.contenido)\n  .join('\\n\\n---\\n\\n');\n\nconst hasContext = context.length > 0;\n\n// Prompt dinámico según contexto\nconst prompt = `\nEres un especialista en ${queryData.context === 'ventas' ? 'ventas automotrices' : 'servicio post-venta automotriz'}.\n\n${hasContext ? `CONTEXTO ESPECÍFICO:\\n${context}\\n\\n` : ''}CONSULTA:\n\"${queryData.query}\"\n\nAnaliza usando ${ hasContext ? 'las políticas específicas del contexto' : 'estándares de la industria' }.\n\nRESPONDE EN JSON:\n{\n  \"clasificacion\": {\n    \"tipo\": \"${queryData.context === 'ventas' ? 'informacion|cotizacion|financiamiento' : 'garantia|servicio_tecnico|atencion_cliente'}\",\n    \"urgencia\": \"alta|media|baja\"\n  },\n  \"analisis\": {\n    \"resumen\": \"descripción del problema/consulta\",\n    \"factores_clave\": [\"factor1\", \"factor2\"]\n  },\n  \"recomendaciones\": [{\n    \"accion\": \"acción sugerida\",\n    \"responsable\": \"${queryData.context === 'ventas' ? 'asesor_ventas' : 'asesor_servicio'}\"\n  }],\n  \"comentarios_ia\": \"observaciones ${ hasContext ? 'contextualizadas' : 'generales' }\"\n}\n\nSOLO JSON, SIN TEXTO ADICIONAL.\n`;\n\nreturn {\n  query_data: queryData,\n  documents_found: documents.length,\n  prompt,\n  has_context: hasContext\n};"
+        "jsCode": "
       },
       "id": "build-prompt",
       "name": "Build AI Prompt",
@@ -134,7 +134,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
+        "url": "https:
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headers": {
@@ -164,7 +164,7 @@
       },
       "id": "gemini-analysis",
       "name": "Gemini Analysis",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [1340, 300]
     },
@@ -218,7 +218,7 @@
       },
       "id": "log-analytics",
       "name": "Log Analytics",
-      "type": "n8n-nodes-base.httpRequest",  
+      "type": "n8n-nodes-base.httpRequestV3",  
       "typeVersion": 4.1,
       "position": [1560, 300]
     },
@@ -230,7 +230,7 @@
       "id": "response",
       "name": "Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1780, 300]
     }
   ],

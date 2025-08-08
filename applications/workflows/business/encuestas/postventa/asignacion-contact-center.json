@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "Call Center Assignment Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
       "webhookId": "survey-call-center-assignment"
     },
@@ -56,13 +56,13 @@
       },
       "id": "get-call-center-agents",
       "name": "Get Call Center Agents",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "/*** SURVEY CALL CENTER ASSIGNMENT - SRP: Solo asignación equitativa ***/\nconst assignmentData = $('Call Center Assignment Trigger').first().json;\nconst callCenterAgents = $('Get Call Center Agents').first().json;\nconst clientsToAssign = assignmentData.clients_for_call_center;\n\n// Validar que hay agentes disponibles\nif (!callCenterAgents || callCenterAgents.length === 0) {\n  throw new Error('No hay agentes de Contact Center activos para este concesionario');\n}\n\n// Distribución equitativa (algoritmo round-robin)\nconst assignments = [];\nlet agentIndex = 0;\n\nclientsToAssign.forEach((client, index) => {\n  const assignedAgent = callCenterAgents[agentIndex];\n  \n  assignments.push({\n    // Datos del cliente\n    cliente_nombre: client.cliente_nombre,\n    cliente_telefono: client.cliente_telefono,\n    sucursal: client.sucursal,\n    tiempo_sin_respuesta: client.tiempo_sin_respuesta,\n    fecha_envio_whatsapp: client.fecha_envio_whatsapp,\n    \n    // Datos del agente asignado\n    agente_id: assignedAgent.id,\n    agente_nombre: assignedAgent.nombre,\n    agente_email: assignedAgent.email,\n    agente_telefono: assignedAgent.telefono,\n    \n    // Metadatos de asignación\n    fecha_asignacion: new Date().toISOString(),\n    prioridad: client.tiempo_sin_respuesta > 12 ? 'alta' : 'normal', // >12 horas sin respuesta\n    tenant_id: assignmentData.tenant_id\n  });\n  \n  // Rotar al siguiente agente\n  agentIndex = (agentIndex + 1) % callCenterAgents.length;\n});\n\n// Agrupar por agente para notificaciones eficientes\nconst assignmentsByAgent = assignments.reduce((acc, assignment) => {\n  const agentId = assignment.agente_id;\n  if (!acc[agentId]) {\n    acc[agentId] = {\n      agent_info: {\n        id: assignment.agente_id,\n        nombre: assignment.agente_nombre,\n        email: assignment.agente_email,\n        telefono: assignment.agente_telefono\n      },\n      assigned_clients: []\n    };\n  }\n  acc[agentId].assigned_clients.push(assignment);\n  return acc;\n}, {});\n\nreturn {\n  tenant_id: assignmentData.tenant_id,\n  total_assignments: assignments.length,\n  total_agents: callCenterAgents.length,\n  assignments_by_agent: assignmentsByAgent,\n  assignment_stats: {\n    clients_per_agent: Math.round(assignments.length / callCenterAgents.length * 100) / 100,\n    high_priority_count: assignments.filter(a => a.prioridad === 'alta').length,\n    assignment_timestamp: new Date().toISOString()\n  },\n  campaign_metadata: assignmentData.campaign_metadata\n};"
+        "jsCode": "/*** SURVEY CALL CENTER ASSIGNMENT - SRP: Solo asignación equitativa ***/\nconst assignmentData = $('Call Center Assignment Trigger').first().json;\nconst callCenterAgents = $('Get Call Center Agents').first().json;\nconst clientsToAssign = assignmentData.clients_for_call_center;\n\n
       },  
       "id": "assign-clients",
       "name": "Assign Clients",
@@ -146,13 +146,13 @@
       },
       "id": "register-assignments",
       "name": "Register Assignments",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [1120, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Preparar email de notificación personalizado por agente\nconst agentData = $input.first().json;\nconst assignmentRecord = $('Register Assignments').first().json;\n\n// Template de email (siguiendo patrón de notificaciones existentes)\nconst emailSubject = `📞 Nuevas encuestas asignadas - ${agentData.assigned_clients.length} clientes`;\n\nconst emailBody = `\n<h2>📞 Asignación de Encuestas Telefónicas</h2>\n\n<p>Hola <strong>${agentData.agent_info.nombre}</strong>,</p>\n\n<p>Se te han asignado <strong>${agentData.assigned_clients.length} clientes</strong> que no respondieron la encuesta por WhatsApp y requieren seguimiento telefónico.</p>\n\n<h3>📋 Detalles de la Asignación:</h3>\n<ul>\n  <li><strong>Total clientes:</strong> ${agentData.assigned_clients.length}</li>\n  <li><strong>Prioridad alta:</strong> ${agentData.assigned_clients.filter(c => c.prioridad === 'alta').length} (más de 12 horas sin respuesta)</li>\n  <li><strong>Fecha asignación:</strong> ${new Date().toLocaleString('es-CL')}</li>\n</ul>\n\n<h3>👥 Clientes Asignados:</h3>\n<table border=\"1\" style=\"border-collapse: collapse; width: 100%;\">\n  <tr style=\"background-color: #f0f0f0;\">\n    <th>Cliente</th>\n    <th>Teléfono</th>\n    <th>Sucursal</th>\n    <th>Horas sin Respuesta</th>\n    <th>Prioridad</th>\n  </tr>\n  ${agentData.assigned_clients.map(client => `\n  <tr>\n    <td>${client.cliente_nombre}</td>\n    <td>${client.cliente_telefono}</td>\n    <td>${client.sucursal}</td>\n    <td>${client.tiempo_sin_respuesta}h</td>\n    <td style=\"color: ${client.prioridad === 'alta' ? 'red' : 'green'}; font-weight: bold;\">\n      ${client.prioridad.toUpperCase()}\n    </td>\n  </tr>\n  `).join('')}\n</table>\n\n<h3>📝 Instrucciones:</h3>\n<ol>\n  <li>Contactar a los clientes de <strong>prioridad alta</strong> primero</li>\n  <li>Realizar la encuesta telefónica de satisfacción</li>\n  <li>Registrar las respuestas en el sistema</li>\n  <li>En caso de notas bajas (1-8), notificar inmediatamente al Jefe de Servicio</li>\n</ol>\n\n<p>Para acceder al sistema: <a href=\"https://app.optimacx.com/encuestas/call-center\">Click aquí</a></p>\n\n<p>¡Gracias por tu trabajo!</p>\n\n<hr>\n<small>Sistema Óptima-CX - ${new Date().toLocaleString('es-CL')}</small>\n`;\n\nreturn {\n  to: agentData.agent_info.email,\n  subject: emailSubject,\n  html: emailBody,\n  agent_name: agentData.agent_info.nombre,\n  clients_count: agentData.assigned_clients.length,\n  assignment_id: assignmentRecord.id\n};"
+        "jsCode": "
       },
       "id": "prepare-notification",
       "name": "Prepare Notification",
@@ -199,13 +199,13 @@
       },
       "id": "send-notification",
       "name": "Send Notification", 
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [1560, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Generar reporte final de asignaciones\nconst assignmentData = $('Assign Clients').first().json;\nconst notificationResults = $input.all();\n\nconst finalReport = {\n  campaign_id: assignmentData.campaign_metadata?.campaign_id || `campaign_${Date.now()}`,\n  tenant_id: assignmentData.tenant_id,\n  assignment_summary: {\n    total_clients_assigned: assignmentData.total_assignments,\n    total_agents: assignmentData.total_agents,\n    assignments_per_agent: assignmentData.assignment_stats.clients_per_agent,\n    high_priority_clients: assignmentData.assignment_stats.high_priority_count\n  },\n  notification_results: {\n    emails_sent: notificationResults.filter(r => r.json?.message_id).length,\n    emails_failed: notificationResults.length - notificationResults.filter(r => r.json?.message_id).length\n  },\n  completion_timestamp: new Date().toISOString(),\n  status: 'completed'\n};\n\nreturn finalReport;"
+        "jsCode": "
       },
       "id": "generate-report",
       "name": "Generate Final Report",
@@ -221,7 +221,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [2000, 300]
     }
   ],

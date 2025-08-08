@@ -17,7 +17,7 @@
       "id": "schedule-trigger",
       "name": "Ejecutar cada 4 horas",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [250, 300]
     },
     {
@@ -33,7 +33,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Procesar y transformar los datos para la tabla de métricas\nconst rawMetrics = $input.all();\nconst processedData = {};\n\nrawMetrics.forEach(item => {\n  const metric = item.json;\n  const tenantId = metric.concesionario_id;\n\n  if (!processedData[tenantId]) {\n    processedData[tenantId] = {\n      concesionario_id: tenantId,\n      periodo: 'ultimas_24_horas',\n      fecha_calculo: new Date().toISOString().split('T')[0],\n      total_qr: 0,\n      total_whatsapp: 0,\n      total_llamada: 0,\n      total_general: 0,\n      rendimiento_ejecutivos: [],\n      nps_general: 0,\n      satisfaccion_promedio: 0,\n      nps_scores: [],\n      satisfaction_scores: []\n    };\n  }\n\n  const tenantData = processedData[tenantId];\n  tenantData.total_general += parseInt(metric.total_encuestas, 10);\n\n  if (metric.origen === 'QR') tenantData.total_qr = parseInt(metric.total_encuestas, 10);\n  if (metric.origen === 'WhatsApp') tenantData.total_whatsapp = parseInt(metric.total_encuestas, 10);\n  if (metric.origen === 'Llamada') {\n    tenantData.total_llamada = parseInt(metric.total_encuestas, 10);\n    tenantData.rendimiento_ejecutivos = metric.rendimiento_ejecutivos;\n  }\n\n  if (metric.nps_promedio) tenantData.nps_scores.push(parseFloat(metric.nps_promedio));\n  if (metric.satisfaccion_promedio) tenantData.satisfaction_scores.push(parseFloat(metric.satisfaccion_promedio));\n});\n\n// Calcular promedios finales\nObject.values(processedData).forEach(tenant => {\n  if (tenant.nps_scores.length > 0) {\n    tenant.nps_general = tenant.nps_scores.reduce((a, b) => a + b, 0) / tenant.nps_scores.length;\n  }\n  if (tenant.satisfaction_scores.length > 0) {\n    tenant.satisfaccion_promedio = tenant.satisfaction_scores.reduce((a, b) => a + b, 0) / tenant.satisfaction_scores.length;\n  }\n  delete tenant.nps_scores;\n  delete tenant.satisfaction_scores;\n});\n\nreturn Object.values(processedData).map(item => ({ json: item }));"
+        "jsCode": "
       },
       "id": "process-metrics",
       "name": "Procesar Métricas",

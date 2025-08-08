@@ -13,7 +13,7 @@
       "id": "webhook-qr-sales-survey",
       "name": "Webhook QR Sales Survey",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [200, 300]
     },
     {
@@ -35,7 +35,7 @@
       "id": "trigger-sales-response-handler",
       "name": "Disparar Manejador Respuestas Ventas",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [600, 300]
     },
     {
@@ -46,7 +46,7 @@
       "id": "success-response-sales",
       "name": "Respuesta Exitosa Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [800, 300]
     },
     {
@@ -60,7 +60,7 @@
       "id": "error-response-sales",
       "name": "Respuesta de Error Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [600, 480]
     }
   ],

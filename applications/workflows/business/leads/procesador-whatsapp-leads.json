@@ -11,7 +11,7 @@
         "id": "webhook-whatsapp-lead",
         "name": "WhatsApp Webhook",
         "type": "n8n-nodes-base.webhook",
-        "typeVersion": 1,
+        "typeVersion": 2,
         "position": [240, 300],
         "webhookId": "lead-whatsapp-webhook"
       },
@@ -47,12 +47,12 @@
         "id": "validate-webhook",
         "name": "Validate WhatsApp Webhook",
         "type": "n8n-nodes-base.if",
-        "typeVersion": 1,
+        "typeVersion": 2,
         "position": [460, 300]
       },
       {
         "parameters": {
-          "jsCode": "try {\n  // Extraer datos críticos del webhook WhatsApp\n  const webhookData = $input.first().json;\n  const entry = webhookData.entry[0];\n  const changes = entry.changes[0];\n  const value = changes.value;\n\n  // Datos del mensaje\n  const messages = value.messages || [];\n  const message = messages[0] || {};\n\n  // Extraer tenant_id desde el número de teléfono business\n  const businessPhoneNumberId = value.metadata?.phone_number_id || '';\n  const fromNumber = message.from || '';\n  const messageText = message.text?.body || '';\n  const messageType = message.type || 'text';\n  const messageId = message.id || '';\n\n  // Extraer información del contacto\n  const contacts = value.contacts || [];\n  const contact = contacts[0] || {};\n  const contactName = contact.profile?.name || 'Cliente';\n\n  // Validaciones básicas\n  if (!businessPhoneNumberId || !fromNumber || !messageText) {\n    throw new Error('Datos incompletos en webhook WhatsApp');\n  }\n\n  // TODO: Mapear phone_number_id a tenant_id\n  // En producción esto debería venir de una tabla de configuración\n  const tenantMapping = {\n    '1234567890': 'concesionario_001',\n    '0987654321': 'concesionario_002'\n  };\n\n  const tenantId = tenantMapping[businessPhoneNumberId];\n\n  if (!tenantId) {\n    throw new Error(`No tenant mapping found for phone_number_id: ${businessPhoneNumberId}`);\n  }\n\n  // Preparar datos para el siguiente nodo\n  return {\n    tenant_id: tenantId,\n    business_phone_id: businessPhoneNumberId,\n    cliente_telefono: fromNumber,\n    cliente_nombre: contactName,\n    mensaje_original: messageText,\n    mensaje_tipo: messageType,\n    mensaje_id: messageId,\n    webhook_timestamp: new Date().toISOString(),\n    raw_webhook: webhookData\n  };\n} catch (error) {\n  throw new Error(`Error extracting WhatsApp data: ${error.message}`);\n}"
+          "jsCode": "try {\n  
         },
         "id": "extract-lead-data",
         "name": "Extract Lead Data",
@@ -93,7 +93,7 @@
         "id": "cache-miss-condition",
         "name": "Cache Miss?",
         "type": "n8n-nodes-base.if",
-        "typeVersion": 1,
+        "typeVersion": 2,
         "position": [1120, 300]
       },
       {
@@ -136,7 +136,7 @@
         },
         "id": "load-tenant-config-db",
         "name": "Load Config from Database",
-        "type": "n8n-nodes-base.httpRequest",
+        "type": "n8n-nodes-base.httpRequestV3",
         "typeVersion": 4.1,
         "position": [1340, 200]
       },
@@ -151,7 +151,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// Usar configuración desde cache\nconst leadData = $input.first().json;\nconst cachedConfig = leadData.cached_config;\n\nreturn {\n  ...leadData,\n  tenant_config: cachedConfig\n};"
+          "jsCode": "
         },
         "id": "use-cached-config",
         "name": "Use Cached Config",
@@ -172,7 +172,7 @@
       },
       {
         "parameters": {
-          "jsCode": "try {\n  // Validar configuración del tenant\n  const leadData = $('Extract Lead Data').first().json;\n  const tenantConfig = $input.first().json;\n\n  if (!tenantConfig || tenantConfig.length === 0) {\n    throw new Error(`Tenant configuration not found for: ${leadData.tenant_id}`);\n  }\n\n  const config = tenantConfig[0];\n\n  // Preparar prompt personalizado para análisis de IA\n  const customPrompt = `\nEres un especialista en ventas automotrices de ${config.nombre_concesionario || 'nuestro concesionario'}.\n\nContexto específico:\n- Marcas disponibles: ${config.marcas_disponibles || 'Toyota, Honda, Nissan'}\n- Productos principales: ${config.productos_principales || 'Vehículos nuevos y usados'}\n- Público objetivo: ${config.publico_objetivo || 'Familias y empresas'}\n\nAnaliza el siguiente mensaje de WhatsApp y extrae:\n\n1. INTENCIÓN (compra|informacion|servicio|cotizacion)\n2. MODELO DE INTERÉS (si menciona algún vehículo específico)\n3. URGENCIA (alta|media|baja)\n4. PRESUPUESTO ESTIMADO (si se menciona)\n5. DATOS DE CONTACTO adicionales\n6. NIVEL DE INTERÉS (1-10)\n\nMensaje del cliente: \"${leadData.mensaje_original}\"\n\nResponde ÚNICAMENTE en formato JSON válido sin markdown:\n{\n  \"intencion_detectada\": \"compra|informacion|servicio|cotizacion\",\n  \"modelo_interes\": \"modelo específico o null\",\n  \"urgencia\": \"alta|media|baja\",\n  \"presupuesto_estimado\": \"rango o null\",\n  \"nivel_interes\": 7,\n  \"datos_adicionales\": {\n    \"email\": \"email si se menciona\",\n    \"preferencias\": \"preferencias específicas\"\n  },\n  \"resumen_analisis\": \"resumen breve del análisis\"\n}\n`;\n\n  return {\n    ...leadData,\n    tenant_config: config,\n    ai_prompt: customPrompt\n  };\n} catch (error) {\n  throw new Error(`Error preparing AI analysis: ${error.message}`);\n}"
+          "jsCode": "try {\n  
         },
         "id": "prepare-ai-analysis",
         "name": "Prepare AI Analysis",
@@ -183,7 +183,7 @@
       {
         "parameters": {
           "method": "POST",
-          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent",
+          "url": "https:
           "authentication": "genericCredentialType",
           "genericAuthType": "httpHeaderAuth",
           "headers": {
@@ -216,13 +216,13 @@
         },
         "id": "gemini-ai-analysis",
         "name": "Gemini AI Analysis",
-        "type": "n8n-nodes-base.httpRequest",
+        "type": "n8n-nodes-base.httpRequestV3",
         "typeVersion": 4.1,
         "position": [1340, 300]
       },
       {
         "parameters": {
-          "jsCode": "try {\n  // Procesar respuesta de Gemini y calcular scoring\n  const originalData = $('Prepare AI Analysis').first().json;\n  const geminiResponse = $input.first().json;\n\n  // Extraer texto de respuesta de Gemini\n  const responseText = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\n\n  // Parsear JSON de la respuesta\n  let aiAnalysis;\n  try {\n    // Limpiar respuesta en caso de que venga con markdown\n    const cleanJson = responseText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n    aiAnalysis = JSON.parse(cleanJson);\n  } catch (parseError) {\n    console.error('Error parsing Gemini response:', responseText);\n    // Fallback en caso de error de parsing\n    aiAnalysis = {\n      intencion_detectada: 'informacion',\n      modelo_interes: null,\n      urgencia: 'media',\n      presupuesto_estimado: null,\n      nivel_interes: 5,\n      datos_adicionales: {},\n      resumen_analisis: 'Error en análisis automático - revisar manualmente'\n    };\n  }\n\n  // Calcular score de calidad del lead (1-100)\n  let scoreCalidad = 0;\n\n  // Scoring basado en intención\n  switch (aiAnalysis.intencion_detectada) {\n    case 'compra':\n      scoreCalidad += 40;\n      break;\n    case 'cotizacion':\n      scoreCalidad += 35;\n      break;\n    case 'informacion':\n      scoreCalidad += 20;\n      break;\n    case 'servicio':\n      scoreCalidad += 10;\n      break;\n    default:\n      scoreCalidad += 15;\n  }\n\n  // Scoring basado en urgencia\n  switch (aiAnalysis.urgencia) {\n    case 'alta':\n      scoreCalidad += 30;\n      break;\n    case 'media':\n      scoreCalidad += 20;\n      break;\n    case 'baja':\n      scoreCalidad += 10;\n      break;\n    default:\n      scoreCalidad += 15;\n  }\n\n  // Bonus por información específica\n  if (aiAnalysis.modelo_interes && aiAnalysis.modelo_interes !== 'null') scoreCalidad += 15;\n  if (aiAnalysis.presupuesto_estimado && aiAnalysis.presupuesto_estimado !== 'null') scoreCalidad += 10;\n  if (aiAnalysis.datos_adicionales?.email) scoreCalidad += 15;\n  if (originalData.cliente_nombre !== 'Cliente') scoreCalidad += 5;\n\n  // Nivel de interés como factor\n  const nivelInteres = aiAnalysis.nivel_interes || 5;\n  scoreCalidad += Math.round(nivelInteres * 2);\n\n  // Asegurar que esté en rango 1-100\n  scoreCalidad = Math.min(Math.max(scoreCalidad, 1), 100);\n\n  // Clasificar lead\n  let clasificacionLead;\n  if (scoreCalidad >= 70) clasificacionLead = 'alto';\n  else if (scoreCalidad >= 40) clasificacionLead = 'medio';\n  else clasificacionLead = 'bajo';\n\n  // Preparar datos completos del lead\n  return {\n    // Datos originales\n    tenant_id: originalData.tenant_id,\n    telefono_cliente: originalData.cliente_telefono,\n    nombre_cliente: originalData.cliente_nombre,\n    mensaje_original: originalData.mensaje_original,\n    \n    // Análisis de IA\n    intencion_detectada: aiAnalysis.intencion_detectada,\n    modelo_interes: aiAnalysis.modelo_interes === 'null' ? null : aiAnalysis.modelo_interes,\n    urgencia: aiAnalysis.urgencia,\n    presupuesto_estimado: aiAnalysis.presupuesto_estimado === 'null' ? null : aiAnalysis.presupuesto_estimado,\n    email_cliente: aiAnalysis.datos_adicionales?.email || null,\n    \n    // Scoring calculado\n    score_calidad: scoreCalidad,\n    nivel_interes: clasificacionLead,\n    \n    // Metadatos\n    fuente_lead: 'whatsapp',\n    estado: 'nuevo',\n    fecha_creacion: new Date().toISOString(),\n    \n    // Datos para asignación\n    resumen_analisis: aiAnalysis.resumen_analisis,\n    raw_ai_response: responseText,\n    tenant_config: originalData.tenant_config,\n    business_phone_id: originalData.business_phone_id\n  };\n} catch (error) {\n  throw new Error(`Error calculating lead score: ${error.message}`);\n}"
+          "jsCode": "try {\n  
         },
         "id": "calculate-lead-score",
         "name": "Calculate Lead Score",
@@ -274,13 +274,13 @@
         },
         "id": "get-available-advisors",
         "name": "Get Available Advisors",
-        "type": "n8n-nodes-base.httpRequest",
+        "type": "n8n-nodes-base.httpRequestV3",
         "typeVersion": 4.1,
         "position": [1780, 300]
       },
       {
         "parameters": {
-          "jsCode": "try {\n  // Algoritmo de asignación inteligente de asesores\n  const leadData = $('Calculate Lead Score').first().json;\n  const advisors = $input.first().json;\n\n  if (!advisors || advisors.length === 0) {\n    throw new Error(`No hay asesores disponibles para el concesionario: ${leadData.tenant_id}`);\n  }\n\n  // Filtrar asesores por especialidad si se detectó modelo específico\n  let eligibleAdvisors = advisors;\n  if (leadData.modelo_interes) {\n    const specialized = advisors.filter(advisor => \n      advisor.especialidad && \n      advisor.especialidad.toLowerCase().includes(leadData.modelo_interes.toLowerCase())\n    );\n    \n    if (specialized.length > 0) {\n      eligibleAdvisors = specialized;\n    }\n  }\n\n  // Algoritmo de distribución por carga de trabajo\n  // Ordenar por menor carga actual\n  eligibleAdvisors.sort((a, b) => (a.carga_actual || 0) - (b.carga_actual || 0));\n\n  // Seleccionar asesor con menor carga\n  const selectedAdvisor = eligibleAdvisors[0];\n\n  // Preparar datos finales para inserción\n  return {\n    // Datos del lead para base de datos\n    lead_data: {\n      concesionario_id: leadData.tenant_id,\n      telefono_cliente: leadData.telefono_cliente,\n      nombre_cliente: leadData.nombre_cliente,\n      email_cliente: leadData.email_cliente,\n      intencion_detectada: leadData.intencion_detectada,\n      modelo_interes: leadData.modelo_interes,\n      mensaje_original: leadData.mensaje_original,\n      score_calidad: leadData.score_calidad,\n      nivel_interes: leadData.nivel_interes,\n      asesor_asignado_id: selectedAdvisor.id,\n      estado: 'nuevo',\n      fuente_lead: 'whatsapp',\n      fecha_creacion: new Date().toISOString(),\n      urgencia: leadData.urgencia,\n      presupuesto_estimado: leadData.presupuesto_estimado\n    },\n    \n    // Datos para notificación\n    notification_data: {\n      asesor: selectedAdvisor,\n      lead_summary: {\n        cliente: leadData.nombre_cliente,\n        telefono: leadData.telefono_cliente,\n        email: leadData.email_cliente,\n        intencion: leadData.intencion_detectada,\n        modelo: leadData.modelo_interes,\n        score: leadData.score_calidad,\n        urgencia: leadData.urgencia,\n        presupuesto: leadData.presupuesto_estimado,\n        resumen: leadData.resumen_analisis\n      },\n      tenant_config: leadData.tenant_config,\n      business_phone_id: leadData.business_phone_id\n    }\n  };\n} catch (error) {\n  throw new Error(`Error assigning advisor: ${error.message}`);\n}"
+          "jsCode": "try {\n  
         },
         "id": "assign-advisor",
         "name": "Assign Advisor",
@@ -328,7 +328,7 @@
         },
         "id": "save-lead-supabase",
         "name": "Save Lead to Supabase",
-        "type": "n8n-nodes-base.httpRequest",
+        "type": "n8n-nodes-base.httpRequestV3",
         "typeVersion": 4.1,
         "position": [2220, 300]
       },
@@ -368,13 +368,13 @@
         },
         "id": "update-advisor-load",
         "name": "Update Advisor Load",
-        "type": "n8n-nodes-base.httpRequest",
+        "type": "n8n-nodes-base.httpRequestV3",
         "typeVersion": 4.1,
         "position": [2440, 300]
       },
       {
         "parameters": {
-          "jsCode": "// Preparar notificación por email al asesor\nconst assignmentData = $('Assign Advisor').first().json;\nconst savedLead = $('Save Lead to Supabase').first().json;\n\nconst asesor = assignmentData.notification_data.asesor;\nconst leadSummary = assignmentData.notification_data.lead_summary;\nconst tenantConfig = assignmentData.notification_data.tenant_config;\n\n// ID del lead creado\nconst leadId = savedLead[0]?.id || 'N/A';\n\n// Template de email personalizado\nconst emailTemplate = `\n<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;\">\n  <div style=\"background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 30px;\">\n    <h1 style=\"margin: 0; font-size: 28px;\">🎯 Nuevo Lead Asignado</h1>\n    <h2 style=\"margin: 10px 0 0 0; opacity: 0.9; font-weight: normal;\">${tenantConfig.nombre_concesionario || 'Concesionario'}</h2>\n  </div>\n  \n  <div style=\"background: #f8fafc; padding: 25px; border-radius: 10px; margin: 20px 0; border-left: 5px solid #4299e1;\">\n    <h3 style=\"margin: 0 0 15px 0; color: #2d3748;\">📋 Información del Cliente</h3>\n    <table style=\"width: 100%; border-collapse: collapse;\">\n      <tr><td style=\"padding: 8px 0; font-weight: bold; color: #4a5568;\">Cliente:</td><td style=\"padding: 8px 0;\">${leadSummary.cliente}</td></tr>\n      <tr><td style=\"padding: 8px 0; font-weight: bold; color: #4a5568;\">Teléfono:</td><td style=\"padding: 8px 0;\">${leadSummary.telefono}</td></tr>\n      <tr><td style=\"padding: 8px 0; font-weight: bold; color: #4a5568;\">Email:</td><td style=\"padding: 8px 0;\">${leadSummary.email || 'No proporcionado'}</td></tr>\n      <tr><td style=\"padding: 8px 0; font-weight: bold; color: #4a5568;\">Intención:</td><td style=\"padding: 8px 0;\">${leadSummary.intencion}</td></tr>\n      <tr><td style=\"padding: 8px 0; font-weight: bold; color: #4a5568;\">Modelo de interés:</td><td style=\"padding: 8px 0;\">${leadSummary.modelo || 'No especificado'}</td></tr>\n      <tr><td style=\"padding: 8px 0; font-weight: bold; color: #4a5568;\">Presupuesto:</td><td style=\"padding: 8px 0;\">${leadSummary.presupuesto || 'No especificado'}</td></tr>\n    </table>\n  </div>\n  \n  <div style=\"background: #f0fff4; padding: 25px; border-radius: 10px; margin: 20px 0; border-left: 5px solid #48bb78;\">\n    <h3 style=\"margin: 0 0 15px 0; color: #2d3748;\">📊 Análisis Automático IA</h3>\n    <div style=\"display: flex; justify-content: space-between; margin-bottom: 15px;\">\n      <div style=\"text-align: center;\">\n        <div style=\"font-size: 24px; font-weight: bold; color: #38a169;\">${leadSummary.score}/100</div>\n        <div style=\"font-size: 12px; color: #4a5568;\">Score Calidad</div>\n      </div>\n      <div style=\"text-align: center;\">\n        <div style=\"font-size: 18px; font-weight: bold; color: #d69e2e; text-transform: uppercase;\">${leadSummary.urgencia}</div>\n        <div style=\"font-size: 12px; color: #4a5568;\">Urgencia</div>\n      </div>\n    </div>\n    <p style=\"margin: 15px 0 0 0; font-style: italic; color: #4a5568;\"><strong>Resumen IA:</strong> ${leadSummary.resumen}</p>\n  </div>\n  \n  <div style=\"background: #fffbeb; padding: 25px; border-radius: 10px; margin: 20px 0; border-left: 5px solid #ed8936;\">\n    <h3 style=\"margin: 0 0 15px 0; color: #2d3748;\">⚡ Próximos Pasos Recomendados</h3>\n    <ol style=\"margin: 0; padding-left: 20px; color: #4a5568; line-height: 1.6;\">\n      <li><strong>Contactar inmediatamente</strong> - El cliente está esperando respuesta</li>\n      <li><strong>Personalizar conversación</strong> - Usar información del análisis IA</li>\n      <li><strong>Actualizar estado</strong> - Marcar como contactado en la plataforma</li>\n      ${leadSummary.urgencia === 'alta' ? '<li style=\"color: #c53030;\"><strong>URGENTE</strong> - Contactar en máximo 1 hora</li>' : ''}\n    </ol>\n  </div>\n  \n  <div style=\"text-align: center; margin: 30px 0;\">\n    <a href=\"${tenantConfig.dashboard_url || 'https://app.optimacx.com'}/leads/${leadId}\" \n       style=\"background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 50px; font-weight: bold; display: inline-block; box-shadow: 0 4px 15px 0 rgba(102, 126, 234, 0.4);\">\n       🚀 Ver Lead en Plataforma\n    </a>\n  </div>\n  \n  <div style=\"border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: center; font-size: 12px; color: #718096;\">\n    <p style=\"margin: 0;\">Lead ID: ${leadId} | Generado automáticamente por OptimaCX</p>\n    <p style=\"margin: 5px 0 0 0;\">¿Problemas? Contacta al administrador del sistema</p>\n  </div>\n</div>\n`;\n\nreturn {\n  type: 'email_asesor',\n  to: asesor.email,\n  subject: `🎯 Nuevo Lead Asignado - Score ${leadSummary.score}/100 - ${leadSummary.cliente}`,\n  html: emailTemplate,\n  tenant_config: tenantConfig,\n  lead_id: leadId\n};"
+          "jsCode": "
         },
         "id": "prepare-email-notification",
         "name": "Prepare Email Notification",
@@ -384,7 +384,7 @@
       },
       {
         "parameters": {
-          "jsCode": "// Preparar notificación WhatsApp automática al cliente\nconst assignmentData = $('Assign Advisor').first().json;\nconst leadSummary = assignmentData.notification_data.lead_summary;\nconst tenantConfig = assignmentData.notification_data.tenant_config;\nconst businessPhoneId = assignmentData.notification_data.business_phone_id;\n\n// Mensaje automático de confirmación personalizado\nconst whatsappMessage = `¡Hola ${leadSummary.cliente}! 👋\n\nGracias por contactar a *${tenantConfig.nombre_concesionario || 'nuestro concesionario'}*.\n\n✅ Hemos recibido tu consulta${leadSummary.modelo ? ` sobre *${leadSummary.modelo}*` : ''}\n👨‍💼 Un asesor especializado se contactará contigo muy pronto\n⏰ Tiempo estimado de respuesta: ${leadSummary.urgencia === 'alta' ? '1 hora' : '2 horas'}\n\n${leadSummary.urgencia === 'alta' ? '🚨 *NOTA:* Detectamos alta urgencia en tu consulta, te contactaremos de inmediato' : ''}\n\n¿Tienes alguna pregunta adicional? Puedes responder a este mensaje.\n\n---\n*${tenantConfig.nombre_concesionario || 'Nuestro Concesionario'}*\n${tenantConfig.direccion ? `📍 ${tenantConfig.direccion}` : ''}\n${tenantConfig.telefono_principal ? `📞 ${tenantConfig.telefono_principal}` : ''}\n${tenantConfig.horarios ? `🕒 ${tenantConfig.horarios}` : ''}`;\n\nreturn {\n  type: 'whatsapp_cliente',\n  to: leadSummary.telefono,\n  message: whatsappMessage.trim(),\n  business_phone_id: businessPhoneId\n};"
+          "jsCode": "
         },
         "id": "prepare-whatsapp-confirmation",
         "name": "Prepare WhatsApp Confirmation", 
@@ -438,14 +438,14 @@
         },
         "id": "send-email-notification",
         "name": "Send Email Notification",
-        "type": "n8n-nodes-base.httpRequest",
+        "type": "n8n-nodes-base.httpRequestV3",
         "typeVersion": 4.1,
         "position": [2880, 200]
       },
       {
         "parameters": {
           "method": "POST",
-          "url": "https://graph.facebook.com/v17.0/{{ $json.business_phone_id }}/messages",
+          "url": "https:
           "authentication": "genericCredentialType", 
           "genericAuthType": "httpHeaderAuth",
           "headers": {
@@ -486,7 +486,7 @@
         },
         "id": "send-whatsapp-confirmation",
         "name": "Send WhatsApp Confirmation",
-        "type": "n8n-nodes-base.httpRequest",
+        "type": "n8n-nodes-base.httpRequestV3",
         "typeVersion": 4.1,
         "position": [2880, 400]
       },
@@ -501,7 +501,7 @@
         "id": "webhook-response",
         "name": "Webhook Success Response",
         "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1,
+        "typeVersion": 2,
         "position": [3100, 300]
       },
       {
@@ -515,7 +515,7 @@
         "id": "invalid-webhook-response",
         "name": "Invalid Webhook Response",
         "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1,
+        "typeVersion": 2,
         "position": [460, 500]
       },
       {
@@ -529,7 +529,7 @@
         "id": "error-response",
         "name": "Error Response",
         "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 1,
+        "typeVersion": 2,
         "position": [1340, 500]
       }
     ],

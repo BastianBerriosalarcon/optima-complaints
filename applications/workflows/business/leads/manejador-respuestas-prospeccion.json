@@ -10,12 +10,12 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
       "parameters": {
-        "jsCode": "const responseData = $input.first().json;\nconst messageBody = responseData.message_body.toLowerCase().trim();\n\n// Lógica simple para detectar intención positiva\nconst positiveKeywords = ['sí', 'si', 'ya', 'bueno', 'ok', 'interesa', 'información', 'info', 'cotizar'];\nconst isPositive = positiveKeywords.some(keyword => messageBody.includes(keyword));\n\nreturn {\n  ...responseData,\n  is_positive_response: isPositive\n};"
+        "jsCode": "const responseData = $input.first().json;\nconst messageBody = responseData.message_body.toLowerCase().trim();\n\n
       },
       "id": "analyze-response",
       "name": "1. Analizar Respuesta",
@@ -38,12 +38,12 @@
       "id": "check-if-positive",
       "name": "¿Respuesta Positiva?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [680, 300]
     },
     {
       "parameters": {
-        "jsCode": "const responseData = $input.first().json;\n\nconst newLead = {\n  concesionario_id: responseData.tenant_id,\n  telefono_cliente: responseData.from_phone,\n  nombre_cliente: responseData.contact_name || 'Cliente de Prospección',\n  estado: 'nuevo',\n  fuente_lead: 'prospeccion_whatsapp',\n  mensaje_original: responseData.message_body,\n  nivel_interes: 'medio', // Se puede ajustar o analizar con más detalle\n  score_calidad: 50 // Score base para un lead de prospección\n};\n\nreturn newLead;"
+        "jsCode": "const responseData = $input.first().json;\n\nconst newLead = {\n  concesionario_id: responseData.tenant_id,\n  telefono_cliente: responseData.from_phone,\n  nombre_cliente: responseData.contact_name || 'Cliente de Prospección',\n  estado: 'nuevo',\n  fuente_lead: 'prospeccion_whatsapp',\n  mensaje_original: responseData.message_body,\n  nivel_interes: 'medio', 
       },
       "id": "prepare-new-lead",
       "name": "2a. Preparar Nuevo Lead",
@@ -61,7 +61,7 @@
       "id": "trigger-assignment-workflow",
       "name": "3a. Disparar Asignación de Asesor",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1120, 200]
     },
     {

@@ -13,12 +13,12 @@
       "id": "webhook-trigger",
       "name": "Webhook Carga Excel Leads",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
       "parameters": {
-        "jsCode": "const webhookData = $input.first().json;\n\n// Validaciones críticas\nif (!webhookData.tenant_id) {\n  throw new Error('El tenant_id es requerido.');\n}\nif (!webhookData.excel_data || !Array.isArray(webhookData.excel_data) || webhookData.excel_data.length === 0) {\n  throw new Error('El campo excel_data debe ser un array de clientes no vacío.');\n}\n\n// Normalizar datos del Excel\nconst processedClients = webhookData.excel_data.map((row, index) => {\n  const telefono = (row.telefono || row.TELEFONO || row['Teléfono'] || '').toString().replace(/\\D/g, '');\n  if (!telefono || telefono.length < 8) {\n    throw new Error(`Fila ${index + 1}: Teléfono inválido.`);\n  }\n\n  return {\n    nombre: row.nombre || row.NOMBRE || row['Nombre Cliente'] || 'Cliente Potencial',\n    telefono: telefono.startsWith('569') ? telefono : '569' + telefono.replace(/^9/, ''),\n    rut: row.rut || row.RUT || null,\n    email: row.email || row.EMAIL || null,\n    metadata_origen: row.origen_dato || 'carga_masiva'\n  };\n});\n\nreturn {\n  tenant_id: webhookData.tenant_id,\n  uploaded_by: webhookData.uploaded_by || 'sistema',\n  campaign_name: webhookData.campaign_name || `prospeccion_${new Date().toISOString().split('T')[0]}` ,\n  clients_from_excel: processedClients\n};"
+        "jsCode": "const webhookData = $input.first().json;\n\n
       },
       "id": "process-excel-data",
       "name": "1. Procesar Datos Excel",
@@ -36,7 +36,7 @@
       "id": "trigger-filter-workflow",
       "name": "2. Disparar Filtro de Duplicados",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [680, 300]
     },
     {
@@ -47,7 +47,7 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [900, 300]
     }
   ],

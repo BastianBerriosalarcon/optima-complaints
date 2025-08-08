@@ -64,7 +64,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Prepara los datos para la iteración, asegurando que 'recipients' sea un array.\nconst input = $input.all()[0].json;\nconst recipients = input.recipients || [];\n\n// Asegúrate de que cada destinatario tenga al menos un email.\nconst validRecipients = recipients.filter(r => r.email);\n\nreturn validRecipients.map(recipient => ({\n  json: {\n    ...input,\n    current_recipient: recipient\n  }\n}));"
+        "functionCode": "
       },
       "id": "prepare-recipients",
       "name": "Preparar Destinatarios",
@@ -84,7 +84,7 @@
     },
     {
       "parameters": {
-        "functionCode": "// Prepara el payload para el envío de email.\nconst input = $input.all()[0].json;\nconst tenantConfig = input.tenant_config;\nconst recipient = input.current_recipient;\nconst emailSubject = input.original_email_subject;\nconst emailHtml = input.original_email_html;\nconst emailText = input.original_email_text;\n\nconst emailPayload = {\n  to: recipient.email,\n  subject: emailSubject,\n  html: emailHtml,\n  text: emailText,\n  from: tenantConfig.email_sender || 'no-reply@optimacx.com', // Asume una configuración de remitente\n  tenant_id: tenantConfig.tenant_id,\n  campaign_id: input.campaign_id || 'manual_email_bulk_send',\n  recipient_id: recipient.id || recipient.email\n};\n\nreturn [{ json: { ...emailPayload, original_email_subject: emailSubject, original_email_html: emailHtml, original_email_text: emailText } }];"
+        "functionCode": "
       },
       "id": "prepare-email-message",
       "name": "Preparar Mensaje Email",
@@ -95,7 +95,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email", // Webhook genérico para enviar email
+        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email", 
         "bodyParameters": {
           "parameters": [
             {
@@ -132,7 +132,7 @@
       "parameters": {
         "operation": "insert",
         "schema": "public",
-        "table": "campaign_logs", // Asumiendo la misma tabla para logs de campañas
+        "table": "campaign_logs", 
         "columns": "campaign_id, tenant_id, recipient_id, email, message_content, status, response_data, created_at",
         "additionalFields": {
           "values": "={{ [$json.campaign_id, $json.tenant_id, $json.recipient_id, $json.to, $json.original_email_html || $json.original_email_text, $node[\"Enviar Mensaje Email\"].json.success ? 'sent' : 'failed', JSON.stringify($node[\"Enviar Mensaje Email\"].json), new Date().toISOString()] }}"

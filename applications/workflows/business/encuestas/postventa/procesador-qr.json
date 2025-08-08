@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Valida y normaliza los datos de la encuesta QR\nconst surveyData = $input.first().json;\n\n// Campos requeridos\nconst requiredFields = ['tenant_id', 'sucursal_id', 'cliente_telefono', 'recomendacion', 'satisfaccion', 'lavado', 'asesor'];\nfor (const field of requiredFields) {\n  if (!surveyData[field]) {\n    throw new Error(`Campo requerido faltante: ${field}`);\n  }\n}\n\n// Validar que las calificaciones estén en el rango 1-10\nconst scoreFields = ['recomendacion', 'satisfaccion', 'lavado', 'asesor'];\nfor (const field of scoreFields) {\n  const score = surveyData[field];\n  if (typeof score !== 'number' || score < 1 || score > 10) {\n    throw new Error(`Calificación inválida para ${field}: ${score}. Debe ser un número entre 1 y 10.`);\n  }\n}\n\n// Calcular promedio de las calificaciones\nconst totalScore = scoreFields.reduce((sum, field) => sum + surveyData[field], 0);\nconst averageScore = totalScore / scoreFields.length;\n\n// Preparar datos para la base de datos\nconst processedSurvey = {\n  concesionario_id: surveyData.tenant_id,\n  sucursal_id: surveyData.sucursal_id,\n  cliente_nombre: surveyData.cliente_nombre || null,\n  cliente_rut: surveyData.cliente_rut || null,\n  cliente_telefono: surveyData.cliente_telefono,\n  recomendacion: surveyData.recomendacion,\n  satisfaccion: surveyData.satisfaccion,\n  lavado: surveyData.lavado,\n  asesor: surveyData.asesor,\n  comentario: surveyData.comentario || null,\n  origen: 'QR',\n  estado: 'completado', // Siempre completado si llega por QR\n  fecha_creacion: new Date().toISOString(),\n  // Añadir el promedio para facilitar la lógica de notificación\n  average_score: averageScore\n};\n\nreturn [{ json: processedSurvey }];"
+        "jsCode": "
       },
       "id": "validate-and-process-qr-data",
       "name": "Validar y Procesar Datos QR",
@@ -61,7 +61,7 @@
       "parameters": {
         "operation": "create",
         "resource": "execution",
-        "workflowId": "survey-low-score-notifier", // ID del workflow de notificación de baja calificación
+        "workflowId": "survey-low-score-notifier", 
         "data": "={{ JSON.stringify($json) }}"
       },
       "id": "trigger-low-score-notification",

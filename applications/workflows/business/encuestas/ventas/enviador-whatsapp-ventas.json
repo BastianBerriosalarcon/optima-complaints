@@ -13,7 +13,7 @@
       "id": "webhook-trigger-ventas",
       "name": "Trigger Enviador WhatsApp Ventas",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
       "webhookId": "sales-survey-whatsapp-sender"
     },
@@ -40,7 +40,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v18.0/{{ $json.phone_number_id }}/messages",
+        "url": "=https:
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headers": {
@@ -78,7 +78,7 @@
       },
       "id": "send-sales-whatsapp",
       "name": "Enviar WhatsApp Ventas",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4,
       "position": [900, 300]
     },
@@ -135,7 +135,7 @@
       },
       "id": "update-sales-survey-status",
       "name": "Actualizar Estado Encuesta Ventas",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4,
       "position": [1120, 300]
     },
@@ -185,7 +185,7 @@
       "id": "success-response-ventas",
       "name": "Respuesta Éxito Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1780, 200]
     },
     {
@@ -196,7 +196,7 @@
       "id": "error-response-ventas",
       "name": "Respuesta Error Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1780, 400]
     }
   ],

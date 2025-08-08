@@ -17,7 +17,7 @@
       "id": "workflow-trigger",
       "name": "Trigger ReRank",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [250, 300]
     },
     {
@@ -57,7 +57,7 @@
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "requestMethod": "POST",
-        "url": "https://api.cohere.ai/v1/rerank",
+        "url": "https:
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -94,7 +94,7 @@
       },
       "id": "call-cohere-rerank",
       "name": "Llamar Cohere Rerank",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.2,
       "position": [1130, 300]
     },
@@ -140,7 +140,7 @@
       "id": "trigger-llm-generation",
       "name": "Activar Generación LLM",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [2010, 300]
     }
   ],

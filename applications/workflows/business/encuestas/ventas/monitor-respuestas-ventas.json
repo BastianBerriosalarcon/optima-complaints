@@ -13,7 +13,7 @@
       "id": "webhook-trigger-ventas",
       "name": "Trigger Monitor Respuestas Ventas",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
       "webhookId": "sales-survey-response-monitor"
     },
@@ -62,7 +62,7 @@
       },
       "id": "get-whatsapp-sales-surveys",
       "name": "Obtener Encuestas WhatsApp Ventas",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4,
       "position": [460, 300]
     },
@@ -146,7 +146,7 @@
       },
       "id": "trigger-sales-call-center",
       "name": "Disparar Asignación Contact Center Ventas",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4,
       "position": [1120, 200]
     },
@@ -167,7 +167,7 @@
       "id": "success-response-ventas",
       "name": "Respuesta Éxito Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1340, 200]
     },
     {
@@ -178,7 +178,7 @@
       "id": "campaign-completed-ventas",
       "name": "Campaña Ventas Completada",
       "type": "n8n-nodes-base.respondToWebhook", 
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1340, 400]
     }
   ],

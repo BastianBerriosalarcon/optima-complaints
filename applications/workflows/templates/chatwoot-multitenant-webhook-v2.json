@@ -10,7 +10,7 @@
       "id": "webhook-receiver",
       "name": "Webhook Chatwoot",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "chatwoot-multitenant"
     },
@@ -19,8 +19,8 @@
       },
       "id": "tenant-identifier",
       "name": "Identificar Tenant",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [460, 300]
     },
     {
@@ -61,7 +61,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://n8n-optimacx-supabase-dev-wfzra4ruxq-tl.a.run.app/webhook/lead-processor",
+        "url": "https:
         "authentication": "headerAuth",
         "sendBody": true,
         "bodyContentType": "json",
@@ -70,7 +70,7 @@
       },
       "id": "forward-to-lead-processor",
       "name": "Enviar a Procesador Leads",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.2,
       "position": [900, 200],
       "credentials": {
@@ -83,7 +83,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://n8n-optimacx-supabase-dev-wfzra4ruxq-tl.a.run.app/webhook/conversation-logger",
+        "url": "https:
         "authentication": "headerAuth",
         "sendBody": true,
         "bodyContentType": "json",
@@ -92,7 +92,7 @@
       },
       "id": "log-conversation",
       "name": "Log Conversación",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.2,
       "position": [900, 400],
       "credentials": {
@@ -110,7 +110,7 @@
       "id": "webhook-response",
       "name": "Respuesta Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1120, 300]
     }
   ],

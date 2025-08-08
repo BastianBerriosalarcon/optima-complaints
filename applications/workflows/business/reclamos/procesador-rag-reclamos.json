@@ -11,7 +11,7 @@
       "id": "webhook-complaint-input",
       "name": "Complaint Input Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
       "webhookId": "complaint-rag-processor"
     },
@@ -47,12 +47,12 @@
       "id": "validate-complaint",
       "name": "Validate Complaint",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "/*** COMPLAINT RAG PROCESSOR - SRP: Solo análisis IA con RAG ***/\nconst webhookData = $input.first().json;\n\n// Normalizar datos siguiendo patrón de workflows existentes\nconst complaintData = {\n  tenant_id: webhookData.tenant_id,\n  complaint_text: webhookData.complaint_text,\n  \n  // Datos del cliente (siguiendo estructura de leads/encuestas)\n  cliente_nombre: webhookData.cliente_nombre || 'Cliente',\n  cliente_telefono: webhookData.cliente_telefono || '',\n  cliente_email: webhookData.cliente_email || null,\n  cliente_rut: webhookData.cliente_rut || null,\n  \n  // Datos del vehículo (específicos de reclamos automotriz)\n  vehiculo_patente: webhookData.vehiculo_patente || null,\n  vehiculo_vin: webhookData.vehiculo_vin || null,\n  vehiculo_marca: webhookData.vehiculo_marca || null,\n  vehiculo_modelo: webhookData.vehiculo_modelo || null,\n  \n  // Metadatos del reclamo\n  canal_origen: webhookData.canal_origen || 'whatsapp',\n  sucursal_estimada: webhookData.sucursal || null,\n  id_externo: webhookData.id_externo || null,\n  fecha_incidente: webhookData.fecha_incidente || null,\n  \n  // Para auditoría\n  raw_input: webhookData\n};\n\n// Validaciones críticas (siguiendo patrón de otros workflows)\nif (complaintData.complaint_text.length < 10) {\n  throw new Error('Texto del reclamo demasiado corto (mínimo 10 caracteres)');\n}\n\nif (complaintData.complaint_text.length > 5000) {\n  throw new Error('Texto del reclamo demasiado largo (máximo 5000 caracteres)');\n}\n\nreturn complaintData;"
+        "jsCode": "/*** COMPLAINT RAG PROCESSOR - SRP: Solo análisis IA con RAG ***/\nconst webhookData = $input.first().json;\n\n
       },
       "id": "normalize-complaint",
       "name": "Normalize Complaint",
@@ -93,14 +93,14 @@
       },
       "id": "load-tenant-config",
       "name": "Load Tenant Config",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [900, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "url": "https:
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headers": {
@@ -130,7 +130,7 @@
       },
       "id": "generate-embedding",
       "name": "Generate Embedding",
-      "type": "n8n-nodes-base.httpRequest", 
+      "type": "n8n-nodes-base.httpRequestV3", 
       "typeVersion": 4.1,
       "position": [1120, 300]
     },
@@ -179,7 +179,7 @@
       },
       "id": "vector-search",
       "name": "Vector Search",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [1340, 300]
     },
@@ -207,7 +207,7 @@
       "id": "check-knowledge-found",
       "name": "Check Knowledge Found",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1560, 300]
     },
     {
@@ -220,12 +220,12 @@
       "id": "rerank-cohere-documents",
       "name": "Rerank Documents (Cohere)",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1680, 200]
     },
     {
       "parameters": {
-        "jsCode": "// Preparar prompt enriquecido con contexto RAG (si hay conocimiento)\nconst complaintData = $('Normalize Complaint').first().json;\nconst tenantConfig = $('Load Tenant Config').first().json[0];\nconst knowledgeResults = $('Rerank Documents (Cohere)').first().json.high_quality_documents;\n\n// Extraer contexto más relevante (top 3)\nconst topDocuments = knowledgeResults\n  .slice(0, 3)\n  .map(doc => doc.contenido || doc.content)\n  .join('\\n\\n---\\n\\n');\n\n// Prompt enriquecido con RAG (siguiendo patrón de IA de leads)\nconst enhancedPrompt = `\nEres un especialista en atención al cliente de ${tenantConfig.nombre_concesionario || 'nuestro concesionario'}.\n\nCONTEXTO DE CONOCIMIENTO ESPECÍFICO:\n${topDocuments}\n\nRECLAMO DEL CLIENTE:\n\"${complaintData.complaint_text}\"\n\nINFORMACIÓN DISPONIBLE:\n- Cliente: ${complaintData.cliente_nombre}\n- Canal: ${complaintData.canal_origen}\n${complaintData.vehiculo_patente ? `- Vehículo: ${complaintData.vehiculo_patente}` : ''}\n${complaintData.vehiculo_marca ? `- Marca/Modelo: ${complaintData.vehiculo_marca} ${complaintData.vehiculo_modelo || ''}` : ''}\n\nINSTRUCCIONES:\nAnaliza el reclamo usando las políticas específicas de nuestro concesionario. Clasifica y extrae información según nuestros procedimientos internos.\n\nRESPONDE EN FORMATO JSON:\n{\n  \"clasificacion\": {\n    \"tipo_reclamo\": \"garantia|servicio_tecnico|atencion_cliente|producto_defectuoso|facturacion|otro\",\n    \"categoria\": \"categoría específica según políticas\",\n    \"subcategoria\": \"subcategoría específica\",\n    \"urgencia\": \"alta|media|baja\",\n    \"black_alert\": true/false\n  },\n  \"datos_extraidos\": {\n    \"sucursal_detectada\": \"sucursal mencionada o null\",\n    \"vehiculo\": {\n      \"patente\": \"patente detectada o null\",\n      \"vin\": \"vin detectado o null\",\n      \"marca\": \"marca detectada\",\n      \"modelo\": \"modelo detectado\",\n      \"año\": \"año si se menciona\"\n    },\n    \"fecha_incidente\": \"fecha del problema si se menciona\",\n    \"fecha_compra_estimada\": \"fecha de compra si se menciona\"\n  },\n  \"analisis\": {\n    \"resumen_problema\": \"resumen conciso del problema\",\n    \"factores_criticos\": [\"factor1\", \"factor2\"],\n    \"nivel_satisfaccion_estimado\": 1-10,\n    \"requiere_black_alert\": true/false,\n    \"dias_desde_compra\": \"número de días si se puede calcular\"\n  },\n  \"sugerencias_resolucion\": [\n    {\n      \"accion\": \"acción recomendada\",\n      \"responsable\": \"jefe_servicio|asesor_servicio|encargado_calidad\",\n      \"plazo\": \"plazo recomendado\",\n      \"prioridad\": \"alta|media|baja\"\n    }\n  ],\n  \"referencias_politicas\": [\"política aplicable del contexto\"],\n  \"comentarios_ia\": \"observaciones adicionales del análisis contextualizado\"\n}\n\nSOLO RESPONDE CON EL JSON, SIN TEXTO ADICIONAL.\n`;\n\nreturn {\n  complaint_data: complaintData,\n  tenant_config: tenantConfig,\n  enhanced_prompt: enhancedPrompt,\n  rag_context: {\n    documents_found: knowledgeResults.length,\n    context_used: true,\n    top_similarity: knowledgeResults[0]?.similarity || 0\n  }\n};"
+        "jsCode": "
       },
       "id": "build-enhanced-prompt",
       "name": "Build Enhanced Prompt",
@@ -235,7 +235,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Fallback: prompt básico sin RAG\nconst complaintData = $('Normalize Complaint').first().json;\nconst tenantConfig = $('Load Tenant Config').first().json[0];\n\n// Prompt básico sin contexto específico\nconst basicPrompt = `\nEres un especialista en atención al cliente de ${tenantConfig.nombre_concesionario || 'nuestro concesionario'}.\n\nRECLAMO DEL CLIENTE:\n\"${complaintData.complaint_text}\"\n\nINFORMACIÓN DISPONIBLE:\n- Cliente: ${complaintData.cliente_nombre}\n- Canal: ${complaintData.canal_origen}\n\nAnaliza el reclamo según categorías estándar de la industria automotriz.\n\nRESPONDE EN FORMATO JSON:\n{\n  \"clasificacion\": {\n    \"tipo_reclamo\": \"garantia|servicio_tecnico|atencion_cliente|producto_defectuoso|facturacion|otro\",\n    \"categoria\": \"categoria general\",\n    \"urgencia\": \"media\",\n    \"black_alert\": false\n  },\n  \"datos_extraidos\": {\n    \"sucursal_detectada\": null,\n    \"vehiculo\": {\n      \"patente\": null,\n      \"marca\": \"marca detectada o null\",\n      \"modelo\": \"modelo detectado o null\"\n    }\n  },\n  \"analisis\": {\n    \"resumen_problema\": \"resumen del problema\",\n    \"nivel_satisfaccion_estimado\": 5,\n    \"requiere_black_alert\": false\n  },\n  \"sugerencias_resolucion\": [\n    {\n      \"accion\": \"revisar reclamo manualmente\",\n      \"responsable\": \"jefe_servicio\",\n      \"plazo\": \"24 horas\",\n      \"prioridad\": \"media\"\n    }\n  ],\n  \"comentarios_ia\": \"Análisis básico sin contexto específico del concesionario\"\n}\n\nSOLO RESPONDE CON EL JSON, SIN TEXTO ADICIONAL.\n`;\n\nreturn {\n  complaint_data: complaintData,\n  tenant_config: tenantConfig,\n  enhanced_prompt: basicPrompt,\n  rag_context: {\n    documents_found: 0,\n    context_used: false,\n    fallback_reason: 'No relevant knowledge found'\n  }\n};"
+        "jsCode": "
       },
       "id": "build-basic-prompt",
       "name": "Build Basic Prompt",
@@ -246,7 +246,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent",
+        "url": "https:
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headers": {
@@ -276,13 +276,13 @@
       },
       "id": "gemini-analysis",
       "name": "Gemini Analysis",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [2000, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Procesar respuesta de Gemini y preparar datos estructurados\nconst promptData = $input.all()[0].json;\nconst geminiResponse = $input.all()[1].json;\n\n// Extraer y parsear respuesta JSON\nconst responseText = geminiResponse.candidates[0]?.content?.parts[0]?.text || '{}';\n\nlet aiAnalysis;\ntry {\n  const cleanJson = responseText.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  aiAnalysis = JSON.parse(cleanJson);\n} catch (error) {\n  console.error('Error parsing Gemini response:', responseText);\n  // Fallback seguro en caso de error\n  aiAnalysis = {\n    clasificacion: {\n      tipo_reclamo: 'otro',\n      categoria: 'sin_clasificar',\n      urgencia: 'media',\n      black_alert: false\n    },\n    datos_extraidos: {},\n    analisis: {\n      resumen_problema: 'Error en procesamiento automático',\n      nivel_satisfaccion_estimado: 5,\n      requiere_black_alert: false\n    },\n    sugerencias_resolucion: [{\n      accion: 'Revisar manualmente',\n      responsable: 'jefe_servicio',\n      plazo: '24 horas',\n      prioridad: 'media'\n    }],\n    comentarios_ia: 'Error en análisis automático - requiere revisión manual'\n  };\n}\n\n// Preparar datos finales para siguiente workflow\nconst processedComplaint = {\n  // Datos originales del reclamo\n  complaint_input: promptData.complaint_data,\n  \n  // Análisis completo de IA\n  ai_analysis: aiAnalysis,\n  \n  // Configuración del tenant\n  tenant_config: promptData.tenant_config,\n  \n  // Metadatos de procesamiento RAG\n  processing_metadata: {\n    used_rag: promptData.rag_context.context_used,\n    documents_found: promptData.rag_context.documents_found,\n    analysis_timestamp: new Date().toISOString(),\n    gemini_response_length: responseText.length\n  },\n  \n  // Trigger para siguiente workflow\n  next_workflow: 'complaint-auto-assignment'\n};\n\nreturn processedComplaint;"
+        "jsCode": "
       },
       "id": "process-ai-response",
       "name": "Process AI Response",
@@ -300,7 +300,7 @@
       "id": "trigger-assignment",
       "name": "Trigger Assignment",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [2440, 300]
     },
     {
@@ -311,7 +311,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [2660, 300]
     },
     {
@@ -325,7 +325,7 @@
       "id": "error-response",
       "name": "Error Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [460, 500]
     }
   ],

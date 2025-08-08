@@ -10,7 +10,7 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
@@ -37,7 +37,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://graph.facebook.com/v17.0/{{ $json.tenant_config.whatsapp_phone_id }}/messages",
+        "url": "https:
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headers": {
@@ -71,7 +71,7 @@
       },
       "id": "send-whatsapp-message",
       "name": "3. Enviar Mensaje WhatsApp",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [900, 300]
     },

@@ -1,0 +1,120 @@
+{
+  "name": "Tenant - Cargador de Configuración",
+  "description": "Workflow que carga la configuración de un tenant desde la base de datos",
+  "tags": ["tenant", "configuration", "database"],
+  "nodes": [
+    {
+      "parameters": {
+        "workflowId": "{{ $json.workflowId }}"
+      },
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM concesionarios WHERE id = $1 AND activo = true",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.tenant_id] }}"
+        }
+      },
+      "id": "get-tenant-config",
+      "name": "Obtener Configuración Tenant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "greaterThan",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "tenant-exists",
+      "name": "¿Tenant Existe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const tenant = $input.all()[0].json[0];\n\nreturn [{\n  json: {\n    tenant_id: tenant.id,\n    tenant_name: tenant.nombre,\n    config: {\n      ai: tenant.configuracion_ai,\n      whatsapp: tenant.configuracion_whatsapp,\n      active: tenant.activo\n    },\n    original_data: $input.all()[0].json\n  }\n}];"
+      },
+      "id": "format-config",
+      "name": "Formatear Configuración",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    error: 'Tenant no encontrado o inactivo',\n    tenant_id: $input.all()[0].json.tenant_id,\n    success: false\n  }\n}];"
+      },
+      "id": "tenant-not-found",
+      "name": "Tenant No Encontrado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 400]
+    }
+  ],
+  "connections": {
+    "workflow-trigger": {
+      "main": [
+        [
+          {
+            "node": "get-tenant-config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-tenant-config": {
+      "main": [
+        [
+          {
+            "node": "tenant-exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "tenant-exists": {
+      "main": [
+        [
+          {
+            "node": "format-config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "tenant-not-found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "versionId": "1.0.0"
+}

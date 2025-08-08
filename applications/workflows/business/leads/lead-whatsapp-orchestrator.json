@@ -13,59 +13,59 @@
       "id": "webhook-whatsapp-lead",
       "name": "WhatsApp Lead Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [200, 300]
     },
     {
       "parameters": {
         "operation": "create",
         "resource": "execution",
-        "workflowId": "whatsapp-message-validator",
+        "workflowId": "validador-mensajes-whatsapp",
         "data": "={{ JSON.stringify($json) }}"
       },
       "id": "trigger-message-validator",
       "name": "Validar Mensaje WhatsApp",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [400, 300]
     },
     {
       "parameters": {
         "operation": "create",
         "resource": "execution",
-        "workflowId": "tenant-config-loader",
+        "workflowId": "cargador-config-tenant",
         "data": "={{ JSON.stringify($json) }}"
       },
       "id": "trigger-tenant-loader",
       "name": "Cargar Configuración Tenant",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [600, 300]
     },
     {
       "parameters": {
         "operation": "create",
         "resource": "execution",
-        "workflowId": "lead-analysis-ai",
+        "workflowId": "analisis-ia-leads",
         "data": "={{ JSON.stringify($json) }}"
       },
       "id": "trigger-lead-analysis",
       "name": "Analizar Lead con IA",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [800, 300]
     },
     {
       "parameters": {
         "operation": "create",
         "resource": "execution",
-        "workflowId": "lead-assignment",
+        "workflowId": "asignacion-asesores",
         "data": "={{ JSON.stringify($json) }}"
       },
       "id": "trigger-lead-management",
       "name": "Gestionar Lead",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1000, 300]
     },
     {
@@ -76,7 +76,7 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1200, 300]
     }
   ],

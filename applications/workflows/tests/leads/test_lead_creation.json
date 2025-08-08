@@ -7,12 +7,12 @@
       "id": "start-node",
       "name": "Start",
       "type": "n8n-nodes-base.start",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Datos de prueba que simulan un webhook de WhatsApp\nconst testPayload = {\n  object: 'whatsapp_business_account',\n  entry: [\n    {\n      id: 'WHATSAPP_BUSINESS_ACCOUNT_ID',\n      changes: [\n        {\n          value: {\n            messaging_product: 'whatsapp',\n            metadata: {\n              display_phone_number: '16505551111',\n              phone_number_id: '1234567890' // ID asociado a un tenant de prueba\n            },\n            contacts: [\n              {\n                profile: {\n                  name: 'Juan Tester'\n                },\n                wa_id: '56998765432'\n              }\n            ],\n            messages: [\n              {\n                from: '56998765432',\n                id: `wamid.${Date.now()}`,\n                timestamp: Math.floor(Date.now() / 1000).toString(),\n                text: {\n                  body: 'Hola, quiero cotizar un Toyota Yaris. Mi correo es juan.tester@example.com'\n                },\n                type: 'text'\n              }\n            ]\n          },\n          field: 'messages'\n        }\n      ]\n    }\n  ]\n};\n\nreturn { testPayload };"
+        "jsCode": "
       },
       "id": "setup-test-data",
       "name": "1. Setup: Simular Webhook WhatsApp",
@@ -23,13 +23,13 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://localhost:5678/webhook/whatsapp/lead",
+        "url": "http:
         "body": "={{ JSON.stringify($json.testPayload) }}",
         "options": {}
       },
       "id": "execute-workflow",
       "name": "2. Execute: Llamar a Procesador de Leads",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [680, 300]
     },
@@ -41,7 +41,7 @@
       "id": "wait-for-processing",
       "name": "3. Wait: Esperar Procesamiento",
       "type": "n8n-nodes-base.wait",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [900, 300]
     },
     {

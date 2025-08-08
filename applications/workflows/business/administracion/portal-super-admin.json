@@ -26,6 +26,7 @@
     },
     {
       "parameters": {
+        "jsCode": "// Procesar y validar solicitud de Super-Admin\nconst input = $input.first().json;\n\n// Validar estructura de la solicitud\nif (!input.action) {\n  throw new Error('MISSING_ACTION: El campo action es requerido');\n}\n\nif (!input.admin_user) {\n  throw new Error('MISSING_ADMIN_USER: El campo admin_user es requerido');\n}\n\n// Validar acciones permitidas\nconst supportedActions = [\n  'create_tenant',\n  'get_platform_metrics', \n  'get_tenant_dashboard',\n  'update_tenant_config',\n  'suspend_tenant',\n  'activate_tenant',\n  'bulk_tenant_operation'\n];\n\nif (!supportedActions.includes(input.action)) {\n  throw new Error(`UNSUPPORTED_ACTION: Acción '${input.action}' no soportada. Acciones válidas: ${supportedActions.join(', ')}`);\n}\n\n// Generar ID único para la acción\nconst actionId = `admin_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n\n// Validar datos específicos por acción\nlet validatedData = {\n  action_id: actionId,\n  action: input.action,\n  admin_user: input.admin_user,\n  admin_ip: input.admin_ip || 'unknown',\n  timestamp: new Date().toISOString(),\n  action_data: input.action_data || {}\n};\n\n// Validaciones específicas por tipo de acción\nswitch (input.action) {\n  case 'create_tenant':\n    const requiredFields = ['tenant_name', 'business_name', 'contact_email'];\n    for (const field of requiredFields) {\n      if (!input.action_data[field]) {\n        throw new Error(`MISSING_FIELD: El campo '${field}' es requerido para crear tenant`);\n      }\n    }\n    \n    // Generar tenant_id si no existe\n    if (!input.action_data.tenant_id) {\n      validatedData.action_data.tenant_id = `tenant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n    }\n    \n    // Valores por defecto\n    validatedData.action_data.plan_type = input.action_data.plan_type || 'basic';\n    validatedData.action_data.features_enabled = input.action_data.features_enabled || ['leads', 'surveys', 'complaints'];\n    validatedData.action_data.initial_users = input.action_data.initial_users || 5;\n    break;\n    \n  case 'get_tenant_dashboard':\n    if (!input.action_data.tenant_id) {\n      throw new Error('MISSING_TENANT_ID: El campo tenant_id es requerido para obtener dashboard');\n    }\n    validatedData.action_data.metrics_period = input.action_data.metrics_period || '30d';\n    break;\n    \n  case 'get_platform_metrics':\n    validatedData.action_data.period = input.action_data.period || '30d';\n    break;\n}\n\n// Log de la acción procesada\nconsole.log('Admin action processed:', {\n  action_id: actionId,\n  action: input.action,\n  admin_user: input.admin_user,\n  timestamp: validatedData.timestamp\n});\n\nreturn [{ json: validatedData }];"
       },
       "id": "process-admin-request",
       "name": "Procesar Solicitud Admin",
@@ -54,7 +55,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Verificar si el tenant ya existe\nSELECT \n  id,\n  nombre,\n  activo,\n  created_at\nFROM concesionarios \nWHERE \n  id = $1 \n  OR LOWER(nombre) = LOWER($2)\nLIMIT 1;",
+        "query": "-- Verificar si el tenant ya existe (nombre único y ID único)\nSELECT \n  id,\n  nombre,\n  activo,\n  created_at,\n  'duplicate_id' as conflict_type\nFROM concesionarios \nWHERE id = $1\nUNION ALL\nSELECT \n  id,\n  nombre,\n  activo,\n  created_at,\n  'duplicate_name' as conflict_type\nFROM concesionarios \nWHERE LOWER(TRIM(nombre)) = LOWER(TRIM($2))\nLIMIT 1;",
         "additionalFields": {
           "queryParameters": "=[$json.action_data.tenant_id, $json.action_data.tenant_name]"
         }
@@ -174,6 +175,7 @@
     },
     {
       "parameters": {
+        "jsCode": "// Generar respuesta estructurada para Super-Admin\nconst allInputs = $input.all();\nconst originalRequest = $('Procesar Solicitud Admin').first().json;\n\n// Función para formatear respuestas según el tipo de acción\nfunction formatResponse(action, data, originalRequest) {\n  const baseResponse = {\n    success: true,\n    action: action,\n    action_id: originalRequest.action_id,\n    timestamp: new Date().toISOString(),\n    admin_user: originalRequest.admin_user\n  };\n  \n  switch (action) {\n    case 'create_tenant':\n      return {\n        ...baseResponse,\n        message: 'Tenant creado exitosamente',\n        data: {\n          tenant_id: data.id,\n          tenant_name: data.nombre,\n          activation_date: data.fecha_activacion,\n          features_enabled: JSON.parse(data.features_habilitadas || '[]'),\n          plan_type: data.plan_tipo,\n          user_limit: data.limite_usuarios,\n          subdomain: data.subdomain,\n          next_steps: [\n            'Configurar integración WhatsApp',\n            'Configurar Chatwoot',\n            'Crear usuarios iniciales',\n            'Configurar workflows específicos'\n          ],\n          provisioning_status: 'initiated',\n          estimated_setup_time: '15-30 minutos'\n        }\n      };\n      \n    case 'get_platform_metrics':\n      return {\n        ...baseResponse,\n        message: 'Métricas de plataforma obtenidas exitosamente',\n        data: {\n          platform_overview: {\n            total_tenants: data.total_tenants,\n            active_tenants: data.active_tenants,\n            tenant_activation_rate: `${data.tenant_activation_rate}%`,\n            new_tenants_7d: data.new_tenants_7d,\n            new_tenants_30d: data.new_tenants_30d\n          },\n          user_metrics: {\n            total_users: data.total_users,\n            active_users: data.active_users,\n            avg_users_per_tenant: data.avg_users_per_tenant,\n            tenants_with_users: data.tenants_with_users\n          },\n          business_metrics: {\n            leads: {\n              total: data.total_leads,\n              recent_7d: data.leads_7d,\n              conversion_rate: `${data.lead_conversion_rate}%`,\n              avg_quality_score: data.avg_lead_score\n            },\n            surveys: {\n              total: data.total_surveys,\n              recent_7d: data.surveys_7d,\n              nps_score: data.nps_score,\n              avg_rating: data.avg_nps,\n              promoters: data.promoters,\n              detractors: data.detractors\n            },\n            complaints: {\n              total: data.total_complaints,\n              recent_7d: data.complaints_7d,\n              resolution_rate: `${data.complaint_resolution_rate}%`,\n              black_alerts: data.black_alerts\n            }\n          },\n          generated_at: data.generated_at,\n          metrics_period: data.metrics_period\n        }\n      };\n      \n    case 'get_tenant_dashboard':\n      const healthStatus = data.tenant_health_score >= 80 ? 'excellent' : \n                          data.tenant_health_score >= 60 ? 'good' : \n                          data.tenant_health_score >= 40 ? 'warning' : 'critical';\n      \n      return {\n        ...baseResponse,\n        message: 'Dashboard de tenant obtenido exitosamente',\n        data: {\n          tenant_info: {\n            id: data.tenant_id,\n            name: data.tenant_name,\n            status: data.is_active ? 'active' : 'inactive',\n            plan_type: data.plan_type,\n            activation_date: data.activation_date,\n            health_score: data.tenant_health_score,\n            health_status: healthStatus\n          },\n          performance_summary: {\n            user_utilization: `${data.user_capacity_usage}%`,\n            lead_conversion: `${data.conversion_rate}%`,\n            customer_satisfaction: data.avg_nps,\n            complaint_resolution: `${data.complaint_resolution_rate}%`\n          },\n          detailed_metrics: {\n            users: {\n              total: data.total_users,\n              active: data.active_users,\n              recent_active: data.recent_active_users,\n              capacity_usage: `${data.user_capacity_usage}%`\n            },\n            leads: {\n              total_30d: data.total_leads,\n              recent_7d: data.leads_7d,\n              converted: data.converted_leads,\n              avg_score: data.avg_lead_score,\n              total_quoted_value: data.total_quoted_value\n            },\n            surveys: {\n              total_30d: data.total_surveys,\n              recent_7d: data.surveys_7d,\n              nps: data.avg_nps,\n              satisfaction: data.avg_satisfaction,\n              detractors: data.detractors_count\n            },\n            complaints: {\n              total_30d: data.total_complaints,\n              recent_7d: data.complaints_7d,\n              resolved: data.resolved_complaints,\n              black_alerts: data.black_alerts,\n              avg_resolution_hours: data.avg_resolution_hours\n            }\n          },\n          recommendations: getRecommendations(data, healthStatus),\n          dashboard_generated_at: data.dashboard_generated_at\n        }\n      };\n      \n    default:\n      return {\n        ...baseResponse,\n        message: 'Acción procesada exitosamente',\n        data: data\n      };\n  }\n}\n\n// Función para generar recomendaciones basadas en métricas\nfunction getRecommendations(data, healthStatus) {\n  const recommendations = [];\n  \n  if (data.user_capacity_usage > 90) {\n    recommendations.push({\n      type: 'warning',\n      category: 'capacity',\n      message: 'Capacidad de usuarios cerca del límite',\n      action: 'Considerar upgrade de plan o optimización de usuarios'\n    });\n  }\n  \n  if (data.conversion_rate < 10) {\n    recommendations.push({\n      type: 'improvement',\n      category: 'sales',\n      message: 'Baja tasa de conversión de leads',\n      action: 'Revisar proceso de seguimiento y calidad de leads'\n    });\n  }\n  \n  if (data.avg_nps < 7) {\n    recommendations.push({\n      type: 'critical',\n      category: 'satisfaction',\n      message: 'NPS por debajo del promedio',\n      action: 'Implementar plan de mejora de experiencia al cliente'\n    });\n  }\n  \n  if (data.black_alerts > 0) {\n    recommendations.push({\n      type: 'urgent',\n      category: 'complaints',\n      message: `${data.black_alerts} alertas Black Alert activas`,\n      action: 'Atención inmediata requerida para reclamos críticos'\n    });\n  }\n  \n  if (recommendations.length === 0) {\n    recommendations.push({\n      type: 'success',\n      category: 'overall',\n      message: 'Tenant funcionando correctamente',\n      action: 'Mantener las mejores prácticas actuales'\n    });\n  }\n  \n  return recommendations;\n}\n\n// Procesar la respuesta\nlet responseData;\nlet success = true;\n\ntry {\n  if (allInputs.length === 0) {\n    throw new Error('No hay datos para procesar');\n  }\n  \n  const data = allInputs[0].json;\n  responseData = formatResponse(originalRequest.action, data, originalRequest);\n  \n} catch (error) {\n  success = false;\n  responseData = {\n    success: false,\n    error: 'PROCESSING_ERROR',\n    message: error.message,\n    action: originalRequest.action,\n    action_id: originalRequest.action_id,\n    timestamp: new Date().toISOString(),\n    admin_user: originalRequest.admin_user\n  };\n}\n\n// Log del resultado\nconsole.log('Admin response generated:', {\n  action_id: originalRequest.action_id,\n  action: originalRequest.action,\n  success: success,\n  timestamp: new Date().toISOString()\n});\n\nreturn [{ json: { ...responseData, success } }];"
       },
       "id": "generate-admin-response",
       "name": "Generar Respuesta Admin",
@@ -220,59 +222,167 @@
   ],
   "connections": {
     "Webhook Portal Admin": {
-      "main": [["Procesar Solicitud Admin", "type": "main", "index": 0]]
+      "main": [
+        [
+          {
+            "node": "Procesar Solicitud Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Procesar Solicitud Admin": {
       "main": [
-        [{"node": "¿Crear Tenant?", "type": "main", "index": 0}],
-        [{"node": "¿Métricas Plataforma?", "type": "main", "index": 0}],
-        [{"node": "¿Dashboard Tenant?", "type": "main", "index": 0}]
+        [
+          {
+            "node": "¿Crear Tenant?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "¿Métricas Plataforma?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "¿Dashboard Tenant?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "¿Crear Tenant?": {
       "main": [
-        [{"node": "Verificar Tenant Existente", "type": "main", "index": 0}],
+        [
+          {
+            "node": "Verificar Tenant Existente",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Verificar Tenant Existente": {
-      "main": [["¿Tenant Único?", "type": "main", "index": 0]]
+      "main": [
+        [
+          {
+            "node": "¿Tenant Único?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "¿Tenant Único?": {
       "main": [
-        [{"node": "Crear Nuevo Tenant", "type": "main", "index": 0}],
-        [{"node": "Respuesta Tenant Existente", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Crear Nuevo Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta Tenant Existente",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Crear Nuevo Tenant": {
-      "main": [["Activar Provisión Workflows", "type": "main", "index": 0]]
+      "main": [
+        [
+          {
+            "node": "Activar Provisión Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Activar Provisión Workflows": {
-      "main": [["Generar Respuesta Admin", "type": "main", "index": 0]]
+      "main": [
+        [
+          {
+            "node": "Generar Respuesta Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "¿Métricas Plataforma?": {
       "main": [
-        [{"node": "Obtener Métricas Plataforma", "type": "main", "index": 0}],
+        [
+          {
+            "node": "Obtener Métricas Plataforma",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Obtener Métricas Plataforma": {
-      "main": [["Generar Respuesta Admin", "type": "main", "index": 0]]
+      "main": [
+        [
+          {
+            "node": "Generar Respuesta Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "¿Dashboard Tenant?": {
       "main": [
-        [{"node": "Obtener Dashboard Tenant", "type": "main", "index": 0}],
+        [
+          {
+            "node": "Obtener Dashboard Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
     "Obtener Dashboard Tenant": {
-      "main": [["Generar Respuesta Admin", "type": "main", "index": 0]]
+      "main": [
+        [
+          {
+            "node": "Generar Respuesta Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Generar Respuesta Admin": {
-      "main": [["Registrar Acción Admin", "type": "main", "index": 0]]
+      "main": [
+        [
+          {
+            "node": "Registrar Acción Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Registrar Acción Admin": {
-      "main": [["Respuesta Portal Admin", "type": "main", "index": 0]]
+      "main": [
+        [
+          {
+            "node": "Respuesta Portal Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {

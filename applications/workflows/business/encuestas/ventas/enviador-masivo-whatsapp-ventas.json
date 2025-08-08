@@ -10,7 +10,7 @@
       "id": "sales-survey-bulk-trigger",
       "name": "Trigger de Encuestas Masivas Ventas",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
@@ -18,8 +18,8 @@
       },
       "id": "process-sales-bulk-data",
       "name": "Procesar Lote Encuestas Ventas",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [460, 300]
     },
     {
@@ -41,14 +41,14 @@
       },
       "id": "generate-sales-whatsapp-message",
       "name": "Generar Mensaje WhatsApp Ventas",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [900, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://graph.facebook.com/v18.0/{{ $json.phone_number_id }}/messages",
+        "url": "=https:
         "authentication": "predefinedCredentialType",
         "nodeCredentialType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -88,7 +88,7 @@
       },
       "id": "send-whatsapp-sales-survey",
       "name": "Enviar WhatsApp Encuesta Ventas",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4,
       "position": [1120, 300]
     },
@@ -111,8 +111,8 @@
       },
       "id": "generate-sales-bulk-report",
       "name": "Generar Reporte Envío Ventas",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1560, 300]
     }
   ],

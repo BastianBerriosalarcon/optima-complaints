@@ -16,7 +16,7 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         250,
         300
@@ -24,6 +24,7 @@
     },
     {
       "parameters": {
+        "jsCode": "// Verificar caché de configuración del tenant\nconst tenantId = $input.all()[0].json.tenant_id;\nconst cacheKey = `tenant_config_${tenantId}`;\n\n// Simular verificación de caché\nconst hasCache = false; // TODO: Implementar redis/memoria\n\nreturn [{\n  json: {\n    tenant_id: tenantId,\n    has_cache: hasCache,\n    cache_key: cacheKey\n  }\n}];"
       },
       "id": "check-tenant-cache",
       "name": "Check Tenant Cache",
@@ -49,7 +50,7 @@
       "id": "cache-miss-condition",
       "name": "Cache Miss?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         690,
         300
@@ -74,6 +75,7 @@
     },
     {
       "parameters": {
+        "jsCode": "
       },
       "id": "update-cache",
       "name": "Update Cache",
@@ -99,11 +101,12 @@
     },
     {
       "parameters": {
+        "jsCode": "
       },
       "id": "prepare-tenant-config",
       "name": "Preparar Configuración",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1570,
         300
@@ -119,7 +122,7 @@
       "id": "trigger-lead-analysis",
       "name": "Iniciar Análisis de Lead",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         1790,
         300
@@ -127,7 +130,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Usar configuración desde cache\nconst cacheData = $input.first().json;\n\nreturn {\n  ...cacheData\n};"
+        "jsCode": "
       },
       "id": "use-cached-config",
       "name": "Use Cached Config",

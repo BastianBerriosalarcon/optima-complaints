@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "Auto Assignment Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
       "webhookId": "complaint-auto-assignment"
     },
@@ -56,13 +56,13 @@
       },
       "id": "get-service-staff",
       "name": "Get Service Staff",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "/*** COMPLAINT AUTO ASSIGNMENT - SRP: Solo asignación y persistencia ***/\nconst assignmentData = $('Auto Assignment Trigger').first().json;\nconst serviceStaff = $('Get Service Staff').first().json;\n\nconst complaintInput = assignmentData.complaint_input;\nconst aiAnalysis = assignmentData.ai_analysis;\nconst tenantConfig = assignmentData.tenant_config;\n\n// Validar personal disponible\nif (!serviceStaff || serviceStaff.length === 0) {\n  throw new Error(`No hay personal de servicio activo para el concesionario: ${complaintInput.tenant_id}`);\n}\n\n// Filtrar por sucursal si se detectó una específica\nlet eligibleStaff = serviceStaff;\nconst sucursalDetectada = aiAnalysis.datos_extraidos?.sucursal_detectada;\nif (sucursalDetectada) {\n  const sucursalStaff = serviceStaff.filter(staff => \n    staff.sucursal_id === sucursalDetectada\n  );\n  if (sucursalStaff.length > 0) {\n    eligibleStaff = sucursalStaff;\n  }\n}\n\n// Buscar roles específicos (siguiendo patrón de asignación de encuestas)\nconst jefeServicio = eligibleStaff.find(staff => staff.rol === 'jefe_servicio');\nconst asesorServicio = eligibleStaff.find(staff => staff.rol === 'asesor_servicio');\nconst encargadoCalidad = eligibleStaff.find(staff => staff.rol === 'encargado_calidad');\n\nif (!jefeServicio && !asesorServicio) {\n  throw new Error(`No hay Jefe de Servicio ni Asesor de Servicio disponibles para: ${complaintInput.tenant_id}`);\n}\n\n// Preparar datos completos para guardar en BD (siguiendo estructura de CLAUDE.md)\nconst complaintForDB = {\n  // Identificación\n  concesionario_id: complaintInput.tenant_id,\n  \n  // Datos del cliente\n  cliente_nombre: complaintInput.cliente_nombre,\n  cliente_telefono: complaintInput.cliente_telefono,\n  cliente_email: complaintInput.cliente_email,\n  cliente_rut: complaintInput.cliente_rut,\n  \n  // Datos del vehículo (combinando input + IA)\n  vehiculo_patente: complaintInput.vehiculo_patente || aiAnalysis.datos_extraidos?.vehiculo?.patente,\n  vehiculo_vin: complaintInput.vehiculo_vin || aiAnalysis.datos_extraidos?.vehiculo?.vin,\n  vehiculo_marca: complaintInput.vehiculo_marca || aiAnalysis.datos_extraidos?.vehiculo?.marca,\n  vehiculo_modelo: complaintInput.vehiculo_modelo || aiAnalysis.datos_extraidos?.vehiculo?.modelo,\n  \n  // Clasificación IA\n  tipo_reclamo: aiAnalysis.clasificacion.tipo_reclamo,\n  categoria: aiAnalysis.clasificacion.categoria,\n  subcategoria: aiAnalysis.clasificacion.subcategoria || null,\n  urgencia: aiAnalysis.clasificacion.urgencia,\n  black_alert: aiAnalysis.clasificacion.black_alert || false,\n  \n  // Localización\n  sucursal: sucursalDetectada || complaintInput.sucursal_estimada || 'Principal',\n  taller: aiAnalysis.datos_extraidos?.taller_detectado || null,\n  \n  // Contenido\n  detalle: complaintInput.complaint_text,\n  \n  // Asignaciones automáticas\n  jefe_servicio_id: jefeServicio?.id || null,\n  asesor_servicio_id: asesorServicio?.id || null,\n  encargado_calidad_id: encargadoCalidad?.id || null,\n  \n  // Metadatos\n  canal_origen: complaintInput.canal_origen,\n  id_externo: complaintInput.id_externo,\n  fecha_incidente: aiAnalysis.datos_extraidos?.fecha_incidente || complaintInput.fecha_incidente,\n  \n  // Estados (siguiendo estructura de CLAUDE.md)\n  estado: 'pendiente', // pendiente, en_proceso, cerrado\n  tipo_reclamo_sistema: 'externo', // externo/interno\n  fecha_creacion: new Date().toISOString(),\n  fecha_actualizacion: new Date().toISOString(),\n  \n  // Análisis completo como JSON\n  analisis_ia_completo: aiAnalysis,\n  metadata_procesamiento: assignmentData.processing_metadata\n};\n\n// Preparar targets de notificación\nconst notificationTargets = [];\n\nif (jefeServicio) {\n  notificationTargets.push({\n    role: 'jefe_servicio',\n    user: jefeServicio,\n    priority: complaintForDB.urgencia === 'alta' ? 'urgent' : 'normal'\n  });\n}\n\nif (asesorServicio) {\n  notificationTargets.push({\n    role: 'asesor_servicio',\n    user: asesorServicio,\n    priority: 'normal'\n  });\n}\n\nif (encargadoCalidad) {\n  notificationTargets.push({\n    role: 'encargado_calidad',\n    user: encargadoCalidad,\n    priority: complaintForDB.black_alert ? 'urgent' : 'low'\n  });\n}\n\nreturn {\n  complaint_data: complaintForDB,\n  notification_targets: notificationTargets,\n  ai_analysis: aiAnalysis,\n  tenant_config: tenantConfig,\n  is_black_alert: complaintForDB.black_alert,\n  processing_metadata: assignmentData.processing_metadata\n};"
+        "jsCode": "/*** COMPLAINT AUTO ASSIGNMENT - SRP: Solo asignación y persistencia ***/\nconst assignmentData = $('Auto Assignment Trigger').first().json;\nconst serviceStaff = $('Get Service Staff').first().json;\n\nconst complaintInput = assignmentData.complaint_input;\nconst aiAnalysis = assignmentData.ai_analysis;\nconst tenantConfig = assignmentData.tenant_config;\n\n
       },
       "id": "assign-and-prepare-data",
       "name": "Assign and Prepare Data",
@@ -107,7 +107,7 @@
       },
       "id": "save-complaint-db",
       "name": "Save Complaint DB",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [900, 300]
     },
@@ -135,7 +135,7 @@
       "id": "check-black-alert",
       "name": "Check Black Alert",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1120, 300]
     },
     {
@@ -148,7 +148,7 @@
       "id": "trigger-black-alert",
       "name": "Trigger Black Alert",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1340, 200]
     },
     {
@@ -161,7 +161,7 @@
       "id": "trigger-notifications",
       "name": "Trigger Notifications",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1340, 400]
     },
     {
@@ -172,7 +172,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1560, 300]
     }
   ],

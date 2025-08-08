@@ -13,7 +13,7 @@
       "id": "webhook-followup-trigger",
       "name": "Webhook Trigger Seguimiento",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [200, 300]
     },
     {
@@ -26,7 +26,7 @@
       "id": "trigger-tenant-loader",
       "name": "Cargar Configuración Tenant",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [400, 300]
     },
     {
@@ -45,12 +45,12 @@
     },
     {
       "parameters": {
-        "functionCode": "// Prepara los datos para la acción de seguimiento.\nconst input = $input.all()[0].json;\nconst leadInfo = $('Obtener Info Lead').item.json[0];\n\nif (!leadInfo) {\n  throw new Error(`Lead con ID ${input.lead_id} no encontrado para el tenant ${input.tenant_id}`);\n}\n\nconst payload = {\n  tenant_id: input.tenant_id,\n  campaign_id: input.campaign_id || 'followup_sequence',\n  recipients: [\n    {\n      id: input.lead_id,\n      phone_number: leadInfo.telefono_cliente,\n      email: leadInfo.email_cliente,\n      name: leadInfo.nombre_cliente\n    }\n  ],\n  message_content: input.message_content,\n  email_subject: input.email_subject,\n  email_html: input.email_html,\n  email_text: input.email_text,\n  // Propagar datos originales del webhook para los sub-workflows\n  original_tenant_id: input.tenant_id,\n  original_total_recipients: 1, // Siempre 1 para un seguimiento individual\n  original_message_content: input.message_content,\n  original_email_subject: input.email_subject,\n  original_email_html: input.email_html,\n  original_email_text: input.email_text\n};\n\nreturn [{ json: payload }];"
+        "jsCode": "
       },
       "id": "prepare-action-data",
       "name": "Preparar Datos Acción",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [800, 300]
     },
     {
@@ -68,7 +68,7 @@
       "id": "check-action-type",
       "name": "¿Tipo de Acción?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1000, 300]
     },
     {
@@ -81,7 +81,7 @@
       "id": "trigger-email-campaign",
       "name": "Disparar Campaña Email",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1200, 240]
     },
     {
@@ -94,7 +94,7 @@
       "id": "trigger-whatsapp-campaign",
       "name": "Disparar Campaña WhatsApp",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1200, 360]
     },
     {
@@ -119,7 +119,7 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1600, 300]
     }
   ],

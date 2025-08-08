@@ -13,7 +13,7 @@
       "id": "webhook-survey-submit",
       "name": "Webhook Survey Submit",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [200, 300]
     },
     {
@@ -26,7 +26,7 @@
       "id": "trigger-response-handler",
       "name": "Disparar Manejador de Respuestas",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [400, 300]
     },
     {
@@ -37,7 +37,7 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [600, 300]
     },
     {
@@ -51,7 +51,7 @@
       "id": "error-response",
       "name": "Respuesta de Error",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [400, 480]
     }
   ],

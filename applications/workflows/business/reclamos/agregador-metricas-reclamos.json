@@ -17,7 +17,7 @@
       "id": "schedule-trigger",
       "name": "Ejecutar cada 4 horas",
       "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [250, 300]
     },
     {
@@ -33,7 +33,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Procesar y transformar los datos para la tabla de métricas\nconst rawMetrics = $input.all();\nconst processedData = {};\n\nrawMetrics.forEach(item => {\n  const metric = item.json;\n  const tenantId = metric.concesionario_id;\n\n  if (!processedData[tenantId]) {\n    processedData[tenantId] = {\n      concesionario_id: tenantId,\n      periodo: 'ultimas_24_horas',\n      fecha_calculo: new Date().toISOString().split('T')[0],\n      total_pendientes: 0,\n      total_en_proceso: 0,\n      total_cerrados: 0,\n      total_reclamos: 0,\n      distribucion_por_tipo: {},\n      distribucion_por_sucursal: {},\n      tiempos_resolucion: [],\n      total_black_alerts: 0\n    };\n  }\n\n  const tenantData = processedData[tenantId];\n  const total = parseInt(metric.total_reclamos, 10);\n  tenantData.total_reclamos += total;\n\n  if (metric.estado === 'Pendiente') tenantData.total_pendientes += total;\n  if (metric.estado === 'En Proceso') tenantData.total_en_proceso += total;\n  if (metric.estado === 'Cerrado') tenantData.total_cerrados += total;\n\n  if (metric.tipo_reclamo) {\n    tenantData.distribucion_por_tipo[metric.tipo_reclamo] = (tenantData.distribucion_por_tipo[metric.tipo_reclamo] || 0) + total;\n  }\n  if (metric.sucursal) {\n    tenantData.distribucion_por_sucursal[metric.sucursal] = (tenantData.distribucion_por_sucursal[metric.sucursal] || 0) + total;\n  }\n\n  if (metric.tiempo_resolucion_horas) tenantData.tiempos_resolucion.push(parseFloat(metric.tiempo_resolucion_horas));\n  if (metric.total_black_alerts) tenantData.total_black_alerts += parseInt(metric.total_black_alerts, 10);\n});\n\n// Calcular promedios finales\nObject.values(processedData).forEach(tenant => {\n  if (tenant.tiempos_resolucion.length > 0) {\n    tenant.tiempo_resolucion_promedio_horas = tenant.tiempos_resolucion.reduce((a, b) => a + b, 0) / tenant.tiempos_resolucion.length;\n  }\n  delete tenant.tiempos_resolucion;\n});\n\nreturn Object.values(processedData).map(item => ({ json: item }));" 
+        "jsCode": "
       },
       "id": "process-metrics",
       "name": "Procesar Métricas",

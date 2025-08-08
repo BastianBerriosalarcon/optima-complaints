@@ -10,7 +10,7 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300]
     },
     {
@@ -18,8 +18,8 @@
       },
       "id": "prepare-embedding-batches",
       "name": "Preparar Lotes Embedding",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [460, 300]
     },
     {
@@ -38,14 +38,14 @@
       },
       "id": "process-current-batch",
       "name": "Procesar Lote Actual",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [900, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "url": "https:
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "headers": {
@@ -82,7 +82,7 @@
       },
       "id": "generate-gemini-embeddings",
       "name": "Generar Embeddings Gemini",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [1120, 300]
     },
@@ -91,8 +91,8 @@
       },
       "id": "combine-embeddings-results",
       "name": "Combinar Resultados",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1340, 300]
     },
     {
@@ -105,7 +105,7 @@
       "id": "trigger-storage-workflow",
       "name": "Iniciar Almacenamiento",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1560, 300]
     }
   ],

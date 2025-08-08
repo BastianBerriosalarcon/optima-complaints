@@ -13,17 +13,17 @@
       "id": "webhook-analytics-trigger",
       "name": "Webhook Trigger Analytics",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
+      "typeVersion": 2.1,
       "position": [200, 300]
     },
     {
       "parameters": {
-        "functionCode": "// Prepara la consulta SQL dinámicamente basada en los parámetros de entrada.\nconst input = $input.all()[0].json;\n\nlet query = `SELECT campaign_id, status, COUNT(*) as count FROM campaign_logs WHERE 1=1`;\nconst queryParameters = [];\nlet paramIndex = 1;\n\nif (input.tenant_id) {\n  query += ` AND tenant_id = $${paramIndex++}`;\n  queryParameters.push(input.tenant_id);\n}\n\nif (input.campaign_id) {\n  query += ` AND campaign_id = $${paramIndex++}`;\n  queryParameters.push(input.campaign_id);\n}\n\nif (input.start_date) {\n  query += ` AND created_at >= $${paramIndex++}`;\n  queryParameters.push(input.start_date);\n}\n\nif (input.end_date) {\n  query += ` AND created_at <= $${paramIndex++}`;\n  queryParameters.push(input.end_date);\n}\n\nquery += ` GROUP BY campaign_id, status ORDER BY campaign_id, status`;\n\nreturn [{ json: { query: query, queryParameters: queryParameters } }];"
+        "jsCode": "
       },
       "id": "prepare-analytics-query",
       "name": "Preparar Consulta Analytics",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [400, 300]
     },
     {
@@ -42,12 +42,12 @@
     },
     {
       "parameters": {
-        "functionCode": "// Procesa los resultados de la consulta para generar un reporte.\nconst logs = $input.all()[0].json;\nconst report = {};\n\nlogs.forEach(row => {\n  if (!report[row.campaign_id]) {\n    report[row.campaign_id] = {\n      total_sent: 0,\n      total_failed: 0,\n      total_success: 0,\n      success_rate: 0\n    };\n  }\n\n  report[row.campaign_id].total_sent += row.count;\n  if (row.status === 'failed') {\n    report[row.campaign_id].total_failed += row.count;\n  } else if (row.status === 'sent') {\n    report[row.campaign_id].total_success += row.count;\n  }\n});\n\n// Calcular la tasa de éxito\nfor (const campaignId in report) {\n  if (report[campaignId].total_sent > 0) {\n    report[campaignId].success_rate = (report[campaignId].total_success / report[campaignId].total_sent) * 100;\n  }\n}\n\nreturn [{ json: report }];"
+        "jsCode": "
       },
       "id": "process-analytics-data",
       "name": "Procesar Datos Analytics",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [800, 300]
     },
     {
@@ -58,7 +58,7 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1000, 300]
     }
   ],

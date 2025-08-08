@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "Response Monitor Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
       "webhookId": "survey-response-monitor"
     },
@@ -60,13 +60,13 @@
       },
       "id": "get-whatsapp-surveys",
       "name": "Get WhatsApp Surveys",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "/*** SURVEY RESPONSE MONITOR - SRP: Solo monitoreo de respuestas ***/\nconst monitorData = $('Response Monitor Trigger').first().json;\nconst whatsappSurveys = $('Get WhatsApp Surveys').first().json;\n\n// Identificar clientes que NO han respondido en las últimas 6 horas\nconst cutoffTime = new Date(Date.now() - 6 * 60 * 60 * 1000);\n\nconst nonResponders = whatsappSurveys.filter(survey => {\n  // Solo los que siguen en estado 'enviado' (no completado)\n  return survey.estado === 'enviado' && \n         new Date(survey.fecha_envio) <= cutoffTime;\n});\n\n// Preparar datos para asignación a contact center\nconst clientsForCallCenter = nonResponders.map(survey => ({\n  cliente_nombre: survey.cliente_nombre,\n  cliente_telefono: survey.cliente_telefono,\n  sucursal: survey.sucursal,\n  fecha_envio_whatsapp: survey.fecha_envio,\n  tiempo_sin_respuesta: Math.round((Date.now() - new Date(survey.fecha_envio)) / (1000 * 60 * 60)) // horas\n}));\n\n// Estadísticas de monitoreo (siguiendo patrón de métricas existentes)\nconst monitoringStats = {\n  total_sent: monitorData.clients_sent || whatsappSurveys.length,\n  total_completed: whatsappSurveys.filter(s => s.estado === 'completado').length,\n  total_pending: whatsappSurveys.filter(s => s.estado === 'enviado').length,\n  non_responders_6h: nonResponders.length,\n  response_rate: Math.round((whatsappSurveys.filter(s => s.estado === 'completado').length / whatsappSurveys.length) * 100)\n};\n\nreturn {\n  tenant_id: monitorData.tenant_id,\n  clients_for_call_center: clientsForCallCenter,\n  monitoring_stats: monitoringStats,\n  campaign_metadata: {\n    campaign_id: monitorData.campaign_id,\n    original_upload: monitorData.upload_metadata,\n    batch_reports: monitorData.batch_reports\n  },\n  next_workflow: 'survey-call-center-assignment'\n};"
+        "jsCode": "/*** SURVEY RESPONSE MONITOR - SRP: Solo monitoreo de respuestas ***/\nconst monitorData = $('Response Monitor Trigger').first().json;\nconst whatsappSurveys = $('Get WhatsApp Surveys').first().json;\n\n
       },
       "id": "analyze-responses",
       "name": "Analyze Responses",
@@ -98,7 +98,7 @@
       "id": "check-pending-clients",
       "name": "Check Pending Clients",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [900, 300]
     },
     {
@@ -111,12 +111,12 @@
       "id": "trigger-call-center",
       "name": "Trigger Call Center Assignment",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1120, 200]
     },
     {
       "parameters": {
-        "jsCode": "// Generar reporte final de campaña (siguiendo patrón de reports)\nconst analysisData = $('Analyze Responses').first().json;\n\nconst finalReport = {\n  campaign_id: analysisData.campaign_metadata.campaign_id,\n  tenant_id: analysisData.tenant_id,\n  campaign_status: 'monitoring_completed',\n  \n  // Métricas finales\n  final_metrics: analysisData.monitoring_stats,\n  \n  // Decisión tomada\n  action_taken: analysisData.clients_for_call_center.length > 0 \n    ? 'assigned_to_call_center' \n    : 'campaign_completed_no_followup',\n  \n  // Detalles\n  clients_for_followup: analysisData.clients_for_call_center.length,\n  completion_timestamp: new Date().toISOString(),\n  \n  // Metadatos originales\n  original_campaign: analysisData.campaign_metadata\n};\n\nreturn finalReport;"
+        "jsCode": "
       },
       "id": "generate-final-report",
       "name": "Generate Final Report",
@@ -132,7 +132,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1340, 300]
     },
     {
@@ -143,7 +143,7 @@
       "id": "campaign-completed",
       "name": "Campaign Completed",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [900, 500]
     }
   ],

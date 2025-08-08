@@ -13,7 +13,7 @@
       "id": "webhook-excel-upload-ventas",
       "name": "Excel Upload Webhook Ventas",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [240, 300],
       "webhookId": "sales-survey-excel-upload"
     },
@@ -110,7 +110,7 @@
       },
       "id": "trigger-sales-duplicate-filter",
       "name": "Disparar Filtro Duplicados Ventas",
-      "type": "n8n-nodes-base.httpRequest",
+      "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4,
       "position": [900, 300]
     },
@@ -122,7 +122,7 @@
       "id": "success-response-ventas",
       "name": "Respuesta Éxito Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [1120, 300]
     },
     {
@@ -136,7 +136,7 @@
       "id": "error-response-ventas",
       "name": "Respuesta Error Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [460, 500]
     }
   ],
