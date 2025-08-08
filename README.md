@@ -4,22 +4,25 @@ Plataforma multitenant de experiencia al cliente que combina N8N, Chatwoot y un 
 
 ## 🚀 Estado del Proyecto
 
-### Infraestructura Actual (Terraform)
-**🔄 EN DESARROLLO** - Infraestructura base completada
-- **N8N Dev:** No desplegado aún ❌
-- **Chatwoot Dev:** No desplegado aún ❌
-- **Frontend Dev:** No desplegado aún ❌
-- **Base de Datos:** Supabase PostgreSQL (Brasil) ✅
-- **Redis:** Cloud Memorystore (10.129.0.4:6379) ✅
+### 🎯 **Infraestructura Productiva (Actual)**
+**✅ ACTIVA y OPTIMIZADA** - Funcionando con reorganización v2.0
+- **N8N Productivo:** ✅ https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/
+- **Chatwoot Productivo:** ✅ https://chatwoot-multitenant-dev-1039900134024.southamerica-west1.run.app/
+- **Base de Datos:** ✅ Supabase PostgreSQL (Brasil) - Schema: n8n_prod
+- **Redis:** ✅ Cloud Memorystore (10.129.0.4:6379)
 - **Región:** southamerica-west1
-- **Último Deploy:** 15 de julio, 2025
+- **Última Reparación:** 8 de agosto, 2025 - Chatwoot ActionCable fix aplicado
+- **Estado:** 🚀 **PRODUCCIÓN + REORGANIZADO v2.0**
 
-### Infraestructura Legacy (Funcionando)
-**✅ ACTIVA y FUNCIONANDO**
-- **URL n8n:** https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/
-- **Base de Datos:** Supabase PostgreSQL (Schema: n8n_prod)
+### 🔧 **Infraestructura de Desarrollo (Terraform)**
+**🔄 PREPARADA** - Lista para nuevos deployments
+- **N8N Dev:** 🟡 Infraestructura lista, pendiente deployment
+- **Chatwoot Dev:** 🟡 Infraestructura lista, pendiente deployment  
+- **Frontend Dev:** 🟡 Infraestructura lista, pendiente deployment
+- **Base de Datos:** ✅ Supabase PostgreSQL (Brasil) - Schemas preparados
+- **Redis:** ✅ Cloud Memorystore configurado
 - **Región:** southamerica-west1
-- **Último Deploy:** 17 de julio, 2025
+- **Última Configuración:** 8 de agosto, 2025
 
 ## 📋 Descripción del Proyecto
 
@@ -85,26 +88,65 @@ OptimaCx es una plataforma multitenant de experiencia al cliente para el sector 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## 📁 Estructura del Proyecto
+## 📁 Estructura del Proyecto (Reorganizada v2.0)
 
 ```
-optimacx-platform/
-├── applications/
-│   ├── n8n-workflows/              # Workflows N8N organizados por módulo
-│   │   ├── encuestas/             # Workflows de encuestas post-venta
-│   │   ├── leads/                 # Workflows de gestión de leads
-│   │   ├── reclamos/              # Workflows de reclamos con RAG
-│   │   └── utils/                 # Utilidades y configuraciones
-│   └── custom-nodes/              # Nodos personalizados N8N
-│       └── rag-system/            # Sistema RAG OptimaCx
-├── infrastructure/terraform/       # Nueva infraestructura IaC
-│   ├── modules/                   # Módulos reutilizables
-│   └── environments/             # Configuraciones por ambiente
-├── database/schemas/              # Esquemas de base de datos
-│   └── modules/rag/              # Módulo RAG con funciones de búsqueda
-├── shared/services/               # Servicios compartidos
-│   └── helpers/                  # Helpers como AdvisorWorkloadManager
-└── README.md                     # Este archivo
+optimacx-GCP/
+├── 🚀 applications/                # Aplicaciones y extensiones
+│   ├── extensions/                # Extensiones y nodos personalizados
+│   │   ├── custom-nodes/         # Nodos N8N personalizados
+│   │   └── rag-system/           # Sistema RAG independiente
+│   └── workflows/                # Workflows organizados por dominio
+│       ├── business/             # Workflows por área de negocio
+│       │   ├── administracion/   # Workflows administrativos
+│       │   ├── campañas/         # Gestión de campañas
+│       │   ├── encuestas/        # Sistema de encuestas
+│       │   ├── leads/            # Gestión de leads
+│       │   └── reclamos/         # Sistema de reclamos con RAG
+│       ├── templates/            # Plantillas reutilizables
+│       ├── tests/                # Tests de workflows
+│       └── utils/                # Utilidades compartidas
+├── 🏗️ infrastructure/terraform/    # Infraestructura como código
+│   ├── environments/             # Configuraciones por ambiente
+│   │   ├── chatwoot/            # Ambiente Chatwoot
+│   │   ├── n8n/                 # Ambiente N8N
+│   │   └── dev/                 # Ambiente desarrollo
+│   ├── modules/                  # Módulos Terraform reutilizables
+│   │   ├── chatwoot-multitenant/ # Módulo Chatwoot multitenant
+│   │   ├── cloud-run/           # Módulo Cloud Run
+│   │   └── database/            # Módulo base de datos
+│   └── services/                 # Servicios específicos
+├── 🗄️ database/                   # Gestión de base de datos
+│   ├── migrations/               # Migraciones SQL versionadas
+│   ├── policies/                 # Row Level Security policies
+│   ├── schemas/                  # Definiciones de esquemas
+│   │   ├── core/                # Esquemas principales
+│   │   └── modules/             # Módulos específicos (RAG)
+│   ├── functions/                # Funciones SQL y triggers
+│   └── seeds/                    # Datos de prueba
+├── 🎨 frontend/                   # Aplicación Next.js
+│   ├── src/                      # Código fuente
+│   ├── tests/                    # Tests E2E y unitarios
+│   └── supabase/                 # Configuración Supabase
+├── 🔧 scripts/                    # Scripts organizados por categoría
+│   ├── deployment/               # Scripts de despliegue
+│   │   ├── chatwoot/            # Específicos Chatwoot
+│   │   └── n8n/                 # Específicos N8N
+│   ├── testing/                  # Validación y health checks
+│   ├── database/                 # Migraciones y setup DB
+│   ├── utilities/                # Herramientas generales
+│   ├── maintenance/              # Scripts de mantenimiento
+│   └── setup/                    # Configuración inicial
+├── 🤝 shared/                     # Código compartido entre módulos
+│   ├── types/                    # Tipos TypeScript compartidos
+│   ├── services/                 # Servicios comunes
+│   └── config/                   # Configuraciones compartidas
+├── 📚 docs/                       # Documentación del proyecto
+│   ├── deployment/               # Guías de deployment
+│   └── *.md                      # Documentación técnica
+├── ⚙️ config/                     # Configuraciones del sistema
+│   └── docker/                   # Configuraciones Docker
+└── 📋 ARCHITECTURE.md             # Documentación de arquitectura
 ```
 
 ## 🔄 Flujo de Encuestas OptimaCx
@@ -240,23 +282,44 @@ docker-compose up -d
 
 ## 📝 Historial de Cambios
 
-### v1.0.0 (4 de julio, 2025)
-- ✅ Implementación inicial OptimaCx
-- ✅ Migración desde ActivePieces a n8n
-- ✅ Sistema RAG con Gemini + pgvector
-- ✅ Despliegue exitoso en Cloud Run
-- ✅ Configuración multitenant
-
-### v1.1.0 (8 de julio, 2025)
-- ✅ Repositorio GitHub configurado
-- ✅ Documentación completa
-- ✅ Respaldos y versionado implementado
+### v2.0.0 (8 de agosto, 2025) ✨ NUEVA VERSIÓN - REORGANIZADA + OPTIMIZADA
+- 🗂️ **Reorganización completa del proyecto**
+  - ✅ Applications: Separados extensions/ y workflows/ por dominio
+  - ✅ Scripts: Categorizados por función (deployment, testing, database, utilities)
+  - ✅ Documentación: README específicos por módulo
+  - ✅ Estructura modular y escalable implementada
+- 🧹 **Optimización y limpieza completada**
+  - ✅ **Fase 1**: Eliminados archivos de respaldo Terraform (~256KB)
+  - ✅ **Fase 2**: Optimización conservadora node_modules (~20MB)
+  - ✅ Limpieza de archivos temporales, cache y sourcemaps
+  - ✅ Zero downtime - deployments preservados
+- 📋 **Documentación mejorada**
+  - ✅ ARCHITECTURE.md con nueva estructura detallada
+  - ✅ Guías de scripts organizadas por categoría
+  - ✅ Reportes de limpieza y optimización
+  - ✅ README.md actualizado con estado real
+- 🚀 **Estado actualizado**
+  - ✅ N8N y Chatwoot funcionando normalmente
+  - ✅ Proyecto preparado para escalabilidad horizontal
+  - ✅ Estructura mantenible y clara para desarrollo
 
 ### v1.2.0 (23 de julio, 2025)
 - ✅ Workflows RAG de procesamiento de conocimiento implementados
 - ✅ AdvisorWorkloadManager para asignación inteligente
 - ✅ Servidores MCP configurados (Supabase, N8N, Context7)
 - ✅ Esquemas de base de datos RAG completados
+
+### v1.1.0 (8 de julio, 2025)
+- ✅ Repositorio GitHub configurado
+- ✅ Documentación completa
+- ✅ Respaldos y versionado implementado
+
+### v1.0.0 (4 de julio, 2025)
+- ✅ Implementación inicial OptimaCx
+- ✅ Migración desde ActivePieces a n8n
+- ✅ Sistema RAG con Gemini + pgvector
+- ✅ Despliegue exitoso en Cloud Run
+- ✅ Configuración multitenant
 
 ## 👥 Contacto
 
@@ -266,14 +329,43 @@ docker-compose up -d
 
 ---
 
-## 🎯 Estado Actual: PRODUCCIÓN ACTIVA
+## 🎯 Estado Actual: PRODUCCIÓN ACTIVA + REORGANIZADA v2.0
 
-**El sistema está funcionando correctamente en Google Cloud Run**
-- n8n: ✅ Activo (https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/)
-- Supabase PostgreSQL: ✅ Activo (Schema: n8n_prod)
-- Sistema RAG: ✅ Configurado con workflows de procesamiento de conocimiento
-- Multitenant: ✅ Funcionando
-- Nodos Personalizados: ✅ Refactorizados con abstracciones
-- Integración MCP: ✅ Supabase y N8N conectados
+**✅ El sistema está funcionando correctamente en Google Cloud Run**
 
-**Última verificación:** 23 de julio, 2025 - **Workflows RAG e integración MCP completados**
+### 🚀 **Servicios Activos**
+- **N8N Productivo:** ✅ https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/
+- **Chatwoot Productivo:** ✅ https://chatwoot-multitenant-dev-1039900134024.southamerica-west1.run.app/
+- **Supabase PostgreSQL:** ✅ Activo (Schema: n8n_prod)
+- **Sistema RAG:** ✅ Configurado con workflows de procesamiento de conocimiento
+- **Multitenant:** ✅ Funcionando
+- **Nodos Personalizados:** ✅ Refactorizados con abstracciones
+- **Integración MCP:** ✅ Supabase y N8N conectados
+- **ActionCable (Chatwoot):** ✅ Fix aplicado - funcionando correctamente
+
+### 📊 **Optimizaciones v2.0 Aplicadas**
+- ✅ **Reorganización completa:** Estructura modular implementada
+- ✅ **Limpieza de archivos:** ~20MB de espacio liberado
+- ✅ **Scripts organizados:** Por categoría y función
+- ✅ **Documentación actualizada:** README específicos por módulo
+- ✅ **Zero downtime:** Deployments preservados sin impacto
+
+**Última verificación:** 8 de agosto, 2025 - **Proyecto reorganizado v2.0 + optimizaciones completadas**
+
+## 🚀 Mejoras v2.0
+
+### ✨ **Nueva Estructura Modular**
+- 🗂️ Applications organizados por dominio de negocio
+- 🔧 Scripts categorizados por función
+- 📋 Documentación completa por módulo
+- 🏗️ Arquitectura escalable y mantenible
+
+### 🧹 **Optimización Aplicada**
+- 💾 ~20MB de espacio liberado
+- 🗑️ Archivos basura eliminados
+- ⚡ Cache optimizado
+- 🔒 Deployments preservados sin impacto
+
+---
+
+📊 **Proyecto optimizado y listo para escalabilidad horizontal**
