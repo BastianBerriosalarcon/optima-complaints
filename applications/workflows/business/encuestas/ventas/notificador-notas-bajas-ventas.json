@@ -42,7 +42,6 @@
     },
     {
       "parameters": {
-        "functionCode": "// Preparar datos específicos para email de notificación de VENTAS\nconst salesNotificationData = $('Trigger Notificación Ventas').first().json;\nconst tenantConfig = $('Cargar Config Concesionario Ventas').first().json;\nconst recipients = $('Obtener Destinatarios Específicos').first().json;\n\n// Validar que hay destinatarios\nif (!recipients || recipients.length === 0) {\n  throw new Error('No se encontraron destinatarios para notificación de ventas (jefe_ventas, asesor_ventas, encargado_calidad o gerencia)');\n}\n\n// Preparar datos del email específico para VENTAS\nconst emailData = {\n  // Configuración del tenant\n  tenant_config: tenantConfig,\n  recipients: recipients,\n  \n  // Datos específicos de la encuesta de VENTAS\n  survey_data: {\n    id: salesNotificationData.survey_id,\n    tipo: 'ENCUESTA DE VENTAS',\n    department: 'VENTAS',\n    cliente: salesNotificationData.cliente_info,\n    venta: salesNotificationData.venta_info,\n    calificaciones: salesNotificationData.scores,\n    contexto: salesNotificationData.survey_context,\n    urgencia: salesNotificationData.urgency\n  },\n  \n  // Configuración del email específica para VENTAS\n  email_config: {\n    subject: `🚨 ALERTA VENTAS - Calificación Baja (${salesNotificationData.scores.promedio}/10) - ${salesNotificationData.venta_info.vehiculo_modelo}`\n,\n    template_type: 'sales_low_score_alert',\n    priority: salesNotificationData.urgency === 'alta' ? 'high' : 'normal'\n  }\n};\n\nconsole.log('Preparando email de notificación VENTAS:', {\n  surveyId: emailData.survey_data.id,\n  tipo: 'VENTAS',\n  recipients: recipients.length,\n  vehiculo: emailData.survey_data.venta.vehiculo_modelo,\n  score: emailData.survey_data.calificaciones.promedio,\n  urgencia: emailData.survey_data.urgencia\n});\n\nreturn [{ json: emailData }];"
       },
       "id": "prepare-sales-email-data",
       "name": "Preparar Datos Email Ventas",
@@ -94,7 +93,6 @@
     },
     {
       "parameters": {
-        "functionCode": "// Log de notificación enviada para VENTAS\nconst emailResult = $input.first().json;\nconst originalData = $('Trigger Notificación Ventas').first().json;\nconst caseData = $('Crear Caso de Feedback').first().json;\n\nconst logData = {\n  status: 'success',\n  message: 'Notificación de baja calificación VENTAS enviada y caso creado exitosamente',\n  survey_type: 'VENTAS',\n  department: 'VENTAS',\n  survey_id: originalData.survey_id,\n  case_id: caseData[0]?.id,\n  recipients_count: $('Generar HTML Email Ventas').first().json.recipients.length,\n  score: originalData.scores.promedio,\n  vehiculo: originalData.venta_info.vehiculo_modelo,\n  urgency: originalData.urgency,\n  sent_at: new Date().toISOString(),\n  email_status: emailResult\n};\n\nconsole.log('Notificación VENTAS enviada y caso creado:', logData);\n\nreturn [{ json: logData }];"
       },
       "id": "log-sales-notification-sent",
       "name": "Log Notificación y Caso Creado",

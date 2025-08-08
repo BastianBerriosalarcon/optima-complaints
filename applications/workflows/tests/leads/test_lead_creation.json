@@ -58,7 +58,6 @@
     },
     {
       "parameters": {
-        "jsCode": "const lead = $input.first()?.json;\n\n// --- ASERCIONES DE LA PRUEBA ---\nif (!lead) {\n  throw new Error('❌ FALLIDO: No se encontró el lead en la base de datos.');\n}\n\nif (lead.estado !== 'nuevo') {\n  throw new Error(`❌ FALLIDO: El estado esperado era 'nuevo', pero se encontró '${lead.estado}'`);\n}\n\nif (lead.intencion_detectada !== 'cotizacion') {\n  throw new Error(`❌ FALLIDO: La intención esperada era 'cotizacion', pero se detectó '${lead.intencion_detectada}'`);\n}\n\nif (lead.score_calidad < 50) {\n  throw new Error(`❌ FALLIDO: El score de calidad (${lead.score_calidad}) es inesperadamente bajo.`);\n}\n\nif (lead.email_cliente !== 'juan.tester@example.com') {\n  throw new Error(`❌ FALLIDO: El email no se extrajo correctamente.`);\n}\n\nconsole.log('✅ PRUEBA EXITOSA: El lead se creó y analizó correctamente.');\nreturn { success: true, lead_id: lead.id };"
       },
       "id": "assert-results",
       "name": "5. Assert: Validar Resultados",

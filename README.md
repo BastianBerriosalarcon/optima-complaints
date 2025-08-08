@@ -92,61 +92,79 @@ OptimaCx es una plataforma multitenant de experiencia al cliente para el sector 
 
 ```
 optimacx-GCP/
-├── 🚀 applications/                # Aplicaciones y extensiones
-│   ├── extensions/                # Extensiones y nodos personalizados
-│   │   ├── custom-nodes/         # Nodos N8N personalizados
-│   │   └── rag-system/           # Sistema RAG independiente
-│   └── workflows/                # Workflows organizados por dominio
-│       ├── business/             # Workflows por área de negocio
-│       │   ├── administracion/   # Workflows administrativos
-│       │   ├── campañas/         # Gestión de campañas
-│       │   ├── encuestas/        # Sistema de encuestas
-│       │   ├── leads/            # Gestión de leads
-│       │   └── reclamos/         # Sistema de reclamos con RAG
-│       ├── templates/            # Plantillas reutilizables
-│       ├── tests/                # Tests de workflows
-│       └── utils/                # Utilidades compartidas
-├── 🏗️ infrastructure/terraform/    # Infraestructura como código
-│   ├── environments/             # Configuraciones por ambiente
-│   │   ├── chatwoot/            # Ambiente Chatwoot
-│   │   ├── n8n/                 # Ambiente N8N
-│   │   └── dev/                 # Ambiente desarrollo
-│   ├── modules/                  # Módulos Terraform reutilizables
-│   │   ├── chatwoot-multitenant/ # Módulo Chatwoot multitenant
-│   │   ├── cloud-run/           # Módulo Cloud Run
-│   │   └── database/            # Módulo base de datos
-│   └── services/                 # Servicios específicos
-├── 🗄️ database/                   # Gestión de base de datos
-│   ├── migrations/               # Migraciones SQL versionadas
-│   ├── policies/                 # Row Level Security policies
-│   ├── schemas/                  # Definiciones de esquemas
-│   │   ├── core/                # Esquemas principales
-│   │   └── modules/             # Módulos específicos (RAG)
-│   ├── functions/                # Funciones SQL y triggers
-│   └── seeds/                    # Datos de prueba
-├── 🎨 frontend/                   # Aplicación Next.js
-│   ├── src/                      # Código fuente
-│   ├── tests/                    # Tests E2E y unitarios
-│   └── supabase/                 # Configuración Supabase
-├── 🔧 scripts/                    # Scripts organizados por categoría
-│   ├── deployment/               # Scripts de despliegue
-│   │   ├── chatwoot/            # Específicos Chatwoot
-│   │   └── n8n/                 # Específicos N8N
-│   ├── testing/                  # Validación y health checks
-│   ├── database/                 # Migraciones y setup DB
-│   ├── utilities/                # Herramientas generales
-│   ├── maintenance/              # Scripts de mantenimiento
-│   └── setup/                    # Configuración inicial
-├── 🤝 shared/                     # Código compartido entre módulos
-│   ├── types/                    # Tipos TypeScript compartidos
-│   ├── services/                 # Servicios comunes
-│   └── config/                   # Configuraciones compartidas
-├── 📚 docs/                       # Documentación del proyecto
-│   ├── deployment/               # Guías de deployment
-│   └── *.md                      # Documentación técnica
+├── � README.md                   # Documentación principal del proyecto
+├── 📄 LICENSE                     # Licencia MIT
+├── 📦 package.json                # Monorepo configuration + workspaces
+├── 🔧 tsconfig.base.json          # TypeScript configuration base
+├── 🛠️ Makefile                    # Comandos desarrollo y deployment (25+ comandos)
+├── 🌍 .env.example                # Template variables de entorno
+├── 🚫 .gitignore                  # Control de versiones (rules completas)
+├── 🐳 .dockerignore               # Docker ignore rules
+├── 🔄 .github/workflows/          # CI/CD pipelines (ci.yml, cd.yml)
+├── 🚀 applications/               # Aplicaciones y extensiones
+│   ├── extensions/               # Extensiones y nodos personalizados
+│   │   ├── custom-nodes/        # Nodos N8N personalizados
+│   │   └── rag-system/          # Sistema RAG independiente
+│   └── workflows/               # Workflows organizados por dominio
+│       ├── business/            # Workflows por área de negocio
+│       │   ├── administracion/  # Workflows administrativos
+│       │   ├── campañas/        # Gestión de campañas
+│       │   ├── encuestas/       # Sistema de encuestas
+│       │   ├── leads/           # Gestión de leads
+│       │   └── reclamos/        # Sistema de reclamos con RAG
+│       ├── templates/           # Plantillas reutilizables
+│       ├── tests/               # Tests de workflows
+│       └── utils/               # Utilidades compartidas
 ├── ⚙️ config/                     # Configuraciones del sistema
-│   └── docker/                   # Configuraciones Docker
-└── 📋 ARCHITECTURE.md             # Documentación de arquitectura
+│   └── docker/                  # Configuraciones Docker
+├── 🗄️ database/                   # Gestión de base de datos
+│   ├── supabase-config.toml     # Configuración local Supabase
+│   ├── migrations/              # Migraciones SQL versionadas
+│   ├── policies/                # Row Level Security policies
+│   ├── schemas/                 # Definiciones de esquemas
+│   │   ├── core/               # Esquemas principales
+│   │   └── modules/            # Módulos específicos (RAG)
+│   ├── functions/               # Funciones SQL y triggers
+│   ├── seeds/                   # Datos de prueba
+│   └── deprecated/              # Migrations obsoletos documentados
+├── � docs/                       # Documentación del proyecto
+│   ├── deployment/              # Guías de deployment
+│   ├── cleanup/                 # Reportes de cleanup y análisis
+│   └── *.md                     # Documentación técnica
+├── 🎨 frontend/                   # Aplicación Next.js
+│   ├── src/                     # Código fuente
+│   ├── tests/                   # Tests E2E y unitarios
+│   └── supabase/                # Configuración Supabase
+├── 🏗️ infrastructure/terraform/    # Infraestructura como código
+│   ├── environments/            # Configuraciones por ambiente
+│   │   ├── chatwoot/           # Ambiente Chatwoot
+│   │   └── n8n/                # Ambiente N8N
+│   ├── modules/                 # Módulos Terraform reutilizables
+│   │   ├── chatwoot-multitenant/ # Módulo Chatwoot multitenant
+│   │   ├── cloud-run/          # Módulo Cloud Run
+│   │   └── database/           # Módulo base de datos
+│   ├── services/                # Servicios específicos
+│   │   ├── n8n/               # Service N8N
+│   │   └── supabase/          # Service Supabase
+│   └── deprecated/              # Infraestructura obsoleta documentada
+├── 🔧 scripts/                    # Scripts organizados por categoría
+│   ├── deployment/              # Scripts de despliegue
+│   │   ├── chatwoot/           # Específicos Chatwoot
+│   │   └── n8n/                # Específicos N8N
+│   ├── database/                # Migraciones y setup DB
+│   ├── maintenance/             # Scripts de mantenimiento
+│   ├── setup/                   # Configuración inicial
+│   ├── testing/                 # Validación y health checks
+│   ├── utilities/               # Herramientas generales
+│   └── deprecated/              # Scripts obsoletos documentados
+├── 🤝 shared/                     # Código compartido entre módulos
+│   ├── index.ts                 # Entry point exports
+│   ├── package.json             # Config @optimacx/shared
+│   ├── tsconfig.json            # TypeScript config
+│   ├── types/                   # Tipos TypeScript compartidos
+│   ├── services/                # Servicios comunes
+│   └── config/                  # Configuraciones compartidas
+└── �️ temp/                       # Archivos temporales (gitignored)
 ```
 
 ## 🔄 Flujo de Encuestas OptimaCx

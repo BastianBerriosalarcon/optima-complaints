@@ -63,7 +63,6 @@
     },
     {
       "parameters": {
-        "jsCode": "// Preparar notificación para el JEFE DE VENTAS\nconst data = $input.first().json;\nconst lead = data.lead_data;\nconst advisor = data.assigned_advisor;\nconst manager = data.sales_manager;\n\nif (!manager) {\n  console.log('No se encontró jefe de ventas para notificar.');\n  return null; // Detiene esta rama del flujo\n}\n\nconst subject = `Nuevo Lead para ${data.tenant_config.tenant_name} (Asignado a ${advisor.nombre})`\nconst body = `Hola ${manager.nombre},<br><br>Se ha registrado un nuevo lead y ha sido asignado a <b>${advisor.nombre}</b>.<br><br><b>Cliente:</b> ${lead.original_message.contact_name || lead.original_message.from}<br><b>Score:</b> ${lead.lead_score}/100<br><b>Intención:</b> ${lead.intencion}<br><br>Puedes revisar los detalles en el CRM.";\n\nreturn {\n  to: manager.email,\n  subject: subject,\n  html: body\n};"
       },
       "id": "prepare-manager-notification",
       "name": "Preparar Email Jefe de Ventas",

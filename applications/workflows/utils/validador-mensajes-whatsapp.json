@@ -72,7 +72,6 @@
     },
     {
       "parameters": {
-        "functionCode": "// Función enfocada únicamente en extraer y estructurar datos del webhook\n// Principio SRP: Una sola responsabilidad - parsear mensajes WhatsApp\n\nconst webhookData = $input.all()[0].json;\n\n// Extraer mensaje y contacto\nconst message = webhookData.entry[0].changes[0].value.messages[0];\nconst contact = webhookData.entry[0].changes[0].value.contacts[0];\nconst metadata = webhookData.entry[0].changes[0].value.metadata;\n\n// Estructura de datos validada y normalizada\nconst validatedMessage = {\n  // Identificadores únicos\n  whatsapp_message_id: message.id,\n  whatsapp_phone_number_id: metadata.phone_number_id,\n  \n  // Datos del mensaje\n  from: message.from,\n  body: message.text.body,\n  type: message.type,\n  timestamp: new Date(parseInt(message.timestamp) * 1000).toISOString(),\n  \n  // Datos del contacto\n  contact_name: contact?.profile?.name || null,\n  \n  // Metadatos para procesamiento\n  validation_timestamp: new Date().toISOString(),\n  validation_status: 'valid',\n  processing_required: true\n};\n\n// Log para debugging\nconsole.log('Mensaje validado:', {\n  messageId: validatedMessage.whatsapp_message_id,\n  from: validatedMessage.from,\n  phoneNumberId: validatedMessage.whatsapp_phone_number_id\n});\n\nreturn [{ json: validatedMessage }];"
       },
       "id": "parse-message-data",
       "name": "Parsear Datos del Mensaje",

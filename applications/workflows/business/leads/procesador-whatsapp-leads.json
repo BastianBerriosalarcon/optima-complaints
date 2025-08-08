@@ -62,7 +62,6 @@
       },
       {
         "parameters": {
-          "jsCode": "// Cache inteligente para configuraciones de tenant\nconst leadData = $input.first().json;\nconst tenantId = leadData.tenant_id;\nconst cacheKey = `tenant_config_${tenantId}`;\n\n// Verificar cache en memoria (simulado con variables globales)\nconst cacheTimeout = 5 * 60 * 1000; // 5 minutos\nconst now = Date.now();\n\n// Obtener cache del workflow static data\nconst staticData = this.getWorkflowStaticData('global');\nconst cachedData = staticData[cacheKey];\n\nif (cachedData && cachedData.timestamp && (now - cachedData.timestamp) < cacheTimeout) {\n  // Cache hit - usar datos cached\n  console.log(`Cache HIT for tenant: ${tenantId}`);\n  return {\n    ...leadData,\n    tenant_config_source: 'cache',\n    cached_config: cachedData.config\n  };\n} else {\n  // Cache miss - necesita consultar Supabase\n  console.log(`Cache MISS for tenant: ${tenantId}`);\n  return {\n    ...leadData,\n    tenant_config_source: 'database',\n    cache_key: cacheKey\n  };\n}"
         },
         "id": "check-tenant-cache",
         "name": "Check Tenant Cache",
@@ -143,7 +142,6 @@
       },
       {
         "parameters": {
-          "jsCode": "// Actualizar cache con nueva configuración\nconst leadData = $('Check Tenant Cache').first().json;\nconst dbResponse = $input.first().json;\nconst cacheKey = leadData.cache_key;\n\nif (!dbResponse || dbResponse.length === 0) {\n  throw new Error(`Tenant configuration not found for: ${leadData.tenant_id}`);\n}\n\nconst config = dbResponse[0];\n\n// Guardar en cache\nconst staticData = this.getWorkflowStaticData('global');\nstaticData[cacheKey] = {\n  config: config,\n  timestamp: Date.now()\n};\n\nconsole.log(`Cache UPDATED for tenant: ${leadData.tenant_id}`);\n\nreturn {\n  ...leadData,\n  tenant_config: config,\n  tenant_config_source: 'database_cached'\n};"
         },
         "id": "update-cache",
         "name": "Update Cache",

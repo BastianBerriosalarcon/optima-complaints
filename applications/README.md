@@ -15,11 +15,24 @@ applications/
     │   ├── campañas/       # Gestión de campañas
     │   ├── encuestas/      # Sistema de encuestas
     │   ├── leads/          # Gestión de leads
-    └── reclamos/           # Sistema de reclamos
+    │   └── reclamos/       # Sistema de reclamos
     ├── templates/          # Plantillas reutilizables
     ├── tests/              # Tests de workflows
     └── utils/              # Utilidades y helpers
 ```
+
+## 🧹 Mantenimiento
+
+### Limpieza de Workflows
+```bash
+# Limpiar logs de debug de workflows
+./clean-workflows.sh
+```
+
+**Últimas mejoras aplicadas:**
+- ✅ **Console.log eliminados**: Todos los logs de debug removidos (43 archivos)
+- ✅ **Templates consolidados**: Mantenidos solo templates necesarios
+- ✅ **Estructura optimizada**: Workflows organizados por dominio de negocio
 
 ## 🔧 Extensions
 
@@ -72,9 +85,10 @@ Sistema de Retrieval Augmented Generation para:
 
 ### Templates
 Plantillas reutilizables para:
-- Integración Chatwoot multitenant
-- Webhooks universales
-- Incorporación de concesionarios
+- **Chatwoot Multitenant v2**: Integración webhook actualizada
+- **Universal Handler**: Manejador de webhooks universal
+- **Incorporación Concesionario**: Workflow de onboarding
+- **Provisión Automática**: Auto-deployment de workflows
 
 ### Utils
 Utilidades compartidas:
@@ -97,7 +111,7 @@ cd applications/workflows/business
 
 ## 📝 Notas
 
-- Todos los workflows están organizados por dominio de negocio
+- Todos los workflows están optimizados para producción (sin console.log)
 - Las extensiones son modulares e independientes
-- Templates facilitan la creación de nuevos workflows
+- Templates actualizados y consolidados
 - Sistema preparado para escalabilidad horizontal

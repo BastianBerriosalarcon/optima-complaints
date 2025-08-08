@@ -57,7 +57,6 @@
     },
     {
       "parameters": {
-        "jsCode": "// Agrupar leads por asesor y tipo de recordatorio\nconst leadsData = $input.all();\n\nif (!leadsData || leadsData.length === 0) {\n  return [];\n}\n\n// Estructura para agrupar por asesor\nconst asesorGroups = new Map();\n\nleadsData.forEach(item => {\n  const lead = item.json;\n  \n  // Skip leads que no necesitan recordatorio\n  if (lead.tipo_recordatorio === 'no_recordatorio') {\n    return;\n  }\n  \n  const asesorKey = `${lead.concesionario_id}_${lead.asesor_asignado_id}`;\n  \n  if (!asesorGroups.has(asesorKey)) {\n    asesorGroups.set(asesorKey, {\n      asesor_id: lead.asesor_asignado_id,\n      asesor_nombre: lead.asesor_nombre,\n      asesor_email: lead.asesor_email,\n      concesionario_id: lead.concesionario_id,\n      concesionario_nombre: lead.concesionario_nombre,\n      leads_por_tipo: {\n        urgentes: [], // alto interés\n        medios: [],   // medio interés\n        bajos: []     // bajo interés\n      },\n      total_leads: 0,\n      urgencia_maxima: 'baja'\n    });\n  }\n  \n  const asesorData = asesorGroups.get(asesorKey);\n  \n  // Categorizar lead según tipo de recordatorio\n  if (lead.tipo_recordatorio.startsWith('urgente')) {\n    asesorData.leads_por_tipo.urgentes.push({\n      id: lead.id,\n      telefono: lead.telefono_cliente,\n      nombre: lead.nombre_cliente,\n      score: lead.score_calidad,\n      horas_transcurridas: Math.round(lead.horas_transcurridas * 10) / 10,\n      mensaje_original: lead.mensaje_original.substring(0, 100) + '...',\n      tipo_recordatorio: lead.tipo_recordatorio\n    });\n    asesorData.urgencia_maxima = 'alta';\n  } else if (lead.tipo_recordatorio.startsWith('medio')) {\n    asesorData.leads_por_tipo.medios.push({\n      id: lead.id,\n      telefono: lead.telefono_cliente,\n      nombre: lead.nombre_cliente,\n      score: lead.score_calidad,\n      horas_transcurridas: Math.round(lead.horas_transcurridas * 10) / 10,\n      mensaje_original: lead.mensaje_original.substring(0, 100) + '...',\n      tipo_recordatorio: lead.tipo_recordatorio\n    });\n    if (asesorData.urgencia_maxima !== 'alta') {\n      asesorData.urgencia_maxima = 'media';\n    }\n  } else if (lead.tipo_recordatorio.startsWith('bajo')) {\n    asesorData.leads_por_tipo.bajos.push({\n      id: lead.id,\n      telefono: lead.telefono_cliente,\n      nombre: lead.nombre_cliente,\n      score: lead.score_calidad,\n      horas_transcurridas: Math.round(lead.horas_transcurridas * 10) / 10,\n      mensaje_original: lead.mensaje_original.substring(0, 100) + '...',\n      tipo_recordatorio: lead.tipo_recordatorio\n    });\n  }\n  \n  asesorData.total_leads++;\n});\n\n// Convertir Map a array\nconst result = Array.from(asesorGroups.values());\n\nconsole.log('Leads agrupados por asesor:', {\n  total_asesores: result.length,\n  total_recordatorios: result.reduce((sum, asesor) => sum + asesor.total_leads, 0)\n});\n\nreturn result.map(asesor => ({ json: asesor }));"
       },
       "id": "group-by-asesor",
       "name": "Agrupar por Asesor",
@@ -96,7 +95,6 @@
     },
     {
       "parameters": {
-        "jsCode": "// Métricas de recordatorios enviados\nconst processedData = $input.all();\n\nconst summary = {\n  total_asesores_notificados: processedData.length,\n  total_leads_recordados: processedData.reduce((sum, item) => {\n    return sum + (item.json.total_leads || 0);\n  }, 0),\n  distribuccion_urgencia: {\n    alta: processedData.filter(item => item.json.urgencia_maxima === 'alta').length,\n    media: processedData.filter(item => item.json.urgencia_maxima === 'media').length,\n    baja: processedData.filter(item => item.json.urgencia_maxima === 'baja').length\n  },\n  timestamp: new Date().toISOString(),\n  execution_success: true\n};\n\nconsole.log('Recordatorios procesados:', summary);\n\nreturn [{ json: summary }];"
       },
       "id": "generate-summary",
       "name": "Generar Resumen",
@@ -106,7 +104,6 @@
     },
     {
       "parameters": {
-        "jsCode": "// No hay leads pendientes de recordatorio\nconsole.log('No hay leads que requieran recordatorio en este momento');\n\nreturn [{\n  json: {\n    message: 'No hay leads pendientes de recordatorio',\n    timestamp: new Date().toISOString(),\n    execution_success: true,\n    leads_found: 0\n  }\n}];"
       },
       "id": "no-leads-response",
       "name": "Sin Leads Pendientes",
