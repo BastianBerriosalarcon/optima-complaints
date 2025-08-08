@@ -334,7 +334,7 @@ docker-compose up -d
 **✅ El sistema está funcionando correctamente en Google Cloud Run**
 
 ### 🚀 **Servicios Activos**
-- **N8N Productivo:** ✅ https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/
+- **N8N Productivo:** ✅ https://n8n-optimacx-supabase-dev-1039900134024.southamerica-west1.run.app/
 - **Chatwoot Productivo:** ✅ https://chatwoot-multitenant-dev-1039900134024.southamerica-west1.run.app/
 - **Supabase PostgreSQL:** ✅ Activo (Schema: n8n_prod)
 - **Sistema RAG:** ✅ Configurado con workflows de procesamiento de conocimiento
