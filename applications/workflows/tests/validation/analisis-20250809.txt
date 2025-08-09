@@ -1,0 +1,27 @@
+# Análisis de Workflows Sat Aug  9 05:27:33 UTC 2025
+Total workflows: 56
+Workflows válidos: 18
+Workflows con errores: 38
+Workflows válidos:
+✅ business/administracion/portal-super-admin.json
+✅ business/leads/puntuacion-ia-leads.json
+✅ business/leads/lead-whatsapp-orchestrator.json
+✅ business/leads/analisis-ia-leads.json
+✅ business/leads/filtro-leads-existentes.json
+✅ business/reclamos/complaint-orchestrator.json
+✅ business/reclamos/almacenamiento-conocimiento.json
+✅ business/reclamos/ingesta-conocimiento.json
+✅ business/reclamos/fragmentacion-conocimiento.json
+✅ business/encuestas/ventas/manejador-respuestas-ventas.json
+✅ business/encuestas/ventas/monitor-respuestas-ventas.json
+✅ business/encuestas/ventas/procesador-excel-ventas.json
+✅ business/encuestas/ventas/asignacion-contact-center-ventas.json
+✅ business/encuestas/ventas/procesador-qr-ventas.json
+✅ business/encuestas/ventas/webhook-envio-encuestas-ventas.json
+✅ business/encuestas/ventas/exportador-excel-ventas.json
+✅ business/encuestas/postventa/exportador-excel.json
+✅ business/encuestas/postventa/webhook-envio-encuestas.json
+=== ESTADO DESPUÉS DE CORRECCIÓN Sat Aug  9 05:32:02 UTC 2025 ===
+Válidos: 18 workflows
+Con problemas: 38 workflows
+Problema: Caracteres de codificación corruptos que requieren corrección manual

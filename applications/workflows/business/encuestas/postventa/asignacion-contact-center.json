@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "Call Center Assignment Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "survey-call-center-assignment"
     },
@@ -67,7 +67,7 @@
       "id": "assign-clients",
       "name": "Assign Clients",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -157,7 +157,7 @@
       "id": "prepare-notification",
       "name": "Prepare Notification",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 300]
     },
     {
@@ -210,7 +210,7 @@
       "id": "generate-report",
       "name": "Generate Final Report",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1780, 300]
     },
     {
@@ -221,7 +221,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [2000, 300]
     }
   ],

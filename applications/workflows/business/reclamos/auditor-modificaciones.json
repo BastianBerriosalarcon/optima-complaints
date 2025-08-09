@@ -21,7 +21,7 @@
       "id": "audit-webhook-trigger",
       "name": "Webhook Auditoría",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
+      "typeVersion": 2.1,
       "position": [250, 300]
     },
     {
@@ -30,7 +30,7 @@
       "id": "process-audit-event",
       "name": "Procesar Evento Auditoría",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [470, 300]
     },
     {
@@ -48,7 +48,7 @@
       "id": "check-has-changes",
       "name": "¿Hay Cambios para Auditar?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2.1,
       "position": [690, 300]
     },
     {
@@ -62,7 +62,7 @@
       "id": "get-complaint-context",
       "name": "Obtener Contexto Reclamo",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [910, 200]
     },
     {
@@ -76,7 +76,7 @@
       "id": "store-audit-record",
       "name": "Almacenar Registro Auditoría",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1130, 200]
     },
     {
@@ -94,7 +94,7 @@
       "id": "check-requires-notification",
       "name": "¿Requiere Notificación?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
+      "typeVersion": 2.1,
       "position": [1350, 200]
     },
     {
@@ -108,7 +108,7 @@
       "id": "get-notification-recipients",
       "name": "Obtener Destinatarios Notificación",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1570, 120]
     },
     {
@@ -123,7 +123,7 @@
       "id": "send-audit-notification",
       "name": "Enviar Notificación Auditoría",
       "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 1,
+      "typeVersion": 2.1,
       "position": [1790, 120]
     },
     {
@@ -132,7 +132,7 @@
       "id": "generate-audit-summary",
       "name": "Generar Resumen Auditoría",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [2010, 200]
     },
     {
@@ -143,7 +143,7 @@
       "id": "respond-audit-complete",
       "name": "Respuesta Auditoría Completa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2.1,
       "position": [2230, 200]
     },
     {
@@ -154,7 +154,7 @@
       "id": "respond-no-changes",
       "name": "Respuesta Sin Cambios",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
+      "typeVersion": 2.1,
       "position": [910, 450]
     }
   ],

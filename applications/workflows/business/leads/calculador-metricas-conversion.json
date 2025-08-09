@@ -1,198 +1,250 @@
 {
-  "name": "Calculador de Métricas de Conversión",
-  "description": "Workflow que calcula automáticamente métricas de conversión y performance por asesor, incluyendo tasas de conversión, tiempo promedio de cierre, y análisis comparativo de rendimiento.",
-  "tags": [
-    "metricas",
-    "conversion", 
-    "performance",
-    "asesores",
-    "analytics",
-    "critico"
-  ],
+  "meta": {
+    "instanceId": "calc-conversion-001"
+  },
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
             {
-              "field": "hours",
+              "field": "hours", 
               "hoursInterval": 6
             }
           ]
         }
       },
       "id": "schedule-trigger",
-      "name": "Ejecutar cada 6 horas",
+      "name": "Schedule Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [250, 300]
+      "position": [240, 300]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Calcular métricas de conversión por asesor en múltiples períodos\nWITH periods AS (\n  SELECT \n    'ultimo_dia' as periodo,\n    CURRENT_DATE as fecha_inicio,\n    CURRENT_DATE + INTERVAL '1 day' as fecha_fin\n  UNION ALL\n  SELECT \n    'ultima_semana' as periodo,\n    CURRENT_DATE - INTERVAL '7 days' as fecha_inicio,\n    CURRENT_DATE as fecha_fin\n  UNION ALL\n  SELECT \n    'ultimo_mes' as periodo,\n    CURRENT_DATE - INTERVAL '30 days' as fecha_inicio,\n    CURRENT_DATE as fecha_fin\n),\nasesor_metrics AS (\n  SELECT \n    p.periodo,\n    l.concesionario_id,\n    l.asesor_asignado_id,\n    u.nombre as asesor_nombre,\n    u.email as asesor_email,\n    c.nombre as concesionario_nombre,\n    \n    -- Conteos por estado\n    COUNT(*) as total_leads,\n    COUNT(CASE WHEN l.estado = 'nuevo' THEN 1 END) as leads_nuevos,\n    COUNT(CASE WHEN l.estado = 'contactado' THEN 1 END) as leads_contactados,\n    COUNT(CASE WHEN l.estado = 'cotizado' THEN 1 END) as leads_cotizados,\n    COUNT(CASE WHEN l.estado = 'vendido' THEN 1 END) as leads_vendidos,\n    COUNT(CASE WHEN l.estado = 'perdido' THEN 1 END) as leads_perdidos,\n    \n    -- Métricas de tiempo (en horas)\n    AVG(CASE \n      WHEN l.fecha_primer_contacto IS NOT NULL \n      THEN EXTRACT(EPOCH FROM (l.fecha_primer_contacto - l.fecha_creacion))/3600 \n    END) as tiempo_promedio_primer_contacto,\n    \n    AVG(CASE \n      WHEN l.fecha_cotizacion IS NOT NULL \n      THEN EXTRACT(EPOCH FROM (l.fecha_cotizacion - l.fecha_creacion))/3600 \n    END) as tiempo_promedio_cotizacion,\n    \n    AVG(CASE \n      WHEN l.fecha_cierre IS NOT NULL \n      THEN EXTRACT(EPOCH FROM (l.fecha_cierre - l.fecha_creacion))/3600 \n    END) as tiempo_promedio_cierre,\n    \n    -- Métricas de valor\n    AVG(l.monto_cotizacion) as monto_promedio_cotizacion,\n    SUM(CASE WHEN l.estado = 'vendido' THEN l.monto_venta ELSE 0 END) as valor_total_ventas,\n    AVG(CASE WHEN l.estado = 'vendido' THEN l.monto_venta END) as ticket_promedio_venta,\n    \n    -- Score de calidad promedio\n    AVG(l.score_calidad) as score_promedio,\n    \n    -- Distribución por nivel de interés\n    COUNT(CASE WHEN l.nivel_interes = 'alto' THEN 1 END) as leads_interes_alto,\n    COUNT(CASE WHEN l.nivel_interes = 'medio' THEN 1 END) as leads_interes_medio,\n    COUNT(CASE WHEN l.nivel_interes = 'bajo' THEN 1 END) as leads_interes_bajo,\n    \n    -- Actividad del asesor\n    COUNT(DISTINCT DATE(l.fecha_creacion)) as dias_con_actividad,\n    \n    -- Timestamp del cálculo\n    p.fecha_inicio,\n    p.fecha_fin\n    \n  FROM periods p\n  CROSS JOIN leads l\n  INNER JOIN usuarios u ON l.asesor_asignado_id = u.id\n  INNER JOIN concesionarios c ON l.concesionario_id = c.id\n  WHERE \n    l.fecha_creacion >= p.fecha_inicio\n    AND l.fecha_creacion < p.fecha_fin\n    AND c.activo = true\n    AND u.activo = true\n    AND u.rol IN ('asesor_ventas', 'jefe_ventas')\n  GROUP BY \n    p.periodo,\n    l.concesionario_id,\n    l.asesor_asignado_id,\n    u.nombre,\n    u.email,\n    c.nombre,\n    p.fecha_inicio,\n    p.fecha_fin\n  HAVING COUNT(*) > 0  -- Solo asesores con actividad\n)\nSELECT \n  *,\n  -- Cálculo de tasas de conversión\n  CASE WHEN total_leads > 0 THEN ROUND((leads_contactados::numeric / total_leads::numeric) * 100, 2) ELSE 0 END as tasa_contacto,\n  CASE WHEN leads_contactados > 0 THEN ROUND((leads_cotizados::numeric / leads_contactados::numeric) * 100, 2) ELSE 0 END as tasa_cotizacion,\n  CASE WHEN leads_cotizados > 0 THEN ROUND((leads_vendidos::numeric / leads_cotizados::numeric) * 100, 2) ELSE 0 END as tasa_cierre,\n  CASE WHEN total_leads > 0 THEN ROUND((leads_vendidos::numeric / total_leads::numeric) * 100, 2) ELSE 0 END as tasa_conversion_total,\n  \n  -- Eficiencia de tiempo\n  CASE \n    WHEN tiempo_promedio_primer_contacto <= 2 THEN 'excelente'\n    WHEN tiempo_promedio_primer_contacto <= 4 THEN 'bueno'\n    WHEN tiempo_promedio_primer_contacto <= 8 THEN 'regular'\n    ELSE 'mejorable'\n  END as eficiencia_contacto,\n  \n  -- Clasificación de performance\n  CASE \n    WHEN leads_vendidos >= 5 AND tasa_conversion_total >= 20 THEN 'top_performer'\n    WHEN leads_vendidos >= 3 AND tasa_conversion_total >= 15 THEN 'buen_performer'\n    WHEN leads_vendidos >= 1 AND tasa_conversion_total >= 10 THEN 'performer_promedio'\n    ELSE 'necesita_mejora'\n  END as clasificacion_performance\n  \nFROM asesor_metrics\nORDER BY \n  periodo,\n  concesionario_id,\n  tasa_conversion_total DESC,\n  valor_total_ventas DESC;",
-        "additionalFields": {}
+        "query": "WITH conversion_metrics AS (\n  SELECT \n    DATE(l.fecha_contacto) as fecha,\n    l.concesionario_id,\n    c.nombre as concesionario_nombre,\n    l.canal_origen,\n    \n    -- Métricas básicas\n    COUNT(*) as total_leads,\n    COUNT(CASE WHEN l.estado = 'contactado' THEN 1 END) as leads_contactados,\n    COUNT(CASE WHEN l.estado IN ('interesado', 'seguimiento') THEN 1 END) as leads_calificados,\n    COUNT(CASE WHEN l.estado = 'convertido' THEN 1 END) as leads_convertidos,\n    \n    -- Tiempo promedio de respuesta\n    AVG(EXTRACT(EPOCH FROM (l.fecha_primer_contacto - l.fecha_contacto))/3600) as tiempo_respuesta_horas,\n    \n    -- Métricas por asesor\n    COUNT(DISTINCT l.asesor_id) as asesores_involucrados,\n    \n    -- Valor estimado\n    SUM(CASE WHEN l.estado = 'convertido' THEN COALESCE(l.valor_estimado, 25000) ELSE 0 END) as valor_total_convertido\n    \n  FROM leads l\n  LEFT JOIN concesionarios c ON l.concesionario_id = c.id\n  WHERE l.fecha_contacto >= NOW() - INTERVAL '7 days'\n  GROUP BY DATE(l.fecha_contacto), l.concesionario_id, c.nombre, l.canal_origen\n)\nSELECT \n  *,\n  -- Cálculo de tasas de conversión\n  ROUND((leads_contactados::decimal / NULLIF(total_leads, 0)) * 100, 2) as tasa_contacto,\n  ROUND((leads_calificados::decimal / NULLIF(leads_contactados, 0)) * 100, 2) as tasa_calificacion,\n  ROUND((leads_convertidos::decimal / NULLIF(leads_calificados, 0)) * 100, 2) as tasa_conversion,\n  ROUND((leads_convertidos::decimal / NULLIF(total_leads, 0)) * 100, 2) as tasa_conversion_total,\n  \n  -- ROI estimado\n  ROUND(valor_total_convertido / NULLIF(total_leads * 50, 0), 2) as roi_estimado\n  \nFROM conversion_metrics\nORDER BY fecha DESC, tasa_conversion_total DESC;",
+        "options": {}
       },
-      "id": "calculate-conversion-metrics",
-      "name": "Calcular Métricas Conversión",
+      "id": "query-metrics",
+      "name": "Consultar Métricas",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [470, 300]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "number": [
-            {
-              "value1": "={{ $json.length }}",
-              "operation": "larger",
-              "value2": 0
-            }
-          ]
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
         }
-      },
-      "id": "check-has-metrics",
-      "name": "¿Hay Métricas para Procesar?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [690, 300]
+      }
     },
     {
       "parameters": {
+        "jsCode": "// Procesar y agregar métricas de conversión\nconst items = $input.all();\nconst resultados = [];\nconst alertas = [];\n\n// Agrupar por concesionario para análisis consolidado\nconst porConcesionario = {};\n\nfor (const item of items) {\n  const data = item.json;\n  const key = `${data.concesionario_id}_${data.fecha}`;\n  \n  if (!porConcesionario[key]) {\n    porConcesionario[key] = {\n      concesionario_id: data.concesionario_id,\n      concesionario_nombre: data.concesionario_nombre,\n      fecha: data.fecha,\n      canales: [],\n      totales: {\n        leads: 0,\n        contactados: 0,\n        calificados: 0,\n        convertidos: 0,\n        valor_total: 0\n      }\n    };\n  }\n  \n  // Agregar datos del canal\n  porConcesionario[key].canales.push({\n    canal: data.canal_origen,\n    total_leads: data.total_leads,\n    tasa_contacto: data.tasa_contacto,\n    tasa_calificacion: data.tasa_calificacion,\n    tasa_conversion: data.tasa_conversion,\n    tasa_conversion_total: data.tasa_conversion_total,\n    tiempo_respuesta_horas: data.tiempo_respuesta_horas,\n    roi_estimado: data.roi_estimado\n  });\n  \n  // Acumular totales\n  porConcesionario[key].totales.leads += data.total_leads;\n  porConcesionario[key].totales.contactados += data.leads_contactados;\n  porConcesionario[key].totales.calificados += data.leads_calificados;\n  porConcesionario[key].totales.convertidos += data.leads_convertidos;\n  porConcesionario[key].totales.valor_total += data.valor_total_convertido;\n}\n\n// Procesar cada concesionario\nfor (const [key, concesionario] of Object.entries(porConcesionario)) {\n  const totales = concesionario.totales;\n  \n  // Calcular métricas consolidadas\n  const metricas = {\n    concesionario_id: concesionario.concesionario_id,\n    concesionario_nombre: concesionario.concesionario_nombre,\n    fecha_calculo: concesionario.fecha,\n    periodo: '24h',\n    \n    // Totales\n    total_leads: totales.leads,\n    total_contactados: totales.contactados,\n    total_calificados: totales.calificados,\n    total_convertidos: totales.convertidos,\n    valor_total_ventas: totales.valor_total,\n    \n    // Tasas consolidadas\n    tasa_contacto_general: Math.round((totales.contactados / totales.leads) * 100 * 100) / 100,\n    tasa_calificacion_general: Math.round((totales.calificados / totales.contactados) * 100 * 100) / 100,\n    tasa_conversion_general: Math.round((totales.convertidos / totales.calificados) * 100 * 100) / 100,\n    tasa_conversion_total: Math.round((totales.convertidos / totales.leads) * 100 * 100) / 100,\n    \n    // ROI y valor promedio\n    roi_general: Math.round((totales.valor_total / (totales.leads * 50)) * 100) / 100,\n    valor_promedio_venta: totales.convertidos > 0 ? Math.round(totales.valor_total / totales.convertidos) : 0,\n    \n    // Mejor canal\n    mejor_canal: concesionario.canales.reduce((mejor, actual) => \n      actual.tasa_conversion_total > (mejor?.tasa_conversion_total || 0) ? actual : mejor\n    , null)?.canal || 'N/A',\n    \n    // Detalle por canal\n    detalle_canales: concesionario.canales,\n    \n    timestamp: new Date().toISOString()\n  };\n  \n  resultados.push({ json: metricas });\n  \n  // Generar alertas para métricas críticas\n  if (metricas.tasa_conversion_total < 5 && metricas.total_leads >= 10) {\n    alertas.push({\n      tipo: 'conversion_baja',\n      concesionario: metricas.concesionario_nombre,\n      tasa: metricas.tasa_conversion_total,\n      leads: metricas.total_leads,\n      fecha: metricas.fecha_calculo\n    });\n  }\n  \n  if (metricas.tasa_contacto_general < 70 && metricas.total_leads >= 5) {\n    alertas.push({\n      tipo: 'contacto_bajo',\n      concesionario: metricas.concesionario_nombre,\n      tasa: metricas.tasa_contacto_general,\n      leads: metricas.total_leads,\n      fecha: metricas.fecha_calculo\n    });\n  }\n}\n\n// Guardar alertas en contexto\nif (alertas.length > 0) {\n  $execution.set('alertas_conversion', alertas);\n}\n\nreturn resultados;"
       },
-      "id": "process-metrics-data",
-      "name": "Procesar Datos Métricas",
+      "id": "calculate-conversion",
+      "name": "Calcular Conversión",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [910, 200]
+      "position": [680, 300]
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Almacenar métricas de conversión calculadas\nINSERT INTO metricas_conversion_asesores (\n  concesionario_id,\n  periodo,\n  fecha_inicio,\n  fecha_fin,\n  asesor_id,\n  asesor_nombre,\n  total_leads,\n  leads_vendidos,\n  valor_total_ventas,\n  tasa_contacto,\n  tasa_cotizacion,\n  tasa_cierre,\n  tasa_conversion_total,\n  tiempo_promedio_primer_contacto,\n  tiempo_promedio_cotizacion,\n  tiempo_promedio_cierre,\n  ticket_promedio_venta,\n  score_promedio,\n  clasificacion_performance,\n  eficiencia_contacto,\n  dias_con_actividad,\n  metadata,\n  created_at\n)\nSELECT \n  $1 as concesionario_id,\n  $2 as periodo,\n  $3::date as fecha_inicio,\n  $4::date as fecha_fin,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.asesor_id).join(',') }}]) as asesor_id,\n  unnest(ARRAY[{{ $json.asesores.map(a => `'${a.asesor_nombre}'`).join(',') }}]) as asesor_nombre,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.total_leads).join(',') }}]) as total_leads,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.leads_vendidos).join(',') }}]) as leads_vendidos,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.valor_total_ventas).join(',') }}]) as valor_total_ventas,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.tasa_contacto).join(',') }}]) as tasa_contacto,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.tasa_cotizacion).join(',') }}]) as tasa_cotizacion,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.tasa_cierre).join(',') }}]) as tasa_cierre,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.tasa_conversion_total).join(',') }}]) as tasa_conversion_total,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.tiempo_promedio_primer_contacto).join(',') }}]) as tiempo_promedio_primer_contacto,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.tiempo_promedio_cotizacion || 0).join(',') }}]) as tiempo_promedio_cotizacion,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.tiempo_promedio_cierre || 0).join(',') }}]) as tiempo_promedio_cierre,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.ticket_promedio_venta || 0).join(',') }}]) as ticket_promedio_venta,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.score_promedio).join(',') }}]) as score_promedio,\n  unnest(ARRAY[{{ $json.asesores.map(a => `'${a.clasificacion_performance}'`).join(',') }}]) as clasificacion_performance,\n  unnest(ARRAY[{{ $json.asesores.map(a => `'${a.eficiencia_contacto}'`).join(',') }}]) as eficiencia_contacto,\n  unnest(ARRAY[{{ $json.asesores.map(a => a.dias_con_actividad).join(',') }}]) as dias_con_actividad,\n  $5::jsonb as metadata,\n  CURRENT_TIMESTAMP as created_at\nON CONFLICT (concesionario_id, periodo, asesor_id, fecha_inicio) DO UPDATE SET\n  total_leads = EXCLUDED.total_leads,\n  leads_vendidos = EXCLUDED.leads_vendidos,\n  valor_total_ventas = EXCLUDED.valor_total_ventas,\n  tasa_contacto = EXCLUDED.tasa_contacto,\n  tasa_cotizacion = EXCLUDED.tasa_cotizacion,\n  tasa_cierre = EXCLUDED.tasa_cierre,\n  tasa_conversion_total = EXCLUDED.tasa_conversion_total,\n  tiempo_promedio_primer_contacto = EXCLUDED.tiempo_promedio_primer_contacto,\n  tiempo_promedio_cotizacion = EXCLUDED.tiempo_promedio_cotizacion,\n  tiempo_promedio_cierre = EXCLUDED.tiempo_promedio_cierre,\n  ticket_promedio_venta = EXCLUDED.ticket_promedio_venta,\n  score_promedio = EXCLUDED.score_promedio,\n  clasificacion_performance = EXCLUDED.clasificacion_performance,\n  eficiencia_contacto = EXCLUDED.eficiencia_contacto,\n  dias_con_actividad = EXCLUDED.dias_con_actividad,\n  metadata = EXCLUDED.metadata,\n  updated_at = CURRENT_TIMESTAMP\nRETURNING *;",
-        "additionalFields": {
-          "queryParameters": "=[\n  $json.concesionario_id,\n  $json.periodo,\n  $json.fecha_inicio,\n  $json.fecha_fin,\n  JSON.stringify({\n    team_averages: $json.team_averages,\n    mejor_asesor: $json.mejor_asesor ? $json.mejor_asesor.asesor_nombre : null,\n    peor_asesor: $json.peor_asesor ? $json.peor_asesor.asesor_nombre : null,\n    tasa_conversion_concesionario: $json.tasa_conversion_concesionario,\n    requires_attention: $json.requires_attention,\n    calculado_at: $json.calculado_at\n  })\n]"
-        }
-      },
-      "id": "store-conversion-metrics",
-      "name": "Almacenar Métricas Conversión",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [1130, 200]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "boolean": [
+        "operation": "upsert",
+        "table": "metricas_conversion_leads",
+        "updateKey": "concesionario_id,fecha_calculo,periodo",
+        "columnsUi": {
+          "columnToMatchOn": [
             {
-              "value1": "={{ $json.requires_attention }}",
-              "operation": "equal",
-              "value2": true
+              "column": "concesionario_id",
+              "operator": "="
+            },
+            {
+              "column": "fecha_calculo",
+              "operator": "="
+            },
+            {
+              "column": "periodo",
+              "operator": "="
+            }
+          ],
+          "columnsToUpdate": [
+            {
+              "column": "total_leads"
+            },
+            {
+              "column": "total_contactados"
+            },
+            {
+              "column": "total_calificados"
+            },
+            {
+              "column": "total_convertidos"
+            },
+            {
+              "column": "valor_total_ventas"
+            },
+            {
+              "column": "tasa_contacto_general"
+            },
+            {
+              "column": "tasa_calificacion_general"
+            },
+            {
+              "column": "tasa_conversion_general"
+            },
+            {
+              "column": "tasa_conversion_total"
+            },
+            {
+              "column": "roi_general"
+            },
+            {
+              "column": "valor_promedio_venta"
+            },
+            {
+              "column": "mejor_canal"
+            },
+            {
+              "column": "detalle_canales"
+            },
+            {
+              "column": "timestamp"
             }
           ]
         }
       },
-      "id": "check-requires-attention",
-      "name": "¿Requiere Atención?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [1350, 200]
+      "id": "save-metrics",
+      "name": "Guardar Métricas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [900, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Obtener jefes de ventas para notificación de performance\nSELECT \n  u.id,\n  u.nombre,\n  u.email,\n  u.rol\nFROM usuarios u\nWHERE \n  u.concesionario_id = $1\n  AND u.activo = true\n  AND u.rol IN ('jefe_ventas', 'gerencia')\nORDER BY \n  CASE u.rol\n    WHEN 'gerencia' THEN 1\n    WHEN 'jefe_ventas' THEN 2\n    ELSE 3\n  END;",
-        "additionalFields": {
-          "queryParameters": "=[$json.concesionario_id]"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "alertas-exist",
+              "leftValue": "={{ $execution.get('alertas_conversion') }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-alerts",
+      "name": "¿Hay Alertas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "ventas@optimacx.com,gerencia@optimacx.com",
+        "subject": "📊 Alerta Métricas de Conversión - {{ new Date().toLocaleDateString() }}",
+        "message": "=**ALERTAS DE CONVERSIÓN DETECTADAS:**\n\n{{ $execution.get('alertas_conversion').map(alerta => \n  `🔸 **${alerta.concesionario}**\n   - Tipo: ${alerta.tipo === 'conversion_baja' ? 'Conversión Baja' : 'Contacto Bajo'}\n   - Tasa: ${alerta.tasa}%\n   - Leads: ${alerta.leads}\n   - Fecha: ${alerta.fecha}` \n).join('\\n\\n') }}\n\n**Acción requerida:** Revisar procesos de seguimiento y contacto.\n\nDashboard: https://dashboard.optimacx.com/conversion\n\nSaludos,\nSistema OptimaCX",
+        "options": {
+          "allowUnauthorizedCerts": false
         }
       },
-      "id": "get-sales-managers",
-      "name": "Obtener Jefes de Ventas",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [1570, 120]
-    },
-    {
-      "parameters": {
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "emailSmtp",
-        "fromEmail": "metricas@optimacx.com",
-        "toEmail": "={{ $('Obtener Jefes de Ventas').all().map(item => item.json.email).join(',') }}",
-        "subject": "📊 REPORTE MÉTRICAS CONVERSIÓN {{ $('Procesar Datos Métricas').first().json.periodo.toUpperCase() }} - {{ $('Procesar Datos Métricas').first().json.concesionario_nombre }}",
-        "html": "=<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        .container { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; }\n        .header { \n            background: {{ $('Procesar Datos Métricas').first().json.requires_attention ? '#dc3545' : '#007bff' }}; \n            color: white; \n            padding: 20px; \n            text-align: center; \n            border-radius: 8px 8px 0 0;\n        }\n        .summary-box { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; }\n        .asesor-card { \n            background: #fff;\n            border: 1px solid #dee2e6;\n            border-radius: 5px;\n            padding: 15px;\n            margin: 10px 0;\n            display: inline-block;\n            width: 45%;\n            vertical-align: top;\n        }\n        .top-performer { border-left: 5px solid #28a745; }\n        .needs-improvement { border-left: 5px solid #dc3545; }\n        .average-performer { border-left: 5px solid #ffc107; }\n        .metric { margin: 5px 0; }\n        .metric-value { font-weight: bold; color: #007bff; }\n        .cta { background: #17a2b8; color: white; padding: 15px; text-align: center; margin: 20px 0; border-radius: 5px; }\n        .table { width: 100%; border-collapse: collapse; margin: 15px 0; }\n        .table th, .table td { padding: 8px; text-align: left; border-bottom: 1px solid #dee2e6; }\n        .table th { background-color: #f8f9fa; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h2>📊 REPORTE MÉTRICAS DE CONVERSIÓN</h2>\n            <p><strong>{{ $('Procesar Datos Métricas').first().json.concesionario_nombre }}</strong></p>\n            <p>Período: {{ $('Procesar Datos Métricas').first().json.periodo.replace('_', ' ').toUpperCase() }}</p>\n            <p>{{ new Date($('Procesar Datos Métricas').first().json.fecha_inicio).toLocaleDateString('es-CL') }} - {{ new Date($('Procesar Datos Métricas').first().json.fecha_fin).toLocaleDateString('es-CL') }}</p>\n        </div>\n        \n        <div style=\"padding: 20px;\">\n            <div class=\"summary-box\">\n                <h3>📈 Resumen Ejecutivo</h3>\n                <div style=\"display: flex; justify-content: space-between; flex-wrap: wrap;\">\n                    <div style=\"width: 48%;\">\n                        <div class=\"metric\">Total Leads: <span class=\"metric-value\">{{ $('Procesar Datos Métricas').first().json.totales.total_leads }}</span></div>\n                        <div class=\"metric\">Leads Vendidos: <span class=\"metric-value\">{{ $('Procesar Datos Métricas').first().json.totales.leads_vendidos }}</span></div>\n                        <div class=\"metric\">Tasa Conversión: <span class=\"metric-value\">{{ $('Procesar Datos Métricas').first().json.tasa_conversion_concesionario }}%</span></div>\n                    </div>\n                    <div style=\"width: 48%;\">\n                        <div class=\"metric\">Valor Total Ventas: <span class=\"metric-value\">${{ new Intl.NumberFormat('es-CL').format($('Procesar Datos Métricas').first().json.totales.valor_total_ventas) }}</span></div>\n                        <div class=\"metric\">Asesores Activos: <span class=\"metric-value\">{{ $('Procesar Datos Métricas').first().json.totales.asesores_activos }}</span></div>\n                        <div class=\"metric\">Valor Prom/Asesor: <span class=\"metric-value\">${{ new Intl.NumberFormat('es-CL').format($('Procesar Datos Métricas').first().json.valor_promedio_por_asesor) }}</span></div>\n                    </div>\n                </div>\n            </div>\n            \n            {{ $('Procesar Datos Métricas').first().json.mejor_asesor ? `\n            <div class=\"summary-box\">\n                <h3>🏆 Mejor Asesor del Período</h3>\n                <div class=\"asesor-card top-performer\">\n                    <h4>${$('Procesar Datos Métricas').first().json.mejor_asesor.asesor_nombre}</h4>\n                    <div class=\"metric\">Conversión: <span class=\"metric-value\">${$('Procesar Datos Métricas').first().json.mejor_asesor.tasa_conversion_total}%</span></div>\n                    <div class=\"metric\">Ventas: <span class=\"metric-value\">${$('Procesar Datos Métricas').first().json.mejor_asesor.leads_vendidos}</span></div>\n                    <div class=\"metric\">Valor Total: <span class=\"metric-value\">$${new Intl.NumberFormat('es-CL').format($('Procesar Datos Métricas').first().json.mejor_asesor.valor_total_ventas)}</span></div>\n                    <div class=\"metric\">Tiempo Contacto: <span class=\"metric-value\">${$('Procesar Datos Métricas').first().json.mejor_asesor.tiempo_promedio_primer_contacto}h</span></div>\n                </div>\n            </div>\n            ` : '' }}\n            \n            <h3>📊 Performance por Asesor</h3>\n            <table class=\"table\">\n                <thead>\n                    <tr>\n                        <th>Asesor</th>\n                        <th>Leads</th>\n                        <th>Ventas</th>\n                        <th>Conversión</th>\n                        <th>Valor Total</th>\n                        <th>Performance</th>\n                    </tr>\n                </thead>\n                <tbody>\n                    {{ $('Procesar Datos Métricas').first().json.asesores.map(asesor => `\n                    <tr>\n                        <td>${asesor.asesor_nombre}</td>\n                        <td>${asesor.total_leads}</td>\n                        <td>${asesor.leads_vendidos}</td>\n                        <td>${asesor.tasa_conversion_total}%</td>\n                        <td>$${new Intl.NumberFormat('es-CL').format(asesor.valor_total_ventas)}</td>\n                        <td>${asesor.clasificacion_performance.replace('_', ' ').toUpperCase()}</td>\n                    </tr>\n                    `).join('') }}\n                </tbody>\n            </table>\n            \n            {{ $('Procesar Datos Métricas').first().json.necesitan_mejora.length > 0 ? `\n            <div style=\"background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;\">\n                <h3>⚠️ Asesores que Necesitan Mejora (${$('Procesar Datos Métricas').first().json.necesitan_mejora.length})</h3>\n                ${$('Procesar Datos Métricas').first().json.necesitan_mejora.map(asesor => `\n                <div style=\"margin: 10px 0; padding: 10px; background: #fff; border-radius: 3px;\">\n                    <strong>${asesor.asesor_nombre}</strong>: \n                    ${asesor.tasa_conversion_total}% conversión, \n                    ${asesor.leads_vendidos} ventas, \n                    ${asesor.tiempo_promedio_primer_contacto}h tiempo contacto\n                </div>\n                `).join('')}\n            </div>\n            ` : '' }}\n            \n            <div class=\"summary-box\">\n                <h3>📊 Promedios del Equipo</h3>\n                <div class=\"metric\">Conversión Promedio: <span class=\"metric-value\">{{ $('Procesar Datos Métricas').first().json.team_averages.tasa_conversion_promedio }}%</span></div>\n                <div class=\"metric\">Tiempo Contacto Promedio: <span class=\"metric-value\">{{ $('Procesar Datos Métricas').first().json.team_averages.tiempo_contacto_promedio }}h</span></div>\n                <div class=\"metric\">Ticket Promedio: <span class=\"metric-value\">${{ new Intl.NumberFormat('es-CL').format($('Procesar Datos Métricas').first().json.team_averages.ticket_promedio_equipo) }}</span></div>\n            </div>\n            \n            {{ $('Procesar Datos Métricas').first().json.requires_attention ? `\n            <div class=\"cta\">\n                <strong>⚠️ ATENCIÓN REQUERIDA</strong><br>\n                Más del 30% del equipo necesita mejora en performance. Se recomienda revisar procesos y capacitación.\n            </div>\n            ` : `\n            <div class=\"cta\">\n                <strong>✅ EQUIPO EN BUEN RENDIMIENTO</strong><br>\n                El equipo mantiene métricas saludables. Continuar con las estrategias actuales.\n            </div>\n            ` }}\n            \n            <div style=\"background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;\">\n                <h4>📋 Recomendaciones:</h4>\n                <ol>\n                    <li><strong>Revisar asesores con baja conversión</strong> - Identificar causas y brindar apoyo</li>\n                    <li><strong>Compartir mejores prácticas</strong> - Que top performers entrenen al equipo</li>\n                    <li><strong>Optimizar tiempo de contacto</strong> - Meta: &lt;2 horas desde creación del lead</li>\n                    <li><strong>Incentivar actividad consistente</strong> - Promover trabajo constante</li>\n                    <li><strong>Revisar calidad de leads</strong> - Analizar sources y scoring</li>\n                </ol>\n            </div>\n            \n            <p>💻 <strong>Ver dashboard completo:</strong> <a href=\"https:
-      },
-      "id": "send-performance-report",
-      "name": "Enviar Reporte Performance",
+      "id": "send-alert",
+      "name": "Enviar Alerta",
       "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 1,
-      "position": [1790, 120]
-    },
-    {
-      "parameters": {
-      },
-      "id": "generate-metrics-summary",
-      "name": "Generar Resumen Métricas",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2010, 200]
-    },
-    {
-      "parameters": {
-      },
-      "id": "no-metrics-response",
-      "name": "Sin Métricas para Procesar",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [910, 400]
+      "typeVersion": 2.1,
+      "position": [1340, 200],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-optimacx",
+          "name": "SMTP OptimaCX"
+        }
+      }
     }
   ],
   "connections": {
-    "Ejecutar cada 6 horas": {
-      "main": [["Calcular Métricas Conversión", "type": "main", "index": 0]]
-    },
-    "Calcular Métricas Conversión": {
-      "main": [["¿Hay Métricas para Procesar?", "type": "main", "index": 0]]
-    },
-    "¿Hay Métricas para Procesar?": {
+    "Schedule Trigger": {
       "main": [
-        [{"node": "Procesar Datos Métricas", "type": "main", "index": 0}],
-        [{"node": "Sin Métricas para Procesar", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Consultar Métricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Procesar Datos Métricas": {
-      "main": [["Almacenar Métricas Conversión", "type": "main", "index": 0]]
-    },
-    "Almacenar Métricas Conversión": {
-      "main": [["¿Requiere Atención?", "type": "main", "index": 0]]
-    },
-    "¿Requiere Atención?": {
+    "Consultar Métricas": {
       "main": [
-        [{"node": "Obtener Jefes de Ventas", "type": "main", "index": 0}],
-        [{"node": "Generar Resumen Métricas", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Calcular Conversión",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Obtener Jefes de Ventas": {
-      "main": [["Enviar Reporte Performance", "type": "main", "index": 0]]
+    "Calcular Conversión": {
+      "main": [
+        [
+          {
+            "node": "Guardar Métricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Enviar Reporte Performance": {
-      "main": [["Generar Resumen Métricas", "type": "main", "index": 0]]
+    "Guardar Métricas": {
+      "main": [
+        [
+          {
+            "node": "¿Hay Alertas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay Alertas?": {
+      "main": [
+        [
+          {
+            "node": "Enviar Alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "pinData": {},
   "settings": {
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner",
-    "errorWorkflow": "manejador-errores"
+    "executionOrder": "v1"
   },
-  "staticData": {},
-  "variables": {
-    "METRICS_VERSION": "1.0.0",
-    "CALCULATION_INTERVAL_HOURS": 6,
-    "PERFORMANCE_PERIODS": ["ultimo_dia", "ultima_semana", "ultimo_mes"],
-    "TOP_PERFORMER_MIN_SALES": 5,
-    "TOP_PERFORMER_MIN_CONVERSION": 20,
-    "NEEDS_IMPROVEMENT_THRESHOLD": 10,
-    "ATTENTION_THRESHOLD_PERCENT": 30,
-    "TARGET_CONTACT_TIME_HOURS": 2
-  }
+  "staticData": null,
+  "tags": ["leads", "conversion", "metricas"],
+  "triggerCount": 0,
+  "updatedAt": "2024-08-09T05:47:00.000Z",
+  "versionId": "calc-conversion-v2.1",
+  "name": "Calculador Métricas Conversión",
+  "active": true,
+  "id": "calc-conversion-metrics",
+  "hash": "conversion-metrics-calculator"
 }

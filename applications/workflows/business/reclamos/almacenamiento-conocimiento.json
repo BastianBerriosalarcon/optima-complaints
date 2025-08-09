@@ -1,7 +1,12 @@
 {
   "name": "Knowledge - Storage Finalizer",
   "description": "Workflow enfocado en almacenar chunks con embeddings en la BD y finalizar procesamiento. Principio SRP: Una sola responsabilidad - storage.",
-  "tags": ["rag", "knowledge", "storage", "srp"],
+  "tags": [
+    "rag",
+    "knowledge",
+    "storage",
+    "srp"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -10,17 +15,22 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2,
-      "position": [240, 300]
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "prepare-chunks-for-storage",
       "name": "Preparar para Almacenamiento",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [460, 300]
+      "typeVersion": 2.1,
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -33,8 +43,11 @@
       "id": "insert-chunks-batch",
       "name": "Insertar Chunks (Lote)",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [680, 300]
+      "typeVersion": 2.1,
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -47,17 +60,22 @@
       "id": "update-document-status",
       "name": "Actualizar Estado Documento",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [900, 300]
+      "typeVersion": 2.1,
+      "position": [
+        900,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "generate-final-report",
       "name": "Generar Reporte Final",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1120, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        300
+      ]
     }
   ],
   "connections": {

@@ -1,7 +1,14 @@
 {
   "name": "Survey - Excel Exporter (Post-venta)",
   "description": "Genera y permite descargar reportes Excel de encuestas de POST-VENTA para jefe de servicio por concesionario/sucursal.",
-  "tags": ["survey", "excel", "export", "postventa", "service", "report"],
+  "tags": [
+    "survey",
+    "excel",
+    "export",
+    "postventa",
+    "service",
+    "report"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -14,16 +21,21 @@
       "name": "Webhook Excel Export Post-venta",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [200, 300]
+      "position": [
+        200,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "validate-export-params-postventa",
       "name": "Validar Parámetros Export Post-venta",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [400, 300]
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        300
+      ]
     },
     {
       "parameters": {
@@ -36,17 +48,22 @@
       "id": "query-postventa-surveys",
       "name": "Consultar Encuestas Post-venta",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [600, 300]
+      "typeVersion": 2.1,
+      "position": [
+        600,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "process-postventa-excel-data",
       "name": "Procesar Datos Excel Post-venta",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [800, 300]
+      "typeVersion": 2.1,
+      "position": [
+        800,
+        300
+      ]
     },
     {
       "parameters": {
@@ -59,8 +76,11 @@
       "id": "generate-postventa-excel",
       "name": "Generar Excel Post-venta",
       "type": "n8n-nodes-base.microsoftExcel",
-      "typeVersion": 2,
-      "position": [1000, 300],
+      "typeVersion": 2.1,
+      "position": [
+        1000,
+        300
+      ],
       "executeOnce": false
     },
     {
@@ -77,8 +97,11 @@
       "id": "download-postventa-excel",
       "name": "Descargar Excel Post-venta",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [1200, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -91,8 +114,11 @@
       "id": "error-response-postventa-excel",
       "name": "Respuesta Error Excel Post-venta",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [800, 480]
+      "typeVersion": 2.1,
+      "position": [
+        800,
+        480
+      ]
     }
   ],
   "connections": {

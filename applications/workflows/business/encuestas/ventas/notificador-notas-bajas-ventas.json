@@ -10,7 +10,7 @@
       "id": "sales-notification-trigger",
       "name": "Trigger Notificación Ventas",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300]
     },
     {
@@ -23,7 +23,7 @@
       "id": "load-tenant-config-sales",
       "name": "Cargar Config Concesionario Ventas",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [460, 300]
     },
     {
@@ -37,7 +37,7 @@
       "id": "get-sales-recipients",
       "name": "Obtener Destinatarios Específicos",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -46,7 +46,7 @@
       "id": "prepare-sales-email-data",
       "name": "Preparar Datos Email Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [900, 300]
     },
     {
@@ -56,7 +56,7 @@
       "id": "generate-sales-email-html",
       "name": "Generar HTML Email Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1120, 300]
     },
     {
@@ -72,7 +72,7 @@
       "id": "send-sales-notification-email",
       "name": "Enviar Email Notificación Ventas",
       "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 300]
     },
     {
@@ -88,7 +88,7 @@
       "id": "create-feedback-case",
       "name": "Crear Caso de Feedback",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1560, 300]
     },
     {
@@ -97,7 +97,7 @@
       "id": "log-sales-notification-sent",
       "name": "Log Notificación y Caso Creado",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1780, 300]
     }
   ],

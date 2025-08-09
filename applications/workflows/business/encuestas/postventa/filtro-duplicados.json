@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "Duplicate Filter Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "survey-duplicate-filter"
     },
@@ -104,7 +104,7 @@
       "id": "filter-duplicates",
       "name": "Filter Duplicates",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [900, 300]
     },
     {
@@ -131,7 +131,7 @@
       "id": "check-clients-available",
       "name": "Check Clients Available",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1120, 300]
     },
     {
@@ -144,7 +144,7 @@
       "id": "trigger-whatsapp-sender",
       "name": "Trigger WhatsApp Sender",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 200]
     },
     {
@@ -155,7 +155,7 @@
       "id": "no-clients-response",
       "name": "No Clients Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1120, 500]
     }
   ],

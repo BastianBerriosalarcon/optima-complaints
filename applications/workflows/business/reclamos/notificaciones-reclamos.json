@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "Notifications Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "complaint-notifications"
     },
@@ -33,7 +33,7 @@
       "id": "prepare-role-notification",
       "name": "Prepare Role Notification",  
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -95,7 +95,7 @@
       "id": "rate-limit-delay",
       "name": "Rate Limit Delay",
       "type": "n8n-nodes-base.wait",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1120, 300]
     },
     {
@@ -105,7 +105,7 @@
       "id": "generate-notification-report",
       "name": "Generate Notification Report",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 300]
     },
     {
@@ -181,7 +181,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1780, 300]
     }
   ],

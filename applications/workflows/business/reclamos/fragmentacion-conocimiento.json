@@ -1,7 +1,12 @@
 {
   "name": "Knowledge - Document Chunking",
   "description": "Workflow enfocado en chunkear documentos en fragmentos para embeddings. Principio SRP: Una sola responsabilidad - chunking.",
-  "tags": ["rag", "knowledge", "chunking", "srp"],
+  "tags": [
+    "rag",
+    "knowledge",
+    "chunking",
+    "srp"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -10,17 +15,22 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2,
-      "position": [240, 300]
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "chunk-document-content",
       "name": "Chunkear Contenido",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [460, 300]
+      "typeVersion": 2.1,
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -32,8 +42,11 @@
       "id": "trigger-embedding-workflow",
       "name": "Iniciar Embeddings",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [680, 300]
+      "typeVersion": 2.1,
+      "position": [
+        680,
+        300
+      ]
     }
   ],
   "connections": {

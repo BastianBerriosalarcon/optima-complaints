@@ -1,255 +1,428 @@
 {
-  "name": "Actualizador Automático de Estados de Leads",
-  "description": "Workflow que gestiona automáticamente las transiciones de estados de leads (Nuevo→Contactado→Cotizado→Vendido/Perdido) basado en acciones detectadas y tiempo transcurrido.",
-  "tags": [
-    "leads",
-    "estados", 
-    "transiciones",
-    "automatizacion",
-    "ventas",
-    "critico"
-  ],
+  "meta": {
+    "instanceId": "leads-status-updater-001"
+  },
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
             {
-              "field": "minutes",
-              "minutesInterval": 15
+              "field": "hours",
+              "hoursInterval": 6
             }
           ]
         }
       },
       "id": "schedule-trigger",
-      "name": "Ejecutar cada 15 minutos",
+      "name": "Trigger Cada 6 Horas",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
-      "position": [250, 300]
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "/webhook/update-lead-status",
-        "options": {
-          "responseData": "firstEntryJson"
-        }
-      },
-      "id": "manual-update-webhook",
-      "name": "Webhook Actualización Manual",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [250, 450]
+      "position": [240, 300]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Buscar leads que requieren actualización automática de estado\nSELECT \n  l.id,\n  l.concesionario_id,\n  l.telefono_cliente,\n  l.nombre_cliente,\n  l.email_cliente,\n  l.mensaje_original,\n  l.modelo_interes,\n  l.score_calidad,\n  l.nivel_interes,\n  l.asesor_asignado_id,\n  l.estado,\n  l.fecha_creacion,\n  l.fecha_primer_contacto,\n  l.fecha_cotizacion,\n  l.fecha_cierre,\n  l.monto_cotizacion,\n  l.motivo_perdida,\n  \n  -- Información del asesor\n  asesor.nombre as asesor_nombre,\n  asesor.email as asesor_email,\n  \n  -- Información del concesionario\n  c.nombre as concesionario_nombre,\n  \n  -- Cálculos de tiempo\n  EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - l.fecha_creacion))/3600 as horas_desde_creacion,\n  EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - COALESCE(l.fecha_primer_contacto, l.fecha_creacion)))/3600 as horas_desde_contacto,\n  EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - COALESCE(l.fecha_cotizacion, l.fecha_creacion)))/3600 as horas_desde_cotizacion,\n  \n  -- Detectar actividad reciente del asesor\n  CASE \n    WHEN EXISTS (\n      SELECT 1 FROM interacciones_leads il \n      WHERE il.lead_id = l.id \n      AND il.tipo IN ('llamada', 'whatsapp', 'email') \n      AND il.created_at > CURRENT_TIMESTAMP - INTERVAL '4 hours'\n      AND il.usuario_id = l.asesor_asignado_id\n    ) THEN true\n    ELSE false\n  END as actividad_reciente,\n  \n  -- Determinar acción sugerida\n  CASE \n    -- Nuevo → Contactado (si hay evidencia de contacto)\n    WHEN l.estado = 'nuevo' AND l.fecha_primer_contacto IS NULL AND EXISTS (\n      SELECT 1 FROM interacciones_leads il \n      WHERE il.lead_id = l.id \n      AND il.tipo IN ('llamada', 'whatsapp', 'email')\n      AND il.direccion = 'saliente'\n    ) THEN 'marcar_contactado'\n    \n    -- Contactado → Cotizado (si hay cotización registrada)\n    WHEN l.estado = 'contactado' AND l.fecha_cotizacion IS NULL AND l.monto_cotizacion IS NOT NULL AND l.monto_cotizacion > 0 \n    THEN 'marcar_cotizado'\n    \n    -- Cotizado → Vendido (si hay indicadores de venta)\n    WHEN l.estado = 'cotizado' AND EXISTS (\n      SELECT 1 FROM interacciones_leads il \n      WHERE il.lead_id = l.id \n      AND il.notas ILIKE '%vendido%' OR il.notas ILIKE '%compra%' OR il.notas ILIKE '%cerrado%'\n    ) THEN 'marcar_vendido'\n    \n    -- Auto-perdido por tiempo (más de 45 días sin actividad)\n    WHEN l.estado IN ('nuevo', 'contactado', 'cotizado') \n    AND EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - COALESCE(l.fecha_cotizacion, l.fecha_primer_contacto, l.fecha_creacion)))/86400 > 45\n    AND NOT EXISTS (\n      SELECT 1 FROM interacciones_leads il \n      WHERE il.lead_id = l.id \n      AND il.created_at > CURRENT_TIMESTAMP - INTERVAL '7 days'\n    ) THEN 'marcar_perdido_tiempo'\n    \n    ELSE 'sin_accion'\n  END as accion_sugerida\n  \nFROM leads l\nINNER JOIN usuarios asesor ON l.asesor_asignado_id = asesor.id\nINNER JOIN concesionarios c ON l.concesionario_id = c.id\nWHERE \n  l.estado IN ('nuevo', 'contactado', 'cotizado')  -- Solo estados activos\n  AND c.activo = true\n  AND asesor.activo = true\n  -- Evitar actualizaciones muy frecuentes del mismo lead\n  AND NOT EXISTS (\n    SELECT 1 FROM actualizaciones_estados_leads ael \n    WHERE ael.lead_id = l.id \n    AND ael.created_at > CURRENT_TIMESTAMP - INTERVAL '1 hour'\n  )\nHAVING accion_sugerida != 'sin_accion'\nORDER BY \n  l.score_calidad DESC,\n  l.fecha_creacion ASC;",
-        "additionalFields": {}
+        "query": "-- Identificar leads que requieren actualización automática de estado\nWITH leads_para_actualizacion AS (\n  -- Leads nuevos sin asignar por más de 24 horas -> marcar como perdido por abandono\n  SELECT \n    'abandono_sin_asignar' as razon_actualizacion,\n    'perdido' as nuevo_estado,\n    'alta' as prioridad_actualizacion,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.estado as estado_actual,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.fecha_creacion,\n    NULL as asesor_asignado_id,\n    NULL as asesor_nombre,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_creacion))/24/3600 as dias_sin_asignar,\n    'Marcado como perdido: más de 24 horas sin asignar asesor' as observacion_automatica\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  WHERE l.estado = 'nuevo'\n    AND l.asesor_asignado_id IS NULL\n    AND l.fecha_creacion < NOW() - INTERVAL '24 hours'\n    AND l.fecha_creacion > NOW() - INTERVAL '30 days' -- No procesar muy antiguos\n    \n  UNION ALL\n  \n  -- Leads asignados sin contacto por más de 7 días -> marcar como perdido por inactividad\n  SELECT \n    'abandono_sin_contacto' as razon_actualizacion,\n    'perdido' as nuevo_estado,\n    'media' as prioridad_actualizacion,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.estado as estado_actual,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.fecha_asignacion as fecha_referencia,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_asignacion))/24/3600 as dias_sin_contacto,\n    'Marcado como perdido: más de 7 días sin primer contacto' as observacion_automatica\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.estado = 'asignado'\n    AND l.fecha_primer_contacto IS NULL\n    AND l.fecha_asignacion < NOW() - INTERVAL '7 days'\n    AND l.fecha_asignacion > NOW() - INTERVAL '60 days'\n    \n  UNION ALL\n  \n  -- Leads en seguimiento sin actividad por más de 30 días -> marcar como inactivo\n  SELECT \n    'inactividad_prolongada' as razon_actualizacion,\n    'inactivo' as nuevo_estado,\n    'baja' as prioridad_actualizacion,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.estado as estado_actual,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto) as fecha_referencia,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto)))/24/3600 as dias_sin_actividad,\n    'Marcado como inactivo: más de 30 días sin seguimiento' as observacion_automatica\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.estado IN ('contactado', 'seguimiento', 'en_seguimiento')\n    AND COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto) < NOW() - INTERVAL '30 days'\n    AND COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto) > NOW() - INTERVAL '90 days'\n    \n  UNION ALL\n  \n  -- Leads de prospección sin respuesta por más de 14 días -> marcar como no interesado\n  SELECT \n    'prospeccion_sin_respuesta' as razon_actualizacion,\n    'no_interesado' as nuevo_estado,\n    'baja' as prioridad_actualizacion,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.estado as estado_actual,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.fecha_ultimo_seguimiento as fecha_referencia,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_ultimo_seguimiento))/24/3600 as dias_sin_respuesta,\n    'Marcado como no interesado: sin respuesta a prospección por más de 14 días' as observacion_automatica\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.estado = 'prospección_enviada'\n    AND l.fuente_lead = 'excel_masivo'\n    AND l.fecha_ultimo_seguimiento < NOW() - INTERVAL '14 days'\n    AND l.fecha_ultimo_seguimiento > NOW() - INTERVAL '45 days'\n    AND NOT EXISTS (\n      SELECT 1 FROM respuestas_prospeccion rp\n      WHERE rp.lead_id = l.id\n    )\n    \n  UNION ALL\n  \n  -- Leads cotizados sin actualización por más de 21 días -> marcar como oportunidad perdida\n  SELECT \n    'cotizacion_vencida' as razon_actualizacion,\n    'oportunidad_perdida' as nuevo_estado,\n    'media' as prioridad_actualizacion,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.estado as estado_actual,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.fecha_cotizacion as fecha_referencia,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_cotizacion))/24/3600 as dias_desde_cotizacion,\n    'Marcado como oportunidad perdida: cotización vencida sin cierre' as observacion_automatica\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.estado = 'cotizado'\n    AND l.fecha_cotizacion < NOW() - INTERVAL '21 days'\n    AND l.fecha_cotizacion > NOW() - INTERVAL '90 days'\n)\nSELECT \n  lpa.*\nFROM leads_para_actualizacion lpa\nWHERE NOT EXISTS (\n  -- Evitar actualizar leads que ya tuvieron cambios recientes\n  SELECT 1 FROM historial_estados_leads hel\n  WHERE hel.lead_id = lpa.lead_id\n    AND hel.fecha_cambio > NOW() - INTERVAL '24 hours'\n    AND hel.cambio_automatico = true\n)\nORDER BY \n  CASE prioridad_actualizacion\n    WHEN 'alta' THEN 1\n    WHEN 'media' THEN 2\n    WHEN 'baja' THEN 3\n  END,\n  fecha_referencia ASC\nLIMIT 50; -- Procesar máximo 50 actualizaciones por ejecución",
+        "options": {}
       },
-      "id": "query-leads-for-status-update",
-      "name": "Consultar Leads para Actualización",
+      "id": "get-leads-to-update",
+      "name": "Obtener Leads para Actualizar",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [470, 300]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "number": [
-            {
-              "value1": "={{ $json.length }}",
-              "operation": "larger",
-              "value2": 0
-            }
-          ]
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
         }
-      },
-      "id": "check-has-leads-to-update",
-      "name": "¿Hay Leads para Actualizar?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [690, 300]
+      }
     },
     {
       "parameters": {
+        "jsCode": "// Procesar y categorizar actualizaciones de estado\nconst items = $input.all();\nconst actualizacionesPorRazon = {};\n\n// Configuraciones por tipo de actualización\nconst configuraciones = {\n  abandono_sin_asignar: {\n    titulo: '🚫 Leads marcados como perdidos por falta de asignación',\n    notificar_gerencia: true,\n    requiere_atencion: 'alta',\n    motivo_perdida: 'Sin asignación de asesor'\n  },\n  abandono_sin_contacto: {\n    titulo: '⏰ Leads perdidos por falta de contacto inicial',\n    notificar_gerencia: true,\n    requiere_atencion: 'media',\n    motivo_perdida: 'Sin contacto inicial'\n  },\n  inactividad_prolongada: {\n    titulo: '💤 Leads marcados como inactivos',\n    notificar_gerencia: false,\n    requiere_atencion: 'baja',\n    motivo_perdida: 'Inactividad prolongada'\n  },\n  prospeccion_sin_respuesta: {\n    titulo: '📧 Prospección sin respuesta',\n    notificar_gerencia: false,\n    requiere_atencion: 'baja',\n    motivo_perdida: 'Sin respuesta a prospección'\n  },\n  cotizacion_vencida: {\n    titulo: '📋 Cotizaciones vencidas',\n    notificar_gerencia: true,\n    requiere_atencion: 'media',\n    motivo_perdida: 'Cotización vencida'\n  }\n};\n\nfor (const item of items) {\n  const data = item.json;\n  const config = configuraciones[data.razon_actualizacion];\n  \n  if (!config) continue;\n  \n  // Calcular tiempo transcurrido legible\n  let tiempoTranscurrido = '';\n  if (data.dias_sin_asignar) {\n    tiempoTranscurrido = `${Math.floor(data.dias_sin_asignar)} días sin asignar`;\n  } else if (data.dias_sin_contacto) {\n    tiempoTranscurrido = `${Math.floor(data.dias_sin_contacto)} días sin contacto`;\n  } else if (data.dias_sin_actividad) {\n    tiempoTranscurrido = `${Math.floor(data.dias_sin_actividad)} días sin actividad`;\n  } else if (data.dias_sin_respuesta) {\n    tiempoTranscurrido = `${Math.floor(data.dias_sin_respuesta)} días sin respuesta`;\n  } else if (data.dias_desde_cotizacion) {\n    tiempoTranscurrido = `${Math.floor(data.dias_desde_cotizacion)} días desde cotización`;\n  }\n  \n  const actualizacion = {\n    // Datos de la actualización\n    razon_actualizacion: data.razon_actualizacion,\n    estado_anterior: data.estado_actual,\n    nuevo_estado: data.nuevo_estado,\n    prioridad: data.prioridad_actualizacion,\n    \n    // Configuración\n    titulo_categoria: config.titulo,\n    notificar_gerencia: config.notificar_gerencia,\n    requiere_atencion: config.requiere_atencion,\n    motivo_perdida: config.motivo_perdida,\n    \n    // Datos del lead\n    lead_id: data.lead_id,\n    cliente_nombre: data.nombre_cliente,\n    cliente_telefono: data.telefono_cliente,\n    concesionario_id: data.concesionario_id,\n    concesionario_nombre: data.concesionario_nombre,\n    \n    // Datos del asesor\n    asesor_id: data.asesor_asignado_id,\n    asesor_nombre: data.asesor_nombre || 'Sin asignar',\n    \n    // Tiempo y fechas\n    tiempo_transcurrido: tiempoTranscurrido,\n    fecha_referencia: data.fecha_referencia,\n    observacion_automatica: data.observacion_automatica,\n    \n    // Metadatos\n    timestamp: new Date().toISOString(),\n    cambio_automatico: true,\n    link_crm: `https://crm.optimacx.com/leads/${data.lead_id}`\n  };\n  \n  if (!actualizacionesPorRazon[data.razon_actualizacion]) {\n    actualizacionesPorRazon[data.razon_actualizacion] = {\n      razon: data.razon_actualizacion,\n      configuracion: config,\n      total: 0,\n      actualizaciones: []\n    };\n  }\n  \n  actualizacionesPorRazon[data.razon_actualizacion].total++;\n  actualizacionesPorRazon[data.razon_actualizacion].actualizaciones.push(actualizacion);\n}\n\n// Convertir a formato para N8N\nconst resultado = [];\nfor (const [razon, grupo] of Object.entries(actualizacionesPorRazon)) {\n  resultado.push({ json: grupo });\n}\n\nreturn resultado;"
       },
-      "id": "process-status-updates",
-      "name": "Procesar Actualizaciones Estados",
+      "id": "process-updates",
+      "name": "Procesar Actualizaciones",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [910, 200]
+      "position": [680, 300]
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Actualizar estado del lead y campos relacionados\nUPDATE leads \nSET \n  estado = $3,\n  fecha_primer_contacto = CASE WHEN $4::jsonb ? 'fecha_primer_contacto' THEN ($4::jsonb->>'fecha_primer_contacto')::timestamp ELSE fecha_primer_contacto END,\n  fecha_cotizacion = CASE WHEN $4::jsonb ? 'fecha_cotizacion' THEN ($4::jsonb->>'fecha_cotizacion')::timestamp ELSE fecha_cotizacion END,\n  fecha_cierre = CASE WHEN $4::jsonb ? 'fecha_cierre' THEN ($4::jsonb->>'fecha_cierre')::timestamp ELSE fecha_cierre END,\n  motivo_perdida = CASE WHEN $4::jsonb ? 'motivo_perdida' THEN ($4::jsonb->>'motivo_perdida') ELSE motivo_perdida END,\n  updated_at = CURRENT_TIMESTAMP\nWHERE \n  id = $1 \n  AND concesionario_id = $2\n  AND estado = $5  -- Verificar que el estado anterior coincida\nRETURNING \n  id,\n  estado,\n  fecha_primer_contacto,\n  fecha_cotizacion,\n  fecha_cierre,\n  updated_at;",
-        "additionalFields": {
-          "queryParameters": "=[\n  $json.lead_id,\n  $json.concesionario_id,\n  $json.estado_nuevo,\n  JSON.stringify($json.additional_data),\n  $json.estado_anterior\n]"
-        }
+        "jsCode": "// Expandir actualizaciones individuales para procesamiento\nconst grupos = $input.all();\nconst actualizacionesIndividuales = [];\n\nfor (const grupo of grupos) {\n  const data = grupo.json;\n  \n  for (const actualizacion of data.actualizaciones) {\n    actualizacionesIndividuales.push({ json: actualizacion });\n  }\n}\n\nreturn actualizacionesIndividuales;"
+      },
+      "id": "expand-updates",
+      "name": "Expandir Actualizaciones",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "table": "leads",
+        "updateKey": "id",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "estado": "={{ $json.nuevo_estado }}",
+            "motivo_perdida": "={{ $json.nuevo_estado.includes('perdido') || $json.nuevo_estado.includes('oportunidad_perdida') ? $json.motivo_perdida : null }}",
+            "fecha_cierre": "={{ $json.nuevo_estado.includes('perdido') || $json.nuevo_estado.includes('oportunidad_perdida') || $json.nuevo_estado.includes('no_interesado') ? $json.timestamp : null }}",
+            "observaciones": "={{ ($json.observaciones ? $json.observaciones + ' | ' : '') + $json.observacion_automatica }}",
+            "fecha_actualizacion_automatica": "={{ $json.timestamp }}",
+            "actualizado_automaticamente": true
+          }
+        },
+        "where": {
+          "values": [
+            {
+              "column": "id",
+              "value": "={{ $json.lead_id }}"
+            },
+            {
+              "column": "concesionario_id",
+              "value": "={{ $json.concesionario_id }}"
+            }
+          ]
+        },
+        "options": {}
       },
       "id": "update-lead-status",
       "name": "Actualizar Estado Lead",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [1130, 200]
+      "typeVersion": 2.4,
+      "position": [1120, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Registrar la actualización de estado para auditoría\nINSERT INTO actualizaciones_estados_leads (\n  lead_id,\n  concesionario_id,\n  asesor_id,\n  estado_anterior,\n  estado_nuevo,\n  accion_ejecutada,\n  razon_actualizacion,\n  actualizado_por,\n  datos_adicionales,\n  created_at\n) VALUES (\n  $1,\n  $2,\n  $3,\n  $4,\n  $5,\n  $6,\n  $7,\n  'sistema_automatico',\n  $8::jsonb,\n  CURRENT_TIMESTAMP\n) RETURNING *;",
-        "additionalFields": {
-          "queryParameters": "=[\n  $json.lead_id,\n  $json.concesionario_id,\n  $json.asesor_id,\n  $json.estado_anterior,\n  $json.estado_nuevo,\n  $json.accion_ejecutada,\n  $json.update_reason,\n  JSON.stringify({\n    update_timestamp: $json.update_timestamp,\n    update_priority: $json.update_priority,\n    horas_desde_creacion: $json.horas_desde_creacion,\n    actividad_reciente: $json.actividad_reciente\n  })\n]"
-        }
+        "operation": "insert",
+        "table": "historial_estados_leads",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}",
+            "concesionario_id": "={{ $json.concesionario_id }}",
+            "estado_anterior": "={{ $json.estado_anterior }}",
+            "estado_nuevo": "={{ $json.nuevo_estado }}",
+            "razon_cambio": "={{ $json.razon_actualizacion }}",
+            "observaciones": "={{ $json.observacion_automatica }}",
+            "fecha_cambio": "={{ $json.timestamp }}",
+            "cambio_automatico": true,
+            "asesor_responsable_id": "={{ $json.asesor_id }}",
+            "metadata": "={{ JSON.stringify({\n              tiempo_transcurrido: $json.tiempo_transcurrido,\n              prioridad_actualizacion: $json.prioridad,\n              motivo_perdida: $json.motivo_perdida,\n              fecha_referencia: $json.fecha_referencia\n            }) }}"
+          }
+        },
+        "options": {}
       },
-      "id": "log-status-update",
-      "name": "Registrar Actualización",
+      "id": "log-status-change",
+      "name": "Registrar Cambio de Estado",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [1350, 200]
+      "typeVersion": 2.4,
+      "position": [1340, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.requires_notification }}",
-              "operation": "equal",
-              "value2": true
+              "id": "notificar-gerencia",
+              "leftValue": "={{ $json.notificar_gerencia }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "check-requires-notification",
-      "name": "¿Requiere Notificación?",
+      "id": "check-management-notification",
+      "name": "¿Notificar Gerencia?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [1570, 200]
-    },
-    {
-      "parameters": {
-        "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "emailSmtp",
-        "fromEmail": "ventas@optimacx.com",
-        "toEmail": "={{ $json.asesor_email }}",
-        "ccEmail": "={{ $json.update_priority === 'high' ? 'jefe.ventas@optimacx.com' : '' }}",
-        "subject": "📊 {{ $json.estado_nuevo === 'vendido' ? '🎉 VENTA DETECTADA' : $json.estado_nuevo === 'cotizado' ? '💰 COTIZACIÓN DETECTADA' : $json.estado_nuevo === 'perdido' ? '⚠️ LEAD PERDIDO' : 'ACTUALIZACIÓN LEAD' }} - {{ $json.cliente_nombre }}",
-        "html": "=<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        .container { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; }\n        .header { \n            background: {{ $json.estado_nuevo === 'vendido' ? '#28a745' : $json.estado_nuevo === 'cotizado' ? '#007bff' : $json.estado_nuevo === 'perdido' ? '#dc3545' : '#6c757d' }}; \n            color: white; \n            padding: 20px; \n            text-align: center; \n            border-radius: 8px 8px 0 0;\n        }\n        .status-change { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; }\n        .lead-info { background: #e9ecef; padding: 15px; border-radius: 5px; margin: 15px 0; }\n        .success { color: #28a745; font-weight: bold; }\n        .warning { color: #ffc107; font-weight: bold; }\n        .danger { color: #dc3545; font-weight: bold; }\n        .info { color: #007bff; font-weight: bold; }\n        .cta { background: #17a2b8; color: white; padding: 15px; text-align: center; margin: 20px 0; border-radius: 5px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h2>{{ $json.estado_nuevo === 'vendido' ? '🎉 VENTA DETECTADA AUTOMÁTICAMENTE' : $json.estado_nuevo === 'cotizado' ? '💰 COTIZACIÓN DETECTADA' : $json.estado_nuevo === 'perdido' ? '⚠️ LEAD PERDIDO POR INACTIVIDAD' : '📊 ACTUALIZACIÓN AUTOMÁTICA DE ESTADO' }}</h2>\n            <p><strong>{{ $json.concesionario_nombre }}</strong></p>\n        </div>\n        \n        <div style=\"padding: 20px;\">\n            <p>Hola <strong>{{ $json.asesor_nombre }}</strong>,</p>\n            \n            <div class=\"status-change\">\n                <h3>🔄 Cambio de Estado Detectado</h3>\n                <p><strong>Lead:</strong> {{ $json.cliente_nombre }} ({{ $json.telefono_cliente }})</p>\n                <p><strong>Estado anterior:</strong> <span class=\"info\">{{ $json.estado_anterior.toUpperCase() }}</span></p>\n                <p><strong>Estado nuevo:</strong> <span class=\"{{ $json.estado_nuevo === 'vendido' ? 'success' : $json.estado_nuevo === 'cotizado' ? 'info' : $json.estado_nuevo === 'perdido' ? 'danger' : 'info' }}\">{{ $json.estado_nuevo.toUpperCase() }}</span></p>\n                <p><strong>Acción ejecutada:</strong> {{ $json.accion_ejecutada.replace('_', ' ').toUpperCase() }}</p>\n            </div>\n            \n            <div class=\"lead-info\">\n                <h3>📋 Información del Lead</h3>\n                <ul>\n                    <li><strong>Modelo de interés:</strong> {{ $json.modelo_interes || 'No especificado' }}</li>\n                    <li><strong>Score de calidad:</strong> {{ $json.score_calidad }}/100</li>\n                    <li><strong>Horas desde creación:</strong> {{ $json.horas_desde_creacion }}h</li>\n                    <li><strong>Actividad reciente:</strong> {{ $json.actividad_reciente ? 'Sí' : 'No' }}</li>\n                </ul>\n            </div>\n            \n            <div style=\"background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;\">\n                <h4>🤖 Razón de la Actualización Automática:</h4>\n                <p>{{ $json.update_reason }}</p>\n            </div>\n            \n            {{ $json.estado_nuevo === 'vendido' ? `\n            <div class=\"cta\">\n                <strong>🎉 ¡FELICITACIONES POR LA VENTA!</strong><br>\n                El sistema detectó indicadores de venta exitosa. Verifica que toda la información esté correcta.\n            </div>\n            ` : $json.estado_nuevo === 'cotizado' ? `\n            <div class=\"cta\">\n                <strong>💰 COTIZACIÓN DETECTADA</strong><br>\n                Asegúrate de hacer seguimiento activo para convertir esta cotización en venta.\n            </div>\n            ` : $json.estado_nuevo === 'perdido' ? `\n            <div class=\"cta\">\n                <strong>⚠️ LEAD PERDIDO POR INACTIVIDAD</strong><br>\n                Este lead se marcó como perdido automáticamente. Si aún es viable, puedes reactivarlo manualmente.\n            </div>\n            ` : '' }}\n            \n            <div style=\"background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;\">\n                <h4>📋 Próximos Pasos:</h4>\n                <ol>\n                    {{ $json.estado_nuevo === 'vendido' ? '<li><strong>Verificar información de venta</strong> - Confirmar detalles</li><li><strong>Procesar documentación</strong> - Completar trámites</li><li><strong>Coordinar entrega</strong> - Agendar con cliente</li>' : '' }}\n                    {{ $json.estado_nuevo === 'cotizado' ? '<li><strong>Hacer seguimiento inmediato</strong> - Contactar cliente</li><li><strong>Negociar condiciones</strong> - Revisar propuesta</li><li><strong>Cerrar la venta</strong> - Impulsar decisión</li>' : '' }}\n                    {{ $json.estado_nuevo === 'perdido' ? '<li><strong>Revisar causas</strong> - Analizar por qué se perdió</li><li><strong>Aprender para futuros casos</strong> - Mejorar proceso</li><li><strong>Reactivar si es posible</strong> - Último intento de contacto</li>' : '' }}\n                    <li><strong>Actualizar sistema</strong> - Verificar que la información sea correcta</li>\n                </ol>\n            </div>\n            \n            <p>💻 <strong>Ver lead completo:</strong> <a href=\"https:
-      },
-      "id": "send-status-notification",
-      "name": "Enviar Notificación Estado",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 1,
-      "position": [1790, 120]
-    },
-    {
-      "parameters": {
-      },
-      "id": "generate-update-summary",
-      "name": "Generar Resumen Actualizaciones",
-      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2010, 200]
+      "position": [1560, 300]
     },
     {
       "parameters": {
-      },
-      "id": "process-manual-update",
-      "name": "Procesar Actualización Manual",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [470, 450]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Actualizar lead con datos manuales\nUPDATE leads \nSET \n  estado = $2,\n  fecha_primer_contacto = CASE WHEN $3::jsonb ? 'fecha_primer_contacto' THEN ($3::jsonb->>'fecha_primer_contacto')::timestamp ELSE fecha_primer_contacto END,\n  fecha_cotizacion = CASE WHEN $3::jsonb ? 'fecha_cotizacion' THEN ($3::jsonb->>'fecha_cotizacion')::timestamp ELSE fecha_cotizacion END,\n  fecha_cierre = CASE WHEN $3::jsonb ? 'fecha_cierre' THEN ($3::jsonb->>'fecha_cierre')::timestamp ELSE fecha_cierre END,\n  monto_cotizacion = CASE WHEN $3::jsonb ? 'monto_cotizacion' THEN ($3::jsonb->>'monto_cotizacion')::numeric ELSE monto_cotizacion END,\n  monto_venta = CASE WHEN $3::jsonb ? 'monto_venta' THEN ($3::jsonb->>'monto_venta')::numeric ELSE monto_venta END,\n  motivo_perdida = CASE WHEN $3::jsonb ? 'motivo_perdida' THEN ($3::jsonb->>'motivo_perdida') ELSE motivo_perdida END,\n  updated_at = CURRENT_TIMESTAMP,\n  updated_by = $4\nWHERE \n  id = $1\nRETURNING *;",
-        "additionalFields": {
-          "queryParameters": "=[\n  $json.lead_id,\n  $json.new_status,\n  JSON.stringify($json.additional_data),\n  $json.user_id\n]"
+        "sendTo": "gerencia@{{ $json.concesionario_id }}.optimacx.com, jefe.ventas@{{ $json.concesionario_id }}.optimacx.com",
+        "subject": "⚠️ Actualización Automática: {{ $json.titulo_categoria }}",
+        "message": "=**ACTUALIZACIÓN AUTOMÁTICA DE ESTADO DE LEAD**\\n\\n{{ $json.titulo_categoria }}\\n\\n👤 **Detalles del Lead:**\\n• Cliente: {{ $json.cliente_nombre }}\\n• Teléfono: {{ $json.cliente_telefono }}\\n• Concesionario: {{ $json.concesionario_nombre }}\\n• Asesor Asignado: {{ $json.asesor_nombre }}\\n\\n🔄 **Cambio de Estado:**\\n• Estado Anterior: {{ $json.estado_anterior.toUpperCase() }}\\n• Nuevo Estado: {{ $json.nuevo_estado.toUpperCase() }}\\n• Razón: {{ $json.motivo_perdida }}\\n\\n⏰ **Tiempo Transcurrido:**\\n{{ $json.tiempo_transcurrido }}\\n\\n📋 **Observaciones:**\\n{{ $json.observacion_automatica }}\\n\\n{{ $json.requiere_atencion === 'alta' ? '🚨 **REQUIERE ATENCIÓN INMEDIATA:**\\nEste tipo de actualización indica problemas en el proceso de gestión de leads que deben ser revisados.' : '' }}\\n\\n{{ $json.requiere_atencion === 'media' ? '⚠️ **REVISIÓN RECOMENDADA:**\\nSe recomienda revisar los procesos para evitar pérdidas futuras.' : '' }}\\n\\n🔗 **Ver Lead en CRM:** {{ $json.link_crm }}\\n\\n---\\nSistema Automático OptimaCX\\nFecha: {{ new Date($json.timestamp).toLocaleString() }}",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "priority": "={{ $json.requiere_atencion === 'alta' ? 'high' : 'normal' }}"
         }
       },
-      "id": "execute-manual-update",
-      "name": "Ejecutar Actualización Manual",
-      "type": "n8n-nodes-base.postgres",
+      "id": "send-management-notification",
+      "name": "Notificar Gerencia",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1780, 200],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-optimacx",
+          "name": "SMTP OptimaCX"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "tiene-asesor",
+              "leftValue": "={{ $json.asesor_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "id": "no-es-inactivo",
+              "leftValue": "={{ $json.nuevo_estado }}",
+              "rightValue": "inactivo",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-advisor-notification",
+      "name": "¿Notificar Asesor?",
+      "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [690, 450]
+      "position": [1780, 400]
     },
     {
       "parameters": {
-        "respondWithOptions": "responseData",
-        "responseData": "={\n  \"success\": true,\n  \"message\": \"Estado de lead actualizado exitosamente\",\n  \"lead_id\": {{ $('Procesar Actualización Manual').first().json.lead_id }},\n  \"previous_status\": \"{{ $('Ejecutar Actualización Manual').first().json.estado }}\",\n  \"new_status\": \"{{ $('Procesar Actualización Manual').first().json.new_status }}\",\n  \"updated_by\": \"{{ $('Procesar Actualización Manual').first().json.user_name }}\",\n  \"update_reason\": \"{{ $('Procesar Actualización Manual').first().json.update_reason }}\",\n  \"timestamp\": \"{{ $('Procesar Actualización Manual').first().json.update_timestamp }}\",\n  \"is_manual_update\": true\n}"
+        "sendTo": "{{ $json.asesor_nombre.toLowerCase().replace(' ', '.') }}@{{ $json.concesionario_id }}.optimacx.com",
+        "subject": "📋 Estado de Lead Actualizado: {{ $json.cliente_nombre }}",
+        "message": "=**ACTUALIZACIÓN AUTOMÁTICA DE LEAD**\\n\\n👤 **Su Lead ha sido actualizado:**\\n• Cliente: {{ $json.cliente_nombre }}\\n• Teléfono: {{ $json.cliente_telefono }}\\n\\n🔄 **Cambio Realizado:**\\n• Estado Anterior: {{ $json.estado_anterior.toUpperCase() }}\\n• Nuevo Estado: {{ $json.nuevo_estado.toUpperCase() }}\\n• Tiempo sin actividad: {{ $json.tiempo_transcurrido }}\\n\\n📝 **Razón del Cambio:**\\n{{ $json.observacion_automatica }}\\n\\n{{ $json.nuevo_estado.includes('perdido') ? '❌ **Lead Perdido:** Este lead ha sido marcado como perdido debido a la falta de seguimiento. Para evitar pérdidas futuras, asegúrese de contactar a los leads dentro de los tiempos establecidos.' : '' }}\\n\\n{{ $json.nuevo_estado.includes('oportunidad_perdida') ? '⏰ **Oportunidad Perdida:** La cotización de este lead ha vencido. Considere contactar al cliente para una nueva oferta.' : '' }}\\n\\n🔗 **Ver en CRM:** {{ $json.link_crm }}\\n\\nSistema OptimaCX",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
       },
-      "id": "respond-manual-update",
-      "name": "Respuesta Actualización Manual",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [910, 450]
+      "id": "send-advisor-notification",
+      "name": "Notificar Asesor",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [2000, 320],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-optimacx",
+          "name": "SMTP OptimaCX"
+        }
+      }
     },
     {
       "parameters": {
+        "jsCode": "// Generar resumen de actualizaciones realizadas\nconst actualizaciones = $input.all();\nconst resumen = {\n  total_actualizaciones: actualizaciones.length,\n  por_razon: {},\n  por_nuevo_estado: {},\n  por_concesionario: {},\n  notificaciones_gerencia: 0,\n  notificaciones_asesor: 0,\n  timestamp: new Date().toISOString()\n};\n\nfor (const act of actualizaciones) {\n  const data = act.json;\n  \n  // Contar por razón\n  resumen.por_razon[data.razon_actualizacion] = (resumen.por_razon[data.razon_actualizacion] || 0) + 1;\n  \n  // Contar por nuevo estado\n  resumen.por_nuevo_estado[data.nuevo_estado] = (resumen.por_nuevo_estado[data.nuevo_estado] || 0) + 1;\n  \n  // Contar por concesionario\n  const concKey = data.concesionario_nombre;\n  if (!resumen.por_concesionario[concKey]) {\n    resumen.por_concesionario[concKey] = 0;\n  }\n  resumen.por_concesionario[concKey]++;\n  \n  // Contar notificaciones\n  if (data.notificar_gerencia) {\n    resumen.notificaciones_gerencia++;\n  }\n  if (data.asesor_id && data.nuevo_estado !== 'inactivo') {\n    resumen.notificaciones_asesor++;\n  }\n}\n\nreturn [{ json: resumen }];"
       },
-      "id": "no-updates-response",
-      "name": "Sin Actualizaciones Pendientes",
+      "id": "generate-summary",
+      "name": "Generar Resumen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [910, 350]
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "actualizaciones_automaticas_log",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "tipo_actualizacion": "estados_leads",
+            "total_procesados": "={{ $json.total_actualizaciones }}",
+            "por_razon": "={{ JSON.stringify($json.por_razon) }}",
+            "por_estado": "={{ JSON.stringify($json.por_nuevo_estado) }}",
+            "notificaciones_enviadas": "={{ $json.notificaciones_gerencia + $json.notificaciones_asesor }}",
+            "fecha_ejecucion": "={{ $json.timestamp }}",
+            "metadata": "={{ JSON.stringify({\n              notificaciones_gerencia: $json.notificaciones_gerencia,\n              notificaciones_asesor: $json.notificaciones_asesor,\n              por_concesionario: $json.por_concesionario\n            }) }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-execution",
+      "name": "Registrar Ejecución",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [2440, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
     }
   ],
   "connections": {
-    "Ejecutar cada 15 minutos": {
-      "main": [["Consultar Leads para Actualización", "type": "main", "index": 0]]
-    },
-    "Webhook Actualización Manual": {
-      "main": [["Procesar Actualización Manual", "type": "main", "index": 0]]
-    },
-    "Consultar Leads para Actualización": {
-      "main": [["¿Hay Leads para Actualizar?", "type": "main", "index": 0]]
-    },
-    "¿Hay Leads para Actualizar?": {
+    "Trigger Cada 6 Horas": {
       "main": [
-        [{"node": "Procesar Actualizaciones Estados", "type": "main", "index": 0}],
-        [{"node": "Sin Actualizaciones Pendientes", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Obtener Leads para Actualizar",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Procesar Actualizaciones Estados": {
-      "main": [["Actualizar Estado Lead", "type": "main", "index": 0]]
+    "Obtener Leads para Actualizar": {
+      "main": [
+        [
+          {
+            "node": "Procesar Actualizaciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Actualizaciones": {
+      "main": [
+        [
+          {
+            "node": "Expandir Actualizaciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expandir Actualizaciones": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Estado Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Actualizar Estado Lead": {
-      "main": [["Registrar Actualización", "type": "main", "index": 0]]
-    },
-    "Registrar Actualización": {
-      "main": [["¿Requiere Notificación?", "type": "main", "index": 0]]
-    },
-    "¿Requiere Notificación?": {
       "main": [
-        [{"node": "Enviar Notificación Estado", "type": "main", "index": 0}],
-        [{"node": "Generar Resumen Actualizaciones", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Registrar Cambio de Estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Enviar Notificación Estado": {
-      "main": [["Generar Resumen Actualizaciones", "type": "main", "index": 0]]
+    "Registrar Cambio de Estado": {
+      "main": [
+        [
+          {
+            "node": "¿Notificar Gerencia?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "¿Notificar Asesor?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Procesar Actualización Manual": {
-      "main": [["Ejecutar Actualización Manual", "type": "main", "index": 0]]
+    "¿Notificar Gerencia?": {
+      "main": [
+        [
+          {
+            "node": "Notificar Gerencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "Ejecutar Actualización Manual": {
-      "main": [["Respuesta Actualización Manual", "type": "main", "index": 0]]
+    "¿Notificar Asesor?": {
+      "main": [
+        [
+          {
+            "node": "Notificar Asesor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar Gerencia": {
+      "main": [
+        [
+          {
+            "node": "Generar Resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar Asesor": {
+      "main": [
+        [
+          {
+            "node": "Generar Resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar Resumen": {
+      "main": [
+        [
+          {
+            "node": "Registrar Ejecución",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
+  "pinData": {},
   "settings": {
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner",
-    "errorWorkflow": "manejador-errores"
+    "executionOrder": "v1"
   },
-  "staticData": {},
-  "variables": {
-    "UPDATE_VERSION": "1.0.0",
-    "MANUAL_WEBHOOK_PATH": "/webhook/update-lead-status",
-    "AUTO_UPDATE_INTERVAL_MINUTES": 15,
-    "AUTO_LOST_AFTER_DAYS": 45,
-    "VALID_STATES": ["nuevo", "contactado", "cotizado", "vendido", "perdido"],
-    "HIGH_PRIORITY_STATES": ["cotizado", "vendido"],
-    "NOTIFICATION_STATES": ["cotizado", "vendido", "perdido"]
-  }
+  "staticData": null,
+  "tags": ["leads", "estados", "automatico"],
+  "triggerCount": 0,
+  "updatedAt": "2024-08-09T05:47:00.000Z",
+  "versionId": "leads-status-updater-v2.1",
+  "name": "Actualizador Automático de Estados de Leads",
+  "active": true,
+  "id": "actualizador-estados-leads",
+  "hash": "leads-status-updater"
 }

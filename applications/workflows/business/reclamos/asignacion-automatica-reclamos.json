@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "Auto Assignment Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "complaint-auto-assignment"
     },
@@ -67,7 +67,7 @@
       "id": "assign-and-prepare-data",
       "name": "Assign and Prepare Data",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -135,7 +135,7 @@
       "id": "check-black-alert",
       "name": "Check Black Alert",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1120, 300]
     },
     {
@@ -148,7 +148,7 @@
       "id": "trigger-black-alert",
       "name": "Trigger Black Alert",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 200]
     },
     {
@@ -161,7 +161,7 @@
       "id": "trigger-notifications",
       "name": "Trigger Notifications",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 400]
     },
     {
@@ -172,7 +172,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1560, 300]
     }
   ],

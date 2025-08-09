@@ -1,7 +1,12 @@
 {
   "name": "Knowledge - Document Ingestion",
   "description": "Workflow enfocado en validar documentos y crear registro inicial. Principio SRP: Una sola responsabilidad - validación e ingesta.",
-  "tags": ["rag", "knowledge", "ingestion", "srp"],
+  "tags": [
+    "rag",
+    "knowledge",
+    "ingestion",
+    "srp"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -14,17 +19,22 @@
       "name": "Knowledge Upload Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "webhookId": "knowledge-ingestion"
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "validate-document-input",
       "name": "Validar Entrada de Documento",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [460, 300]
+      "typeVersion": 2.1,
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -37,17 +47,22 @@
       "id": "create-document-record",
       "name": "Crear Registro Documento",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [680, 300]
+      "typeVersion": 2.1,
+      "position": [
+        680,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "prepare-for-chunking",
       "name": "Preparar para Chunking",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [900, 300]
+      "typeVersion": 2.1,
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -59,8 +74,11 @@
       "id": "trigger-chunking-workflow",
       "name": "Iniciar Chunking",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [1120, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
@@ -70,8 +88,11 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [1340, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1340,
+        300
+      ]
     },
     {
       "parameters": {
@@ -84,8 +105,11 @@
       "id": "error-response",
       "name": "Respuesta de Error",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [460, 500]
+      "typeVersion": 2.1,
+      "position": [
+        460,
+        500
+      ]
     }
   ],
   "connections": {

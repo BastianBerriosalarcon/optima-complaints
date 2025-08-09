@@ -1,7 +1,13 @@
 {
   "name": "Sales Survey - QR Processor",
   "description": "Procesa encuestas de VENTAS recibidas vía código QR, valida datos, registra en tabla separada y notifica bajas calificaciones al jefe de ventas.",
-  "tags": ["sales", "survey", "qr", "ventas", "notification"],
+  "tags": [
+    "sales",
+    "survey",
+    "qr",
+    "ventas",
+    "notification"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -14,16 +20,21 @@
       "name": "Webhook QR Sales Survey",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [200, 300]
+      "position": [
+        200,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "validate-and-process-sales-qr-data",
       "name": "Validar y Procesar Datos QR Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [400, 300]
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        300
+      ]
     },
     {
       "parameters": {
@@ -35,8 +46,11 @@
       "id": "trigger-sales-response-handler",
       "name": "Disparar Manejador Respuestas Ventas",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [600, 300]
+      "typeVersion": 2.1,
+      "position": [
+        600,
+        300
+      ]
     },
     {
       "parameters": {
@@ -46,8 +60,11 @@
       "id": "success-response-sales",
       "name": "Respuesta Exitosa Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [800, 300]
+      "typeVersion": 2.1,
+      "position": [
+        800,
+        300
+      ]
     },
     {
       "parameters": {
@@ -60,8 +77,11 @@
       "id": "error-response-sales",
       "name": "Respuesta de Error Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [600, 480]
+      "typeVersion": 2.1,
+      "position": [
+        600,
+        480
+      ]
     }
   ],
   "connections": {

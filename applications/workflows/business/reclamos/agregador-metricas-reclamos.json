@@ -28,7 +28,7 @@
       "id": "query-complaint-metrics",
       "name": "Consultar Métricas de Reclamos",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [470, 300]
     },
     {
@@ -38,7 +38,7 @@
       "id": "process-metrics",
       "name": "Procesar Métricas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [690, 300]
     },
     {
@@ -55,7 +55,7 @@
       "id": "upsert-metrics",
       "name": "Guardar Métricas en BD",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [910, 300]
     }
   ],

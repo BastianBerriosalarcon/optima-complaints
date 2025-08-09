@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "WhatsApp Sender Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "survey-whatsapp-sender"
     },
@@ -28,12 +28,12 @@
     },
     {
       "parameters": {
-        "jsCode": "/*** SURVEY WHATSAPP SENDER - SRP: Solo envío masivo de encuestas ***/\nconst campaignData = $('WhatsApp Sender Trigger').first().json;\nconst currentBatch = $input.first().json;\nconst tenantConfig = campaignData.tenant_config;\n\n
+        "jsCode": "// SURVEY WHATSAPP SENDER - SRP: Solo envío masivo de encuestas\nconst campaignData = $('WhatsApp Sender Trigger').first().json;\nconst currentBatch = $input.first().json;\nconst tenantConfig = campaignData.tenant_config;\n\n// Preparar mensajes para el lote actual\nconst messages = currentBatch.map(cliente => ({\n  to: cliente.telefono,\n  mensaje: `Hola ${cliente.nombre_completo}, tu opinión es importante para nosotros. Por favor completa nuestra encuesta: ${campaignData.survey_url}?cliente=${cliente.rut}`,\n  cliente_id: cliente.id,\n  rut_cliente: cliente.rut\n}));\n\nreturn { messages, tenant_config: tenantConfig };"
       },
       "id": "prepare-messages",
       "name": "Prepare Messages",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -197,7 +197,7 @@
       "id": "rate-limit-delay",
       "name": "Rate Limit Delay",
       "type": "n8n-nodes-base.wait",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1560, 300]
     },
     {
@@ -207,7 +207,7 @@
       "id": "batch-statistics",
       "name": "Batch Statistics",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1780, 300]
     },
     {
@@ -217,7 +217,7 @@
       "id": "schedule-monitoring",
       "name": "Schedule Monitoring",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [2000, 300]
     },
     {
@@ -233,7 +233,7 @@
       "id": "trigger-monitoring",
       "name": "Trigger Monitoring",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [2220, 300]
     },
     {
@@ -244,7 +244,7 @@
       "id": "success-response",
       "name": "Success Response", 
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [2440, 300]
     }
   ],

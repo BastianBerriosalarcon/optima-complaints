@@ -11,7 +11,7 @@
       "id": "webhook-excel-upload",
       "name": "Excel Upload Webhook",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "survey-excel-upload"
     },
@@ -47,7 +47,7 @@
       "id": "validate-upload",
       "name": "Validate Upload",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [460, 300]
     },
     {
@@ -57,7 +57,7 @@
       "id": "process-excel-data",
       "name": "Process Excel Data",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -70,7 +70,7 @@
       "id": "trigger-duplicate-filter",
       "name": "Trigger Duplicate Filter",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [900, 300]
     },
     {
@@ -81,7 +81,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1120, 300]
     },
     {
@@ -95,7 +95,7 @@
       "id": "error-response",
       "name": "Error Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [460, 500]
     }
   ],

@@ -13,7 +13,7 @@
       "id": "webhook-trigger-ventas",
       "name": "Trigger Enviador WhatsApp Ventas",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "sales-survey-whatsapp-sender"
     },
@@ -34,7 +34,7 @@
       "id": "prepare-sales-whatsapp-message",
       "name": "Preparar Mensaje WhatsApp Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -145,7 +145,7 @@
       "id": "generate-sales-delivery-result",
       "name": "Generar Resultado Envío Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 300]
     },
     {
@@ -174,7 +174,7 @@
       "id": "check-delivery-success",
       "name": "¿Envío Exitoso?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1560, 300]
     },
     {
@@ -185,7 +185,7 @@
       "id": "success-response-ventas",
       "name": "Respuesta Éxito Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1780, 200]
     },
     {
@@ -196,7 +196,7 @@
       "id": "error-response-ventas",
       "name": "Respuesta Error Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1780, 400]
     }
   ],

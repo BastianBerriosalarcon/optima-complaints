@@ -1,7 +1,11 @@
 {
   "name": "Lead - Scoring de Calidad",
   "description": "Workflow enfocado en calcular el score de calidad de un lead basado en el análisis de IA.",
-  "tags": ["scoring", "lead", "srp"],
+  "tags": [
+    "scoring",
+    "lead",
+    "srp"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -10,17 +14,22 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2,
-      "position": [200, 300]
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "calculate-lead-score",
       "name": "Calculate Lead Score",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [420, 300]
+      "typeVersion": 2.1,
+      "position": [
+        420,
+        300
+      ]
     }
   ],
   "connections": {

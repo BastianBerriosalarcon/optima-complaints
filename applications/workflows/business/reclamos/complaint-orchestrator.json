@@ -1,7 +1,11 @@
 {
   "name": "Complaint - Orchestrator",
   "description": "Orquesta el procesamiento completo de reclamos: recepción, análisis RAG, asignación y notificaciones.",
-  "tags": ["complaint", "orchestrator", "main"],
+  "tags": [
+    "complaint",
+    "orchestrator",
+    "main"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -14,7 +18,10 @@
       "name": "Complaint Input Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [200, 300]
+      "position": [
+        200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -26,8 +33,11 @@
       "id": "trigger-rag-processor",
       "name": "Disparar Procesador RAG",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [400, 300]
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        300
+      ]
     },
     {
       "parameters": {
@@ -37,8 +47,11 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [600, 300]
+      "typeVersion": 2.1,
+      "position": [
+        600,
+        300
+      ]
     },
     {
       "parameters": {
@@ -51,8 +64,11 @@
       "id": "error-response",
       "name": "Respuesta de Error",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [400, 480]
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        480
+      ]
     }
   ],
   "connections": {
@@ -83,5 +99,16 @@
     "saveExecutionProgress": true,
     "saveManualExecutions": true,
     "callerPolicy": "workflowsFromSameOwner"
+  },
+  "version": "1.0.0",
+  "category": "reclamos",
+  "metadata": {
+    "lastUpdated": "2025-08-09T04:50:00Z",
+    "apiVersion": "n8n/1.0",
+    "author": "OptimaCX Team",
+    "support": {
+      "email": "support@optimacx.com",
+      "docs": "https://docs.optimacx.com/workflows/reclamos"
+    }
   }
 }

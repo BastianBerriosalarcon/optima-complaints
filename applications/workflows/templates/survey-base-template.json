@@ -1,0 +1,139 @@
+{
+  "name": "Survey Template - Base",
+  "description": "Template base para workflows de encuestas. Principio DRY: No repetir código.",
+  "version": "1.0.0",
+  "category": "template",
+  "tags": ["template", "survey", "base", "reusable"],
+  "metadata": {
+    "lastUpdated": "2025-08-09T00:00:00Z",
+    "apiVersion": "n8n/1.0",
+    "author": "OptimaCX Team",
+    "templateType": "survey-base",
+    "support": {
+      "email": "support@optimacx.com",
+      "docs": "https://docs.optimacx.com/workflows/templates"
+    },
+    "configurable": {
+      "surveyType": {
+        "type": "enum",
+        "values": ["ventas", "postventa"],
+        "description": "Tipo de encuesta a procesar"
+      },
+      "notificationChannel": {
+        "type": "enum", 
+        "values": ["whatsapp", "email", "both"],
+        "description": "Canal de notificación"
+      },
+      "assignmentType": {
+        "type": "enum",
+        "values": ["contact-center", "manager", "auto"],
+        "description": "Tipo de asignación para seguimiento"
+      }
+    },
+    "expectedInput": {
+      "tenant_id": "string",
+      "survey_type": "string (ventas|postventa)",
+      "customer_data": "object",
+      "survey_responses": "array"
+    },
+    "expectedOutput": {
+      "status": "string",
+      "survey_id": "string", 
+      "assigned_to": "string",
+      "notification_sent": "boolean"
+    }
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/survey/template",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-survey-input",
+      "name": "Survey Input Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validación y configuración base para encuestas\nconst input = $input.first().json;\nconst config = {\n  surveyType: input.survey_type || 'postventa',\n  tenantId: input.tenant_id,\n  timestamp: new Date().toISOString()\n};\n\n// Validaciones base\nif (!config.tenantId) {\n  throw new Error('MISSING_TENANT_ID: tenant_id es requerido');\n}\n\nif (!['ventas', 'postventa'].includes(config.surveyType)) {\n  throw new Error('INVALID_SURVEY_TYPE: survey_type debe ser ventas o postventa');\n}\n\n// Configurar rutas específicas por tipo\nconst routes = {\n  ventas: {\n    handler: 'manejador-respuestas-ventas',\n    notifier: 'notificador-notas-bajas-ventas',\n    assignor: 'asignacion-contact-center-ventas'\n  },\n  postventa: {\n    handler: 'manejador-respuestas',\n    notifier: 'notificador-notas-bajas', \n    assignor: 'asignacion-contact-center'\n  }\n};\n\nreturn [{\n  json: {\n    ...input,\n    config,\n    routes: routes[config.surveyType]\n  }\n}];"
+      },
+      "id": "configure-survey-routing",
+      "name": "Configure Survey Routing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution", 
+        "workflowId": "={{ $json.routes.handler }}",
+        "data": "={{ JSON.stringify($json) }}"
+      },
+      "id": "trigger-handler",
+      "name": "Trigger Survey Handler",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 2.1,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Encuesta procesada exitosamente\",\n  \"survey_type\": \"{{ $json.config.surveyType }}\",\n  \"timestamp\": \"{{ $json.config.timestamp }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 2.1,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Survey Input Webhook": {
+      "main": [
+        [
+          {
+            "node": "Configure Survey Routing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configure Survey Routing": {
+      "main": [
+        [
+          {
+            "node": "Trigger Survey Handler", 
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Survey Handler": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main", 
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCreatedBy": "OptimaCX Team",
+    "instanceId": "template"
+  }
+}

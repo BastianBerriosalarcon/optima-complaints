@@ -28,17 +28,17 @@
       "id": "query-survey-metrics",
       "name": "Consultar Métricas de Encuestas",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [470, 300]
     },
     {
       "parameters": {
-        "jsCode": "
+  "jsCode": "// Procesa métricas agregadas desde la consulta y normaliza campos\nconst item = $input.first().json;\n\n// Estructura de salida esperada por el nodo de upsert\nconst salida = {\n  concesionario_id: item.concesionario_id,\n  periodo: '24h',\n  fecha_calculo: new Date().toISOString(),\n  total_qr: item.origen === 'QR' ? item.total_encuestas : 0,\n  total_whatsapp: item.origen === 'WhatsApp' ? item.total_encuestas : 0,\n  total_llamada: item.origen === 'Llamada' ? item.total_encuestas : 0,\n  total_general: item.total_encuestas,\n  rendimiento_ejecutivos: item.rendimiento_ejecutivos || [],\n  nps_general: item.nps_promedio ?? null,\n  satisfaccion_promedio: item.satisfaccion_promedio ?? null\n};\n\nreturn [{ json: salida }];"
       },
       "id": "process-metrics",
       "name": "Procesar Métricas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [690, 300]
     },
     {
@@ -55,7 +55,7 @@
       "id": "upsert-metrics",
       "name": "Guardar Métricas en BD",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [910, 300]
     }
   ],

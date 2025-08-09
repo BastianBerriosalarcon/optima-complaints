@@ -11,7 +11,7 @@
       "id": "webhook-trigger",
       "name": "Black Alert Trigger",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300],
       "webhookId": "complaint-black-alert"
     },
@@ -67,7 +67,7 @@
       "id": "prepare-mass-alert",
       "name": "Prepare Mass Alert",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -139,7 +139,7 @@
       "id": "generate-alert-report",
       "name": "Generate Alert Report",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 300]
     },
     {
@@ -150,7 +150,7 @@
       "id": "success-response",
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1560, 300]
     }
   ],

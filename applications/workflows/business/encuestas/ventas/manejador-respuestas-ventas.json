@@ -1,7 +1,13 @@
 {
   "name": "Sales Survey - Response Handler",
   "description": "Maneja respuestas de encuestas de VENTAS, registra en tabla sales_surveys y dispara notificaciones al jefe de ventas.",
-  "tags": ["sales", "survey", "response", "handler", "ventas"],
+  "tags": [
+    "sales",
+    "survey",
+    "response",
+    "handler",
+    "ventas"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -10,17 +16,22 @@
       "id": "sales-workflow-trigger",
       "name": "Trigger del Workflow Ventas",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2,
-      "position": [240, 300]
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "validate-sales-survey-response",
       "name": "Validar Respuesta Encuesta Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [460, 300]
+      "typeVersion": 2.1,
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -33,8 +44,11 @@
       "id": "insert-sales-survey-response",
       "name": "Registrar Encuesta Ventas",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [680, 300]
+      "typeVersion": 2.1,
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -51,17 +65,22 @@
       "id": "check-notification-required-sales",
       "name": "¿Requiere Notificación Ventas?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [900, 300]
+      "typeVersion": 2.1,
+      "position": [
+        900,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "prepare-sales-notification-data",
       "name": "Preparar Datos Notificación Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1120, 200]
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        200
+      ]
     },
     {
       "parameters": {
@@ -73,17 +92,22 @@
       "id": "trigger-sales-low-score-notification",
       "name": "Disparar Notificación Baja Calificación Ventas",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [1340, 200]
+      "typeVersion": 2.1,
+      "position": [
+        1340,
+        200
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "generate-sales-success-response",
       "name": "Generar Respuesta Éxito Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1340, 400]
+      "typeVersion": 2.1,
+      "position": [
+        1340,
+        400
+      ]
     }
   ],
   "connections": {

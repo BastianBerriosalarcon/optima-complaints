@@ -10,7 +10,7 @@
       "id": "sales-survey-bulk-trigger",
       "name": "Trigger de Encuestas Masivas Ventas",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300]
     },
     {
@@ -19,7 +19,7 @@
       "id": "process-sales-bulk-data",
       "name": "Procesar Lote Encuestas Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [460, 300]
     },
     {
@@ -33,7 +33,7 @@
       "id": "get-whatsapp-config-sales",
       "name": "Obtener Config WhatsApp Ventas",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -42,7 +42,7 @@
       "id": "generate-sales-whatsapp-message",
       "name": "Generar Mensaje WhatsApp Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [900, 300]
     },
     {
@@ -103,7 +103,7 @@
       "id": "update-sales-survey-status",
       "name": "Actualizar Estado Encuesta Ventas",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 300]
     },
     {
@@ -112,7 +112,7 @@
       "id": "generate-sales-bulk-report",
       "name": "Generar Reporte Envío Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1560, 300]
     }
   ],

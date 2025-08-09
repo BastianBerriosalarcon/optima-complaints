@@ -3,7 +3,7 @@
   "description": "Workflow que proporciona un portal completo de administración para Super-Admin, incluyendo onboarding automatizado de concesionarios, monitoreo en tiempo real y gestión centralizada de la plataforma multitenant.",
   "tags": [
     "super-admin",
-    "gestion-tenants", 
+    "gestion-tenants",
     "onboarding",
     "multitenant",
     "escalabilidad",
@@ -21,8 +21,11 @@
       "id": "portal-webhook-trigger",
       "name": "Webhook Portal Admin",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [250, 300]
+      "typeVersion": 2.1,
+      "position": [
+        250,
+        300
+      ]
     },
     {
       "parameters": {
@@ -31,8 +34,11 @@
       "id": "process-admin-request",
       "name": "Procesar Solicitud Admin",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [470, 300]
+      "typeVersion": 2.1,
+      "position": [
+        470,
+        300
+      ]
     },
     {
       "parameters": {
@@ -49,8 +55,11 @@
       "id": "check-create-tenant",
       "name": "¿Crear Tenant?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [690, 200]
+      "typeVersion": 2.1,
+      "position": [
+        690,
+        200
+      ]
     },
     {
       "parameters": {
@@ -63,8 +72,11 @@
       "id": "check-tenant-exists",
       "name": "Verificar Tenant Existente",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [910, 120]
+      "typeVersion": 2.1,
+      "position": [
+        910,
+        120
+      ]
     },
     {
       "parameters": {
@@ -81,8 +93,11 @@
       "id": "check-tenant-unique",
       "name": "¿Tenant Único?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [1130, 120]
+      "typeVersion": 2.1,
+      "position": [
+        1130,
+        120
+      ]
     },
     {
       "parameters": {
@@ -95,8 +110,11 @@
       "id": "create-new-tenant",
       "name": "Crear Nuevo Tenant",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [1350, 60]
+      "typeVersion": 2.1,
+      "position": [
+        1350,
+        60
+      ]
     },
     {
       "parameters": {
@@ -108,8 +126,11 @@
       "id": "trigger-workflow-provisioning",
       "name": "Activar Provisión Workflows",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
-      "position": [1570, 60]
+      "typeVersion": 2.1,
+      "position": [
+        1570,
+        60
+      ]
     },
     {
       "parameters": {
@@ -126,8 +147,11 @@
       "id": "check-platform-metrics",
       "name": "¿Métricas Plataforma?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [690, 400]
+      "typeVersion": 2.1,
+      "position": [
+        690,
+        400
+      ]
     },
     {
       "parameters": {
@@ -138,8 +162,11 @@
       "id": "get-platform-metrics",
       "name": "Obtener Métricas Plataforma",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [910, 340]
+      "typeVersion": 2.1,
+      "position": [
+        910,
+        340
+      ]
     },
     {
       "parameters": {
@@ -156,8 +183,11 @@
       "id": "check-tenant-dashboard",
       "name": "¿Dashboard Tenant?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [690, 600]
+      "typeVersion": 2.1,
+      "position": [
+        690,
+        600
+      ]
     },
     {
       "parameters": {
@@ -170,8 +200,11 @@
       "id": "get-tenant-dashboard",
       "name": "Obtener Dashboard Tenant",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [910, 540]
+      "typeVersion": 2.1,
+      "position": [
+        910,
+        540
+      ]
     },
     {
       "parameters": {
@@ -180,8 +213,11 @@
       "id": "generate-admin-response",
       "name": "Generar Respuesta Admin",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1790, 400]
+      "typeVersion": 2.1,
+      "position": [
+        1790,
+        400
+      ]
     },
     {
       "parameters": {
@@ -194,8 +230,11 @@
       "id": "log-admin-action",
       "name": "Registrar Acción Admin",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [2010, 400]
+      "typeVersion": 2.1,
+      "position": [
+        2010,
+        400
+      ]
     },
     {
       "parameters": {
@@ -205,8 +244,11 @@
       "id": "respond-admin-portal",
       "name": "Respuesta Portal Admin",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [2230, 400]
+      "typeVersion": 2.1,
+      "position": [
+        2230,
+        400
+      ]
     },
     {
       "parameters": {
@@ -216,8 +258,11 @@
       "id": "respond-tenant-exists",
       "name": "Respuesta Tenant Existente",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [1350, 220]
+      "typeVersion": 2.1,
+      "position": [
+        1350,
+        220
+      ]
     }
   ],
   "connections": {
@@ -395,7 +440,15 @@
   "variables": {
     "PORTAL_VERSION": "1.0.0",
     "WEBHOOK_PATH": "/webhook/super-admin-portal",
-    "SUPPORTED_ACTIONS": ["create_tenant", "get_platform_metrics", "get_tenant_dashboard", "update_tenant_config", "suspend_tenant", "activate_tenant", "bulk_tenant_operation"],
+    "SUPPORTED_ACTIONS": [
+      "create_tenant",
+      "get_platform_metrics",
+      "get_tenant_dashboard",
+      "update_tenant_config",
+      "suspend_tenant",
+      "activate_tenant",
+      "bulk_tenant_operation"
+    ],
     "ADMIN_SECURITY": {
       "REQUIRE_TOKEN": true,
       "LOG_ALL_ACTIONS": true,
@@ -406,7 +459,22 @@
       "WARNING": 60,
       "GOOD": 80
     },
-    "DEFAULT_FEATURES": ["leads", "surveys", "complaints"],
+    "DEFAULT_FEATURES": [
+      "leads",
+      "surveys",
+      "complaints"
+    ],
     "DEFAULT_USER_LIMIT": 5
+  },
+  "version": "1.0.0",
+  "category": "administracion",
+  "metadata": {
+    "lastUpdated": "2025-08-09T04:50:00Z",
+    "apiVersion": "n8n/1.0",
+    "author": "OptimaCX Team",
+    "support": {
+      "email": "support@optimacx.com",
+      "docs": "https://docs.optimacx.com/workflows/administracion"
+    }
   }
 }

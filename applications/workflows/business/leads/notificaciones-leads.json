@@ -1,203 +1,259 @@
 {
-  "name": "Lead - Asignación y Notificaciones",
-  "description": "Asigna un lead a un asesor, y notifica al asesor, al jefe de ventas y al cliente.",
-  "tags": ["assignment", "notification", "srp"],
+  "meta": {
+    "instanceId": "lead-notifications-001"
+  },
   "nodes": [
     {
       "parameters": {
-        "workflowId": "{{ $json.workflowId }}"
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
       },
-      "id": "workflow-trigger",
-      "name": "Trigger del Workflow",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
-      "position": [200, 300]
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT id, nombre, email, especialidad, carga_actual FROM usuarios WHERE concesionario_id = $1 AND rol = 'asesor_ventas' AND activo = true",
-        "additionalFields": {
-          "queryParameters": "={{ [$json.tenant_config.tenant_id] }}"
+        "query": "WITH notificaciones_pendientes AS (\n  -- Leads nuevos sin asignar (> 30 min)\n  SELECT \n    'lead_sin_asignar' as tipo_notificacion,\n    'alta' as prioridad,\n    l.id as lead_id,\n    l.nombre as cliente_nombre,\n    l.telefono,\n    l.mensaje_inicial,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.fecha_contacto,\n    NULL as asesor_id,\n    NULL as asesor_nombre,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_contacto))/60 as minutos_sin_asignar\n  FROM leads l\n  LEFT JOIN concesionarios con ON l.concesionario_id = con.id\n  WHERE l.estado = 'nuevo'\n    AND l.asesor_id IS NULL\n    AND l.fecha_contacto < NOW() - INTERVAL '30 minutes'\n    AND l.fecha_contacto > NOW() - INTERVAL '24 hours'\n    \n  UNION ALL\n  \n  -- Leads asignados sin contactar (> 2 horas)\n  SELECT \n    'lead_sin_contactar' as tipo_notificacion,\n    CASE WHEN l.prioridad = 'alta' THEN 'alta' ELSE 'media' END as prioridad,\n    l.id as lead_id,\n    l.nombre as cliente_nombre,\n    l.telefono,\n    l.mensaje_inicial,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.fecha_contacto,\n    l.asesor_id,\n    a.nombre as asesor_nombre,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_asignacion))/60 as minutos_sin_contactar\n  FROM leads l\n  LEFT JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_id = a.id\n  WHERE l.estado = 'asignado'\n    AND l.fecha_primer_contacto IS NULL\n    AND l.fecha_asignacion < NOW() - INTERVAL '2 hours'\n    AND l.fecha_asignacion > NOW() - INTERVAL '48 hours'\n    \n  UNION ALL\n  \n  -- Leads alta prioridad sin actividad (> 4 horas)\n  SELECT \n    'lead_prioritario_inactivo' as tipo_notificacion,\n    'critica' as prioridad,\n    l.id as lead_id,\n    l.nombre as cliente_nombre,\n    l.telefono,\n    l.mensaje_inicial,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.fecha_contacto,\n    l.asesor_id,\n    a.nombre as asesor_nombre,\n    EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto, l.fecha_asignacion)))/60 as minutos_inactivo\n  FROM leads l\n  LEFT JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_id = a.id\n  WHERE l.prioridad = 'alta'\n    AND l.estado IN ('contactado', 'seguimiento')\n    AND COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto, l.fecha_asignacion) < NOW() - INTERVAL '4 hours'\n    \n  UNION ALL\n  \n  -- Leads perdidos por tiempo excesivo (> 7 días)\n  SELECT \n    'lead_perdido_tiempo' as tipo_notificacion,\n    'media' as prioridad,\n    l.id as lead_id,\n    l.nombre as cliente_nombre,\n    l.telefono,\n    l.mensaje_inicial,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.fecha_contacto,\n    l.asesor_id,\n    a.nombre as asesor_nombre,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_contacto))/24/3600 as dias_sin_convertir\n  FROM leads l\n  LEFT JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_id = a.id\n  WHERE l.estado IN ('contactado', 'seguimiento')\n    AND l.fecha_contacto < NOW() - INTERVAL '7 days'\n    AND l.fecha_contacto > NOW() - INTERVAL '14 days'\n    AND NOT EXISTS (\n      SELECT 1 FROM cotizaciones c \n      WHERE c.lead_id = l.id \n        AND c.fecha_creacion > NOW() - INTERVAL '3 days'\n    )\n)\nSELECT *\nFROM notificaciones_pendientes\nWHERE NOT EXISTS (\n  SELECT 1 FROM notificaciones_enviadas ne\n  WHERE ne.lead_id = notificaciones_pendientes.lead_id\n    AND ne.tipo_notificacion = notificaciones_pendientes.tipo_notificacion\n    AND ne.fecha_envio > NOW() - INTERVAL '4 hours'\n)\nORDER BY \n  CASE prioridad\n    WHEN 'critica' THEN 1\n    WHEN 'alta' THEN 2\n    WHEN 'media' THEN 3\n    ELSE 4\n  END,\n  fecha_contacto ASC\nLIMIT 20;",
+        "options": {}
+      },
+      "id": "get-pending-notifications",
+      "name": "Obtener Notificaciones Pendientes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar y categorizar notificaciones\nconst items = $input.all();\nconst notificaciones = [];\n\n// Templates de notificaciones\nconst templates = {\n  lead_sin_asignar: {\n    titulo: '🚨 Lead Sin Asignar',\n    destinatarios: ['gerencia@optimacx.com', 'coordinacion@optimacx.com'],\n    urgencia: 'alta',\n    accion_requerida: 'Asignar asesor inmediatamente'\n  },\n  lead_sin_contactar: {\n    titulo: '⏰ Lead Sin Contactar',\n    destinatarios: ['supervisores@optimacx.com'],\n    urgencia: 'media',\n    accion_requerida: 'Verificar con asesor asignado'\n  },\n  lead_prioritario_inactivo: {\n    titulo: '🔥 Lead Prioritario Inactivo',\n    destinatarios: ['gerencia@optimacx.com', 'ventas@optimacx.com'],\n    urgencia: 'critica',\n    accion_requerida: 'Intervención inmediata requerida'\n  },\n  lead_perdido_tiempo: {\n    titulo: '📉 Lead en Riesgo de Pérdida',\n    destinatarios: ['ventas@optimacx.com'],\n    urgencia: 'media',\n    accion_requerida: 'Última oportunidad de contacto'\n  }\n};\n\nfor (const item of items) {\n  const data = item.json;\n  const template = templates[data.tipo_notificacion];\n  \n  if (!template) continue;\n  \n  // Calcular tiempo transcurrido legible\n  let tiempoTranscurrido = '';\n  if (data.minutos_sin_asignar) {\n    const horas = Math.floor(data.minutos_sin_asignar / 60);\n    const mins = Math.floor(data.minutos_sin_asignar % 60);\n    tiempoTranscurrido = `${horas}h ${mins}m sin asignar`;\n  } else if (data.minutos_sin_contactar) {\n    const horas = Math.floor(data.minutos_sin_contactar / 60);\n    const mins = Math.floor(data.minutos_sin_contactar % 60);\n    tiempoTranscurrido = `${horas}h ${mins}m sin contactar`;\n  } else if (data.minutos_inactivo) {\n    const horas = Math.floor(data.minutos_inactivo / 60);\n    tiempoTranscurrido = `${horas}h inactivo`;\n  } else if (data.dias_sin_convertir) {\n    tiempoTranscurrido = `${Math.floor(data.dias_sin_convertir)} días sin convertir`;\n  }\n  \n  const notificacion = {\n    // Datos básicos\n    tipo_notificacion: data.tipo_notificacion,\n    prioridad: data.prioridad,\n    titulo: template.titulo,\n    destinatarios: template.destinatarios,\n    urgencia: template.urgencia,\n    accion_requerida: template.accion_requerida,\n    \n    // Datos del lead\n    lead_id: data.lead_id,\n    cliente_nombre: data.cliente_nombre,\n    cliente_telefono: data.telefono,\n    mensaje_inicial: data.mensaje_inicial,\n    concesionario_nombre: data.concesionario_nombre,\n    fecha_contacto: data.fecha_contacto,\n    \n    // Datos del asesor (si existe)\n    asesor_id: data.asesor_id,\n    asesor_nombre: data.asesor_nombre || 'Sin asignar',\n    \n    // Tiempo transcurrido\n    tiempo_transcurrido: tiempoTranscurrido,\n    \n    // Metadatos\n    timestamp: new Date().toISOString(),\n    requiere_escalamiento: data.prioridad === 'critica',\n    link_crm: `https://crm.optimacx.com/leads/${data.lead_id}`\n  };\n  \n  notificaciones.push({ json: notificacion });\n}\n\nreturn notificaciones;"
+      },
+      "id": "process-notifications",
+      "name": "Procesar Notificaciones",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.destinatarios.join(',') }}",
+        "subject": "{{ $json.titulo }} - {{ $json.cliente_nombre }} ({{ $json.concesionario_nombre }})",
+        "message": "=**{{ $json.titulo.toUpperCase() }}**\\n\\n📋 **Detalles del Lead:**\\n• Cliente: {{ $json.cliente_nombre }}\\n• Teléfono: {{ $json.cliente_telefono }}\\n• Concesionario: {{ $json.concesionario_nombre }}\\n• Asesor: {{ $json.asesor_nombre }}\\n• Fecha Contacto: {{ new Date($json.fecha_contacto).toLocaleString() }}\\n• Tiempo: {{ $json.tiempo_transcurrido }}\\n\\n💬 **Mensaje Inicial:**\\n{{ $json.mensaje_inicial }}\\n\\n⚡ **Acción Requerida:**\\n{{ $json.accion_requerida }}\\n\\n🔗 **Ver en CRM:**\\n{{ $json.link_crm }}\\n\\n---\\nSistema OptimaCX",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "priority": "={{ $json.urgencia === 'critica' ? 'high' : 'normal' }}"
         }
       },
-      "id": "get-available-advisors",
-      "name": "Obtener Asesores Disponibles",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [420, 200]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT id, nombre, email FROM usuarios WHERE concesionario_id = $1 AND rol = 'jefe_de_ventas' AND activo = true LIMIT 1",
-        "additionalFields": {
-          "queryParameters": "={{ [$json.tenant_config.tenant_id] }}"
+      "id": "send-email-notification",
+      "name": "Enviar Notificación Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [900, 300],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-optimacx",
+          "name": "SMTP OptimaCX"
         }
-      },
-      "id": "get-sales-manager",
-      "name": "Obtener Jefe de Ventas",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [420, 400]
+      }
     },
     {
       "parameters": {
-        "jsCode": "
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "es-critica",
+              "leftValue": "={{ $json.urgencia }}",
+              "rightValue": "critica",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "assign-advisor-and-prep-data",
-      "name": "Asignar Asesor y Preparar Datos",
-      "type": "n8n-nodes-base.code",
+      "id": "check-critical",
+      "name": "¿Es Crítica?",
+      "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [640, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "
-      },
-      "id": "prepare-advisor-notification",
-      "name": "Preparar Email Asesor",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [860, 200]
-    },
-    {
-      "parameters": {
-      },
-      "id": "prepare-manager-notification",
-      "name": "Preparar Email Jefe de Ventas",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [860, 400]
+      "position": [1120, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email", 
+        "url": "https://graph.facebook.com/v18.0/{{ $vars.WHATSAPP_PHONE_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.WHATSAPP_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
         "bodyParameters": {
           "parameters": [
             {
+              "name": "messaging_product",
+              "value": "whatsapp"
+            },
+            {
               "name": "to",
-              "value": "={{ $json.to }}"
+              "value": "+56912345678"
             },
             {
-              "name": "subject",
-              "value": "={{ $json.subject }}"
+              "name": "type",
+              "value": "text"
             },
             {
-              "name": "html",
-              "value": "={{ $json.html }}"
+              "name": "text",
+              "value": "={{ { body: `🚨 ALERTA CRÍTICA: ${$json.titulo} - ${$json.cliente_nombre} (${$json.concesionario_nombre}). ${$json.tiempo_transcurrido}. Revisar CRM inmediatamente: ${$json.link_crm}` } }}"
             }
           ]
         },
         "options": {}
       },
-      "id": "send-advisor-email",
-      "name": "Enviar Email Asesor",
+      "id": "send-critical-whatsapp",
+      "name": "WhatsApp Crítico",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [1080, 200]
+      "typeVersion": 4.2,
+      "position": [1340, 200]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email",
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "to",
-              "value": "={{ $json.to }}"
-            },
-            {
-              "name": "subject",
-              "value": "={{ $json.subject }}"
-            },
-            {
-              "name": "html",
-              "value": "={{ $json.html }}"
-            }
-          ]
+        "operation": "insert",
+        "table": "notificaciones_enviadas",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "lead_id": "={{ $json.lead_id }}",
+            "tipo_notificacion": "={{ $json.tipo_notificacion }}",
+            "prioridad": "={{ $json.prioridad }}",
+            "destinatarios": "={{ $json.destinatarios.join(',') }}",
+            "titulo": "={{ $json.titulo }}",
+            "mensaje": "={{ $json.titulo }} - {{ $json.cliente_nombre }} - {{ $json.tiempo_transcurrido }}",
+            "canal": "email",
+            "fecha_envio": "={{ $json.timestamp }}",
+            "metadata": "={{ JSON.stringify({\n              urgencia: $json.urgencia,\n              asesor_nombre: $json.asesor_nombre,\n              concesionario: $json.concesionario_nombre,\n              escalado: $json.requiere_escalamiento\n            }) }}"
+          }
         },
         "options": {}
       },
-      "id": "send-manager-email",
-      "name": "Enviar Email Jefe de Ventas",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [1080, 400]
+      "id": "log-notification",
+      "name": "Registrar Notificación",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1340, 400],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar resumen de notificaciones enviadas\nconst notificaciones = $input.all();\nconst resumen = {\n  total_notificaciones: notificaciones.length,\n  por_tipo: {},\n  por_prioridad: {},\n  criticas: 0,\n  timestamp: new Date().toISOString()\n};\n\nfor (const notif of notificaciones) {\n  const data = notif.json;\n  \n  // Contar por tipo\n  resumen.por_tipo[data.tipo_notificacion] = (resumen.por_tipo[data.tipo_notificacion] || 0) + 1;\n  \n  // Contar por prioridad\n  resumen.por_prioridad[data.prioridad] = (resumen.por_prioridad[data.prioridad] || 0) + 1;\n  \n  // Contar críticas\n  if (data.urgencia === 'critica') {\n    resumen.criticas++;\n  }\n}\n\nreturn [{ json: resumen }];"
+      },
+      "id": "generate-summary",
+      "name": "Generar Resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
     }
   ],
   "connections": {
-    "Trigger del Workflow": {
+    "Schedule Trigger": {
       "main": [
         [
           {
-            "node": "Obtener Asesores Disponibles",
+            "node": "Obtener Notificaciones Pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Notificaciones Pendientes": {
+      "main": [
+        [
+          {
+            "node": "Procesar Notificaciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Notificaciones": {
+      "main": [
+        [
+          {
+            "node": "Enviar Notificación Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Notificación Email": {
+      "main": [
+        [
+          {
+            "node": "¿Es Crítica?",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Obtener Jefe de Ventas",
+            "node": "Registrar Notificación",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Obtener Asesores Disponibles": {
+    "¿Es Crítica?": {
       "main": [
         [
           {
-            "node": "Asignar Asesor y Preparar Datos",
+            "node": "WhatsApp Crítico",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Obtener Jefe de Ventas": {
+    "Registrar Notificación": {
       "main": [
         [
           {
-            "node": "Asignar Asesor y Preparar Datos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Asignar Asesor y Preparar Datos": {
-      "main": [
-        [
-          {
-            "node": "Preparar Email Asesor",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Preparar Email Jefe de Ventas",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Preparar Email Asesor": {
-      "main": [
-        [
-          {
-            "node": "Enviar Email Asesor",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Preparar Email Jefe de Ventas": {
-      "main": [
-        [
-          {
-            "node": "Enviar Email Jefe de Ventas",
+            "node": "Generar Resumen",
             "type": "main",
             "index": 0
           }
@@ -205,9 +261,17 @@
       ]
     }
   },
+  "pinData": {},
   "settings": {
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  }
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["leads", "notificaciones", "alertas"],
+  "triggerCount": 0,
+  "updatedAt": "2024-08-09T05:47:00.000Z",
+  "versionId": "lead-notifications-v2.1",
+  "name": "Notificaciones de Leads",
+  "active": true,
+  "id": "lead-notifications-system",
+  "hash": "lead-notifications-processor"
 }

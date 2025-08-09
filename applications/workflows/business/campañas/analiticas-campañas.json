@@ -1,106 +1,286 @@
 {
-  "name": "Campaña - Analytics",
-  "description": "Workflow para generar reportes analíticos de campañas de WhatsApp y Email.",
-  "tags": ["campaign", "analytics", "reporting"],
+  "name": "Analíticas de Campañas",
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "webhook/campaign/analytics",
-        "responseMode": "responseNode",
+        "method": "GET",
+        "url": "={{ $vars.WEBHOOK_URL }}/analytics/campañas",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
-      "id": "webhook-analytics-trigger",
-      "name": "Webhook Trigger Analytics",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [200, 300]
+      "id": "webhook-analytics",
+      "name": "Webhook Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [240, 300],
+      "webhookId": "analytics-webhook"
     },
     {
       "parameters": {
-        "jsCode": "
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "tenant-validation",
+              "leftValue": "={{ $json.concesionario_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "prepare-analytics-query",
-      "name": "Preparar Consulta Analytics",
-      "type": "n8n-nodes-base.code",
+      "id": "validar-tenant",
+      "name": "Validar Tenant",
+      "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [400, 300]
+      "position": [460, 300]
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "={{ $json.query }}",
-        "additionalFields": {
-          "queryParameters": "={{ $json.queryParameters }}"
-        }
+        "operation": "select",
+        "schema": {
+          "value": "public"
+        },
+        "table": {
+          "value": "log_campañas"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "concesionario_id",
+              "condition": "equal",
+              "value": "={{ $json.concesionario_id }}"
+            },
+            {
+              "column": "fecha_envio",
+              "condition": "dateRange",
+              "value": {
+                "dateRange": {
+                  "fromDate": "={{ $json.fecha_inicio || new Date(Date.now() - 30*24*60*60*1000).toISOString() }}",
+                  "toDate": "={{ $json.fecha_fin || new Date().toISOString() }}"
+                }
+              }
+            }
+          ]
+        },
+        "options": {}
       },
-      "id": "get-campaign-logs",
+      "id": "obtener-logs-campañas",
       "name": "Obtener Logs Campañas",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [600, 300]
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 240],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase OptimaCX"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "
+        "operation": "select",
+        "schema": {
+          "value": "public"
+        },
+        "table": {
+          "value": "leads"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "concesionario_id",
+              "condition": "equal",
+              "value": "={{ $json.concesionario_id }}"
+            },
+            {
+              "column": "fuente_lead",
+              "condition": "equal",
+              "value": "campaña"
+            },
+            {
+              "column": "fecha_creacion",
+              "condition": "dateRange",
+              "value": {
+                "dateRange": {
+                  "fromDate": "={{ $('webhook-analytics').first().$json.fecha_inicio || new Date(Date.now() - 30*24*60*60*1000).toISOString() }}",
+                  "toDate": "={{ $('webhook-analytics').first().$json.fecha_fin || new Date().toISOString() }}"
+                }
+              }
+            }
+          ]
+        },
+        "options": {}
       },
-      "id": "process-analytics-data",
-      "name": "Procesar Datos Analytics",
+      "id": "obtener-leads-generados",
+      "name": "Obtener Leads Generados",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 360],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase OptimaCX"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar datos de campañas\nconst logsCampañas = $input.first().json;\nconst leadsGenerados = $input.last().json;\n\n// Calcular métricas por tipo de campaña\nconst metricasPorTipo = {};\n\nlogsCampañas.forEach(log => {\n  const tipo = log.tipo_campaña;\n  if (!metricasPorTipo[tipo]) {\n    metricasPorTipo[tipo] = {\n      total_enviados: 0,\n      exitosos: 0,\n      fallidos: 0,\n      tasa_exito: 0\n    };\n  }\n  \n  metricasPorTipo[tipo].total_enviados++;\n  if (log.estado === 'enviado') {\n    metricasPorTipo[tipo].exitosos++;\n  } else {\n    metricasPorTipo[tipo].fallidos++;\n  }\n});\n\n// Calcular tasas de éxito\nObject.keys(metricasPorTipo).forEach(tipo => {\n  const metricas = metricasPorTipo[tipo];\n  metricas.tasa_exito = metricas.total_enviados > 0 \n    ? (metricas.exitosos / metricas.total_enviados * 100).toFixed(2)\n    : 0;\n});\n\n// Procesar leads generados\nconst leadsPorEstado = {};\nleadsGenerados.forEach(lead => {\n  const estado = lead.estado;\n  leadsPorEstado[estado] = (leadsPorEstado[estado] || 0) + 1;\n});\n\n// Calcular conversión\nconst totalLeads = leadsGenerados.length;\nconst leadsVendidos = leadsPorEstado['vendido'] || 0;\nconst tasaConversion = totalLeads > 0 ? (leadsVendidos / totalLeads * 100).toFixed(2) : 0;\n\n// Preparar respuesta\nconst analytics = {\n  periodo: {\n    inicio: $('webhook-analytics').first().json.fecha_inicio || new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0],\n    fin: $('webhook-analytics').first().json.fecha_fin || new Date().toISOString().split('T')[0]\n  },\n  resumen_campañas: {\n    total_campañas: logsCampañas.length,\n    por_tipo: metricasPorTipo\n  },\n  generacion_leads: {\n    total_leads: totalLeads,\n    por_estado: leadsPorEstado,\n    tasa_conversion: parseFloat(tasaConversion)\n  },\n  concesionario_id: $('webhook-analytics').first().json.concesionario_id\n};\n\nreturn { analytics };"
+      },
+      "id": "procesar-analytics",
+      "name": "Procesar Analytics",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [800, 300]
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "value": "public"
+        },
+        "table": {
+          "value": "analytics_campañas"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "concesionario_id": "={{ $json.analytics.concesionario_id }}",
+            "fecha_reporte": "={{ new Date().toISOString() }}",
+            "periodo_inicio": "={{ $json.analytics.periodo.inicio }}",
+            "periodo_fin": "={{ $json.analytics.periodo.fin }}",
+            "total_campañas": "={{ $json.analytics.resumen_campañas.total_campañas }}",
+            "total_leads_generados": "={{ $json.analytics.generacion_leads.total_leads }}",
+            "tasa_conversion": "={{ $json.analytics.generacion_leads.tasa_conversion }}",
+            "metricas_detalladas": "={{ JSON.stringify($json.analytics) }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "guardar-reporte",
+      "name": "Guardar Reporte",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase OptimaCX"
+        }
+      }
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify($json) }}"
+        "responseBody": "={{ {\n  success: true,\n  analytics: $json.analytics,\n  mensaje: 'Reporte de analíticas generado exitosamente'\n} }}"
       },
-      "id": "success-response",
-      "name": "Respuesta Exitosa",
+      "id": "respuesta-analytics",
+      "name": "Respuesta Analytics",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [1000, 300]
+      "typeVersion": 1.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: false,\n  error: 'Tenant ID requerido',\n  mensaje: 'El campo concesionario_id es obligatorio para generar analíticas'\n} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error-tenant",
+      "name": "Error Tenant",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 460]
     }
   ],
+  "pinData": {},
   "connections": {
-    "Webhook Trigger Analytics": {
+    "webhook-analytics": {
       "main": [
         [
           {
-            "node": "Preparar Consulta Analytics",
+            "node": "validar-tenant",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Preparar Consulta Analytics": {
+    "validar-tenant": {
       "main": [
         [
           {
-            "node": "Obtener Logs Campañas",
+            "node": "obtener-logs-campañas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "obtener-leads-generados",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "error-tenant",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Obtener Logs Campañas": {
+    "obtener-logs-campañas": {
       "main": [
         [
           {
-            "node": "Procesar Datos Analytics",
+            "node": "procesar-analytics",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Procesar Datos Analytics": {
+    "obtener-leads-generados": {
       "main": [
         [
           {
-            "node": "Respuesta Exitosa",
+            "node": "procesar-analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "procesar-analytics": {
+      "main": [
+        [
+          {
+            "node": "guardar-reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "guardar-reporte": {
+      "main": [
+        [
+          {
+            "node": "respuesta-analytics",
             "type": "main",
             "index": 0
           }
@@ -108,9 +288,22 @@
       ]
     }
   },
+  "active": false,
   "settings": {
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  }
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "campaign-analytics"
+  },
+  "id": "analiticas-campañas",
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "campaigns",
+      "name": "campaigns"
+    }
+  ]
 }

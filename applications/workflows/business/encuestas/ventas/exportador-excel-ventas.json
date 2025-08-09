@@ -1,7 +1,14 @@
 {
   "name": "Sales Survey - Excel Exporter",
   "description": "Genera y permite descargar reportes Excel de encuestas de ventas para jefe de ventas por concesionario/sucursal.",
-  "tags": ["sales", "survey", "excel", "export", "ventas", "report"],
+  "tags": [
+    "sales",
+    "survey",
+    "excel",
+    "export",
+    "ventas",
+    "report"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -14,16 +21,21 @@
       "name": "Webhook Excel Export Ventas",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [200, 300]
+      "position": [
+        200,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "validate-export-params-sales",
       "name": "Validar Parámetros Export Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [400, 300]
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        300
+      ]
     },
     {
       "parameters": {
@@ -36,17 +48,22 @@
       "id": "query-sales-surveys",
       "name": "Consultar Encuestas Ventas",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [600, 300]
+      "typeVersion": 2.1,
+      "position": [
+        600,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "process-sales-excel-data",
       "name": "Procesar Datos Excel Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [800, 300]
+      "typeVersion": 2.1,
+      "position": [
+        800,
+        300
+      ]
     },
     {
       "parameters": {
@@ -59,8 +76,11 @@
       "id": "generate-sales-excel",
       "name": "Generar Excel Ventas",
       "type": "n8n-nodes-base.microsoftExcel",
-      "typeVersion": 2,
-      "position": [1000, 300],
+      "typeVersion": 2.1,
+      "position": [
+        1000,
+        300
+      ],
       "executeOnce": false
     },
     {
@@ -77,8 +97,11 @@
       "id": "download-sales-excel",
       "name": "Descargar Excel Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [1200, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -91,8 +114,11 @@
       "id": "error-response-sales-excel",
       "name": "Respuesta Error Excel Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [800, 480]
+      "typeVersion": 2.1,
+      "position": [
+        800,
+        480
+      ]
     }
   ],
   "connections": {

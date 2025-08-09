@@ -10,7 +10,7 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [240, 300]
     },
     {
@@ -20,7 +20,7 @@
       "id": "validate-survey-response",
       "name": "Validar Respuesta Encuesta",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [460, 300]
     },
     {
@@ -34,7 +34,7 @@
       "id": "insert-survey-response",
       "name": "Registrar Encuesta",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [680, 300]
     },
     {
@@ -52,7 +52,7 @@
       "id": "check-notification-required",
       "name": "¿Requiere Notificación?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [900, 300]
     },
     {
@@ -61,7 +61,7 @@
       "id": "prepare-notification-data",
       "name": "Preparar Datos Notificación",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1120, 200]
     },
     {
@@ -74,7 +74,7 @@
       "id": "trigger-low-score-notification",
       "name": "Disparar Notificación Baja Calificación",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 200]
     },
     {
@@ -83,7 +83,7 @@
       "id": "generate-success-response",
       "name": "Generar Respuesta Éxito",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [1340, 400]
     }
   ],

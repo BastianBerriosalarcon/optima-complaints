@@ -1,7 +1,12 @@
 {
   "name": "Lead - Análisis con IA",
   "description": "Workflow enfocado en analizar mensajes con IA y extraer insights del lead",
-  "tags": ["ai", "analysis", "lead", "srp"],
+  "tags": [
+    "ai",
+    "analysis",
+    "lead",
+    "srp"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -10,8 +15,11 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2,
-      "position": [200, 300]
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -24,8 +32,11 @@
       "id": "check-existing-lead",
       "name": "Buscar Lead Existente",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [400, 300]
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        300
+      ]
     },
     {
       "parameters": {
@@ -42,17 +53,22 @@
       "id": "is-existing-lead",
       "name": "¿Lead Existente?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [600, 300]
+      "typeVersion": 2.1,
+      "position": [
+        600,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "prepare-ai-analysis",
       "name": "Preparar Análisis IA",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [800, 300]
+      "typeVersion": 2.1,
+      "position": [
+        800,
+        300
+      ]
     },
     {
       "parameters": {
@@ -68,29 +84,38 @@
       "id": "ai-analysis",
       "name": "Análisis con IA",
       "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 2,
-      "position": [1000, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1000,
+        300
+      ]
     },
     {
       "parameters": {},
       "id": "process-ai-response",
       "name": "Procesar Respuesta IA",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1200, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        300
+      ]
     },
     {
       "parameters": {
         "operation": "create",
         "resource": "execution",
-        "workflowId": "lead-scoring-ai", 
+        "workflowId": "lead-scoring-ai",
         "data": "={{ JSON.stringify($json) }}"
       },
       "id": "trigger-lead-scoring",
       "name": "Calcular Score de Lead",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [1300, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1300,
+        300
+      ]
     },
     {
       "parameters": {
@@ -107,8 +132,11 @@
       "id": "requires-advisor",
       "name": "¿Requiere Asesor?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1400, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1400,
+        300
+      ]
     }
   ],
   "connections": {

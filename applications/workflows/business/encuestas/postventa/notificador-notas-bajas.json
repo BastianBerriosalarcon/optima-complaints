@@ -1,18 +1,233 @@
-{
-  "name": "Survey - Low Score Notifier",
-  "description": "Workflow enfocado en enviar notificaciones cuando una encuesta tiene calificación baja (1-8) y crear un caso para seguimiento.",
-  "tags": ["survey", "notification", "low-score", "email", "srp", "case-management"],
-  "nodes": [
+{  "name": "Notificador Notas Bajas Post-Venta",  "nodes": [    {      "parameters": {        "method": "POST",        "url": "={{ $vars.WEBHOOK_URL }}/notificaciones/notas-bajas",        "authentication": "genericCredentialType",        "genericAuthType": "httpHeaderAuth",        "options": {}      },      "id": "webhook-notas-bajas",      "name": "Webhook Notas Bajas",      "type": "n8n-nodes-base.httpRequest",      "typeVersion": 4.1,      "position": [240, 300],      "webhookId": "low-score-notification"    },
     {
       "parameters": {
-        "workflowId": "{{ $json.workflowId }}"
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "tenant-validation",
+              "leftValue": "={{ $json.concesionario_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "score-validation", 
+              "leftValue": "={{ $json.nota_promedio }}",
+              "rightValue": 6,
+              "operator": {
+                "type": "number",
+                "operation": "smaller",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "workflow-trigger",
-      "name": "Trigger del Workflow",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
-      "position": [240, 300]
+      "id": "validar-nota-baja",
+      "name": "Validar Nota Baja",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
     },
     {
       "parameters": {
-        "functionCode": "
+        "operation": "select",
+        "schema": {
+          "value": "public"
+        },
+        "table": {
+          "value": "usuarios"
+        },
+        "where": {
+          "values": [
+            {
+              "column": "concesionario_id",
+              "condition": "equal",
+              "value": "={{ $json.concesionario_id }}"
+            },
+            {
+              "column": "rol",
+              "condition": "equal",
+              "value": "jefe_servicio"
+            },
+            {
+              "column": "activo",
+              "condition": "equal",
+              "value": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "obtener-jefes-servicio",
+      "name": "Obtener Jefes de Servicio",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 240],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase OptimaCX"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "notification-data",
+              "name": "notification_data",
+              "value": "={{ {\n  cliente: $('webhook-notas-bajas').first().$json.nombre_cliente,\n  rut: $('webhook-notas-bajas').first().$json.rut_cliente,\n  nota_promedio: $('webhook-notas-bajas').first().$json.nota_promedio,\n  fecha_encuesta: $('webhook-notas-bajas').first().$json.fecha_encuesta,\n  servicio: $('webhook-notas-bajas').first().$json.tipo_servicio,\n  observaciones: $('webhook-notas-bajas').first().$json.observaciones || 'Sin observaciones',\n  urgencia: $('webhook-notas-bajas').first().$json.nota_promedio < 4 ? 'ALTA' : 'MEDIA'\n} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "preparar-notificacion",
+      "name": "Preparar Notificación",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [900, 240]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "🚨 ALERTA: Nota Baja en Encuesta Post-Venta",
+        "emailType": "html",
+        "message": "=<div>Cliente: {{ $('preparar-notificacion').first().$json.notification_data.cliente }}<br>RUT: {{ $('preparar-notificacion').first().$json.notification_data.rut }}<br>Nota: {{ $('preparar-notificacion').first().$json.notification_data.nota_promedio }}/10<br>Urgencia: {{ $('preparar-notificacion').first().$json.notification_data.urgencia }}</div>",
+        "options": {}
+      },
+      "id": "enviar-email-alerta",
+      "name": "Enviar Email Alerta",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1120, 240],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-tenant",
+          "name": "SMTP Tenant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  mensaje: 'Notificación enviada',\n  cliente: $('preparar-notificacion').first().$json.notification_data.cliente\n} }}"
+      },
+      "id": "respuesta-exitosa",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1340, 240]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: false,\n  mensaje: 'Nota no requiere alerta'\n} }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "no-requiere-alerta",
+      "name": "No Requiere Alerta",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 400]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "webhook-notas-bajas": {
+      "main": [
+        [
+          {
+            "node": "validar-nota-baja",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "validar-nota-baja": {
+      "main": [
+        [
+          {
+            "node": "obtener-jefes-servicio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "no-requiere-alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "obtener-jefes-servicio": {
+      "main": [
+        [
+          {
+            "node": "preparar-notificacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "preparar-notificacion": {
+      "main": [
+        [
+          {
+            "node": "enviar-email-alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "enviar-email-alerta": {
+      "main": [
+        [
+          {
+            "node": "respuesta-exitosa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "low-score-notifications"
+  },
+  "id": "notificador-notas-bajas-postventa",
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "surveys",
+      "name": "surveys"
+    }
+  ]
+}

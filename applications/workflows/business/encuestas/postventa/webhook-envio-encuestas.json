@@ -1,7 +1,11 @@
 {
   "name": "Survey - Submission Webhook",
   "description": "Webhook universal para recibir todas las encuestas completadas y pasarlas al manejador de respuestas.",
-  "tags": ["survey", "webhook", "entrypoint"],
+  "tags": [
+    "survey",
+    "webhook",
+    "entrypoint"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -14,7 +18,10 @@
       "name": "Webhook Survey Submit",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [200, 300]
+      "position": [
+        200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -26,8 +33,11 @@
       "id": "trigger-response-handler",
       "name": "Disparar Manejador de Respuestas",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [400, 300]
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        300
+      ]
     },
     {
       "parameters": {
@@ -37,8 +47,11 @@
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [600, 300]
+      "typeVersion": 2.1,
+      "position": [
+        600,
+        300
+      ]
     },
     {
       "parameters": {
@@ -51,8 +64,11 @@
       "id": "error-response",
       "name": "Respuesta de Error",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [400, 480]
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        480
+      ]
     }
   ],
   "connections": {

@@ -1,7 +1,32 @@
 {
   "name": "Sales Survey Call Center Assignment",
   "description": "Asignación equitativa de encuestas de VENTAS no respondidas a agentes de Contact Center. Principio SRP: Una sola responsabilidad - asignación de encuestas ventas.",
-  "tags": ["sales", "survey", "assignment", "contact-center", "ventas", "srp"],
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "srp",
+      "name": "srp"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "sales",
+      "name": "sales"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "ventas",
+      "name": "ventas"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "assignment",
+      "name": "assignment"
+    }
+  ],
   "nodes": [
     {
       "parameters": {
@@ -13,8 +38,11 @@
       "id": "webhook-trigger-ventas",
       "name": "Trigger Asignación Contact Center Ventas",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [240, 300],
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ],
       "webhookId": "sales-survey-call-center-assignment"
     },
     {
@@ -60,16 +88,21 @@
       "name": "Obtener Agentes Contact Center Ventas",
       "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "assign-sales-clients",
       "name": "Asignar Clientes Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [680, 300]
+      "typeVersion": 2.1,
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -80,7 +113,10 @@
       "name": "Dividir por Agente Ventas",
       "type": "n8n-nodes-base.itemLists",
       "typeVersion": 3,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -157,16 +193,21 @@
       "name": "Registrar Asignaciones Ventas",
       "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "prepare-sales-notification",
       "name": "Preparar Notificación Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1340, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1340,
+        300
+      ]
     },
     {
       "parameters": {
@@ -217,16 +258,21 @@
       "name": "Enviar Notificación Ventas",
       "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
-      "position": [1560, 300]
+      "position": [
+        1560,
+        300
+      ]
     },
     {
-      "parameters": {
-      },
+      "parameters": {},
       "id": "generate-sales-report",
       "name": "Generar Reporte Final Ventas",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1780, 300]
+      "typeVersion": 2.1,
+      "position": [
+        1780,
+        300
+      ]
     },
     {
       "parameters": {
@@ -236,8 +282,11 @@
       "id": "success-response-ventas",
       "name": "Respuesta Éxito Ventas",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [2000, 300]
+      "typeVersion": 2.1,
+      "position": [
+        2000,
+        300
+      ]
     }
   ],
   "connections": {
@@ -335,32 +384,6 @@
     "executionOrder": "v1"
   },
   "staticData": null,
-  "tags": [
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "srp",
-      "name": "srp"
-    },
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z", 
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "sales",
-      "name": "sales"
-    },
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "ventas",
-      "name": "ventas"
-    },
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "assignment", 
-      "name": "assignment"
-    }
-  ],
   "meta": {
     "templateCredsSetupCompleted": true
   },

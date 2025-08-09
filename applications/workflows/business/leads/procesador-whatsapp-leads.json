@@ -1,816 +1,236 @@
 {
-    "name": "Lead Processor WhatsApp - Fixed",
-    "nodes": [
-      {
-        "parameters": {
-          "httpMethod": "POST",
-          "path": "webhook/whatsapp/lead",
-          "responseMode": "responseNode",
-          "options": {}
-        },
-        "id": "webhook-whatsapp-lead",
-        "name": "WhatsApp Webhook",
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [240, 300],
-        "webhookId": "lead-whatsapp-webhook"
+  "meta": {
+    "instanceId": "proc-whatsapp-leads-001"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "proceso-whatsapp-leads",
+        "options": {}
       },
-      {
-        "parameters": {
-          "conditions": {
-            "options": {
-              "caseSensitive": true,
-              "leftValue": "",
-              "typeValidation": "strict"
-            },
-            "conditions": [
-              {
-                "leftValue": "={{ $json.object }}",
-                "rightValue": "whatsapp_business_account",
-                "operator": {
-                  "type": "string",
-                  "operation": "equals"
-                }
-              },
-              {
-                "leftValue": "={{ $json.entry[0].changes[0].field }}",
-                "rightValue": "messages",
-                "operator": {
-                  "type": "string",
-                  "operation": "equals"
-                }
-              }
-            ],
-            "combineOperation": "all"
-          }
-        },
-        "id": "validate-webhook",
-        "name": "Validate WhatsApp Webhook",
-        "type": "n8n-nodes-base.if",
-        "typeVersion": 2,
-        "position": [460, 300]
+      "id": "webhook-trigger",
+      "name": "Webhook WhatsApp",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "whatsapp-leads-processor"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar mensaje entrante de WhatsApp para leads\nconst webhookData = $input.first().json;\nconst body = webhookData.body || webhookData;\n\n// Extraer información del mensaje\nconst message = {\n  phone: body.from || body.phone_number,\n  text: body.text || body.message || '',\n  timestamp: body.timestamp || new Date().toISOString(),\n  contact_name: body.profile?.name || body.contact_name || 'Cliente',\n  message_id: body.id || body.message_id || `msg_${Date.now()}`\n};\n\n// Validar que sea un lead potencial\nconst esLeadPotencial = {\n  tiene_telefono: !!message.phone,\n  tiene_mensaje: message.text.length > 10,\n  palabras_clave: /cotiz|precio|costo|vehículo|auto|compra|financ|crédito/i.test(message.text),\n  no_es_spam: !/spam|test|prueba/i.test(message.text)\n};\n\nconst esValido = Object.values(esLeadPotencial).every(v => v === true);\n\n// Extraer información del lead\nconst leadData = {\n  telefono: message.phone,\n  nombre: message.contact_name,\n  mensaje_inicial: message.text,\n  canal_origen: 'WhatsApp',\n  fecha_contacto: message.timestamp,\n  estado: 'nuevo',\n  prioridad: esLeadPotencial.palabras_clave ? 'alta' : 'media',\n  metadata: {\n    message_id: message.message_id,\n    validacion: esLeadPotencial,\n    es_valido: esValido\n  }\n};\n\nreturn [{ json: leadData }];"
       },
-      {
-        "parameters": {
-          "jsCode": "try {\n  
-        },
-        "id": "extract-lead-data",
-        "name": "Extract Lead Data",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [680, 300]
-      },
-      {
-        "parameters": {
-        },
-        "id": "check-tenant-cache",
-        "name": "Check Tenant Cache",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [900, 300]
-      },
-      {
-        "parameters": {
-          "conditions": {
-            "options": {
-              "caseSensitive": true,
-              "leftValue": "",
-              "typeValidation": "strict"
-            },
-            "conditions": [
-              {
-                "leftValue": "={{ $json.tenant_config_source }}",
-                "rightValue": "database",
-                "operator": {
-                  "type": "string",
-                  "operation": "equals"
-                }
-              }
-            ],
-            "combineOperation": "all"
-          }
-        },
-        "id": "cache-miss-condition",
-        "name": "Cache Miss?",
-        "type": "n8n-nodes-base.if",
-        "typeVersion": 2,
-        "position": [1120, 300]
-      },
-      {
-        "parameters": {
-          "method": "GET",
-          "url": "={{ $vars.SUPABASE_URL }}/rest/v1/tenant_config",
-          "authentication": "genericCredentialType",
-          "genericAuthType": "httpHeaderAuth",
-          "headers": {
-            "parameters": [
-              {
-                "name": "apikey",
-                "value": "={{ $vars.SUPABASE_ANON_KEY }}"
-              },
-              {
-                "name": "Authorization",
-                "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
-              },
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          },
-          "qs": {
-            "parameters": [
-              {
-                "name": "concesionario_id",
-                "value": "eq.{{ $json.tenant_id }}"
-              },
-              {
-                "name": "select",
-                "value": "*"
-              }
-            ]
-          },
+      "id": "process-message",
+      "name": "Procesar Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
           "options": {
-            "timeout": 10000
-          }
-        },
-        "id": "load-tenant-config-db",
-        "name": "Load Config from Database",
-        "type": "n8n-nodes-base.httpRequestV3",
-        "typeVersion": 4.1,
-        "position": [1340, 200]
-      },
-      {
-        "parameters": {
-        },
-        "id": "update-cache",
-        "name": "Update Cache",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [1560, 200]
-      },
-      {
-        "parameters": {
-          "jsCode": "
-        },
-        "id": "use-cached-config",
-        "name": "Use Cached Config",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [1340, 400]
-      },
-      {
-        "parameters": {
-          "mode": "mergeByIndex",
-          "options": {}
-        },
-        "id": "merge-config-paths",
-        "name": "Merge Config Paths",
-        "type": "n8n-nodes-base.merge",
-        "typeVersion": 2.1,
-        "position": [1780, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "try {\n  
-        },
-        "id": "prepare-ai-analysis",
-        "name": "Prepare AI Analysis",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [1120, 300]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https:
-          "authentication": "genericCredentialType",
-          "genericAuthType": "httpHeaderAuth",
-          "headers": {
-            "parameters": [
-              {
-                "name": "x-goog-api-key",
-                "value": "={{ $vars.GEMINI_API_KEY }}"
-              },
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
           },
-          "body": {
-            "parameters": [
-              {
-                "name": "contents",
-                "value": "=[\n  {\n    \"parts\": [\n      {\n        \"text\": \"{{ $json.ai_prompt }}\"\n      }\n    ]\n  }\n]"
-              },
-              {
-                "name": "generationConfig",
-                "value": "={\n  \"temperature\": 0.3,\n  \"topK\": 40,\n  \"topP\": 0.95,\n  \"maxOutputTokens\": 1024\n}"
-              }
-            ]
-          },
-          "options": {
-            "timeout": 15000
-          }
-        },
-        "id": "gemini-ai-analysis",
-        "name": "Gemini AI Analysis",
-        "type": "n8n-nodes-base.httpRequestV3",
-        "typeVersion": 4.1,
-        "position": [1340, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "try {\n  
-        },
-        "id": "calculate-lead-score",
-        "name": "Calculate Lead Score",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [1560, 300]
-      },
-      {
-        "parameters": {
-          "method": "GET",
-          "url": "={{ $vars.SUPABASE_URL }}/rest/v1/usuarios",
-          "authentication": "genericCredentialType",
-          "genericAuthType": "httpHeaderAuth",
-          "headers": {
-            "parameters": [
-              {
-                "name": "apikey",
-                "value": "={{ $vars.SUPABASE_ANON_KEY }}"
-              },
-              {
-                "name": "Authorization",
-                "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
-              }
-            ]
-          },
-          "qs": {
-            "parameters": [
-              {
-                "name": "concesionario_id",
-                "value": "eq.{{ $json.tenant_id }}"
-              },
-              {
-                "name": "rol",
-                "value": "eq.asesor_ventas"
-              },
-              {
-                "name": "activo",
-                "value": "eq.true"
-              },
-              {
-                "name": "select",
-                "value": "id,nombre,email,especialidad,carga_actual"
-              }
-            ]
-          },
-          "options": {
-            "timeout": 10000
-          }
-        },
-        "id": "get-available-advisors",
-        "name": "Get Available Advisors",
-        "type": "n8n-nodes-base.httpRequestV3",
-        "typeVersion": 4.1,
-        "position": [1780, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "try {\n  
-        },
-        "id": "assign-advisor",
-        "name": "Assign Advisor",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [2000, 300]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "={{ $vars.SUPABASE_URL }}/rest/v1/leads",
-          "authentication": "genericCredentialType",
-          "genericAuthType": "httpHeaderAuth",
-          "headers": {
-            "parameters": [
-              {
-                "name": "apikey",
-                "value": "={{ $vars.SUPABASE_ANON_KEY }}"
-              },
-              {
-                "name": "Authorization",
-                "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
-              },
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "name": "Prefer",
-                "value": "return=representation"
-              }
-            ]
-          },
-          "body": {
-            "parameters": [
-              {
-                "name": "body",
-                "value": "={{ JSON.stringify($json.lead_data) }}"
-              }
-            ]
-          },
-          "options": {
-            "timeout": 10000
-          }
-        },
-        "id": "save-lead-supabase",
-        "name": "Save Lead to Supabase",
-        "type": "n8n-nodes-base.httpRequestV3",
-        "typeVersion": 4.1,
-        "position": [2220, 300]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "={{ $vars.SUPABASE_URL }}/rest/v1/rpc/incrementar_carga_asesor",
-          "authentication": "genericCredentialType",
-          "genericAuthType": "httpHeaderAuth",
-          "headers": {
-            "parameters": [
-              {
-                "name": "apikey",
-                "value": "={{ $vars.SUPABASE_ANON_KEY }}"
-              },
-              {
-                "name": "Authorization",
-                "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
-              },
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          },
-          "body": {
-            "parameters": [
-              {
-                "name": "asesor_id",
-                "value": "={{ $('Assign Advisor').first().json.notification_data.asesor.id }}"
-              }
-            ]
-          },
-          "options": {
-            "timeout": 5000
-          }
-        },
-        "id": "update-advisor-load",
-        "name": "Update Advisor Load",
-        "type": "n8n-nodes-base.httpRequestV3",
-        "typeVersion": 4.1,
-        "position": [2440, 300]
-      },
-      {
-        "parameters": {
-          "jsCode": "
-        },
-        "id": "prepare-email-notification",
-        "name": "Prepare Email Notification",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [2660, 200]
-      },
-      {
-        "parameters": {
-          "jsCode": "
-        },
-        "id": "prepare-whatsapp-confirmation",
-        "name": "Prepare WhatsApp Confirmation", 
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [2660, 400]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email",
-          "headers": {
-            "parameters": [
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "name": "Authorization",
-                "value": "Bearer {{ $vars.N8N_WEBHOOK_AUTH_TOKEN || 'default-token' }}"
-              }
-            ]
-          },
-          "body": {
-            "parameters": [
-              {
-                "name": "to",
-                "value": "={{ $json.to }}"
-              },
-              {
-                "name": "subject", 
-                "value": "={{ $json.subject }}"
-              },
-              {
-                "name": "html",
-                "value": "={{ $json.html }}"
-              },
-              {
-                "name": "tenant_id",
-                "value": "={{ $json.tenant_config.concesionario_id }}"
-              },
-              {
-                "name": "lead_id",
-                "value": "={{ $json.lead_id }}"
-              }
-            ]
-          },
-          "options": {
-            "timeout": 10000
-          }
-        },
-        "id": "send-email-notification",
-        "name": "Send Email Notification",
-        "type": "n8n-nodes-base.httpRequestV3",
-        "typeVersion": 4.1,
-        "position": [2880, 200]
-      },
-      {
-        "parameters": {
-          "method": "POST",
-          "url": "https:
-          "authentication": "genericCredentialType", 
-          "genericAuthType": "httpHeaderAuth",
-          "headers": {
-            "parameters": [
-              {
-                "name": "Authorization",
-                "value": "Bearer {{ $vars.WHATSAPP_ACCESS_TOKEN }}"
-              },
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          },
-          "body": {
-            "parameters": [
-              {
-                "name": "messaging_product",
-                "value": "whatsapp"
-              },
-              {
-                "name": "to",
-                "value": "={{ $json.to }}"
-              },
-              {
-                "name": "type", 
-                "value": "text"
-              },
-              {
-                "name": "text",
-                "value": "={ \"body\": \"{{ $json.message.replace(/\"/g, '\\\\\"') }}\" }"
-              }
-            ]
-          },
-          "options": {
-            "timeout": 10000
-          }
-        },
-        "id": "send-whatsapp-confirmation",
-        "name": "Send WhatsApp Confirmation",
-        "type": "n8n-nodes-base.httpRequestV3",
-        "typeVersion": 4.1,
-        "position": [2880, 400]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Lead procesado correctamente\",\n  \"data\": {\n    \"lead_id\": \"{{ $('Save Lead to Supabase').first().json[0]?.id }}\",\n    \"score\": {{ $('Calculate Lead Score').first().json.score_calidad }},\n    \"nivel_interes\": \"{{ $('Calculate Lead Score').first().json.nivel_interes }}\",\n    \"asesor_asignado\": \"{{ $('Assign Advisor').first().json.notification_data.asesor.nombre }}\",\n    \"asesor_email\": \"{{ $('Assign Advisor').first().json.notification_data.asesor.email }}\",\n    \"intencion_detectada\": \"{{ $('Calculate Lead Score').first().json.intencion_detectada }}\",\n    \"urgencia\": \"{{ $('Calculate Lead Score').first().json.urgencia }}\",\n    \"modelo_interes\": \"{{ $('Calculate Lead Score').first().json.modelo_interes || 'No especificado' }}\"\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\",\n  \"processing_time_ms\": \"{{ Date.now() - new Date($('Extract Lead Data').first().json.webhook_timestamp).getTime() }}\"\n}",
-          "options": {
-            "responseCode": 200
-          }
-        },
-        "id": "webhook-response",
-        "name": "Webhook Success Response",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 2,
-        "position": [3100, 300]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"Webhook inválido: no es un mensaje de WhatsApp Business válido\",\n  \"error_details\": {\n    \"expected_object\": \"whatsapp_business_account\",\n    \"expected_field\": \"messages\",\n    \"received_object\": \"{{ $json.object || 'undefined' }}\",\n    \"received_field\": \"{{ $json.entry?.[0]?.changes?.[0]?.field || 'undefined' }}\"\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
-          "options": {
-            "responseCode": 400
-          }
-        },
-        "id": "invalid-webhook-response",
-        "name": "Invalid Webhook Response",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 2,
-        "position": [460, 500]
-      },
-      {
-        "parameters": {
-          "respondWith": "json",
-          "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"Error interno procesando el lead\",\n  \"error_details\": \"{{ $json.error?.message || 'Error desconocido' }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\",\n  \"support\": \"Contacte al administrador del sistema\"\n}",
-          "options": {
-            "responseCode": 500
-          }
-        },
-        "id": "error-response",
-        "name": "Error Response",
-        "type": "n8n-nodes-base.respondToWebhook",
-        "typeVersion": 2,
-        "position": [1340, 500]
-      }
-    ],
-    "connections": {
-      "WhatsApp Webhook": {
-        "main": [
-          [
+          "conditions": [
             {
-              "node": "Validate WhatsApp Webhook",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Validate WhatsApp Webhook": {
-        "main": [
-          [
-            {
-              "node": "Extract Lead Data",
-              "type": "main",
-              "index": 0
+              "id": "es-lead-valido",
+              "leftValue": "={{ $json.metadata.es_valido }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equal"
+              }
             }
           ],
-          [
-            {
-              "node": "Invalid Webhook Response",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "Extract Lead Data": {
-        "main": [
-          [
-            {
-              "node": "Check Tenant Cache",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
+      "id": "validate-lead",
+      "name": "¿Es Lead Válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "leads",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $json.telefono }}",
+            "nombre": "={{ $json.nombre }}",
+            "mensaje_inicial": "={{ $json.mensaje_inicial }}",
+            "canal_origen": "={{ $json.canal_origen }}",
+            "fecha_contacto": "={{ $json.fecha_contacto }}",
+            "estado": "={{ $json.estado }}",
+            "prioridad": "={{ $json.prioridad }}",
+            "metadata": "={{ JSON.stringify($json.metadata) }}"
+          }
+        },
+        "options": {
+          "queryBatching": "transaction"
+        }
       },
-      "Check Tenant Cache": {
-        "main": [
-          [
+      "id": "insert-lead",
+      "name": "Guardar Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [900, 200],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('webhook-trigger').first().json.headers['x-callback-url'] || 'https://api.optimacx.com/leads/assign' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "node": "Cache Miss?",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Cache Miss?": {
-        "main": [
-          [
-            {
-              "node": "Load Config from Database",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "Use Cached Config",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Load Config from Database": {
-        "main": [
-          [
-            {
-              "node": "Update Cache",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Update Cache": {
-        "main": [
-          [
-            {
-              "node": "Merge Config Paths",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Use Cached Config": {
-        "main": [
-          [
-            {
-              "node": "Merge Config Paths",
-              "type": "main",
-              "index": 1
-            }
-          ]
-        ]
-      },
-      "Merge Config Paths": {
-        "main": [
-          [
-            {
-              "node": "Prepare AI Analysis",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Prepare AI Analysis": {
-        "main": [
-          [
-            {
-              "node": "Gemini AI Analysis",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Gemini AI Analysis": {
-        "main": [
-          [
-            {
-              "node": "Calculate Lead Score",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Calculate Lead Score": {
-        "main": [
-          [
-            {
-              "node": "Get Available Advisors",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Get Available Advisors": {
-        "main": [
-          [
-            {
-              "node": "Assign Advisor",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Assign Advisor": {
-        "main": [
-          [
-            {
-              "node": "Save Lead to Supabase",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Save Lead to Supabase": {
-        "main": [
-          [
-            {
-              "node": "Update Advisor Load",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Update Advisor Load": {
-        "main": [
-          [
-            {
-              "node": "Prepare Email Notification",
-              "type": "main",
-              "index": 0
+              "name": "Content-Type",
+              "value": "application/json"
             },
             {
-              "node": "Prepare WhatsApp Confirmation",
-              "type": "main",
-              "index": 0
+              "name": "X-API-Key",
+              "value": "={{ $vars.OPTIMACX_API_KEY }}"
             }
           ]
-        ]
-      },
-      "Prepare Email Notification": {
-        "main": [
-          [
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
             {
-              "node": "Send Email Notification",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Prepare WhatsApp Confirmation": {
-        "main": [
-          [
+              "name": "lead_id",
+              "value": "={{ $json.id }}"
+            },
             {
-              "node": "Send WhatsApp Confirmation",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Send Email Notification": {
-        "main": [
-          [
+              "name": "telefono",
+              "value": "={{ $json.telefono }}"
+            },
             {
-              "node": "Webhook Success Response",
-              "type": "main",
-              "index": 0
+              "name": "prioridad",
+              "value": "={{ $json.prioridad }}"
             }
           ]
-        ]
+        },
+        "options": {}
       },
-      "Send WhatsApp Confirmation": {
-        "main": [
-          [
-            {
-              "node": "Webhook Success Response",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      }
+      "id": "trigger-assignment",
+      "name": "Activar Asignación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200]
     },
-    "pinData": {},
-    "settings": {
-      "executionOrder": "v1",
-      "saveManualExecutions": true,
-      "callerPolicy": "workflowsFromSameOwner",
-      "errorWorkflow": ""
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.WHATSAPP_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $json.telefono }}"
+            },
+            {
+              "name": "text",
+              "value": "¡Hola {{ $json.nombre }}! 👋 Gracias por contactarnos. Hemos recibido tu consulta y uno de nuestros asesores se pondrá en contacto contigo pronto. ¿En qué vehículo estás interesado?"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-confirmation",
+      "name": "Enviar Confirmación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Webhook WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Procesar Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "staticData": null,
-    "tags": [
-      {
-        "createdAt": "2024-01-01T00:00:00.000Z",
-        "updatedAt": "2024-01-01T00:00:00.000Z",
-        "id": "leads",
-        "name": "leads"
-      },
-      {
-        "createdAt": "2024-01-01T00:00:00.000Z", 
-        "updatedAt": "2024-01-01T00:00:00.000Z",
-        "id": "whatsapp",
-        "name": "whatsapp"
-      },
-      {
-        "createdAt": "2024-01-01T00:00:00.000Z",
-        "updatedAt": "2024-01-01T00:00:00.000Z", 
-        "id": "ai",
-        "name": "ai"
-      },
-      {
-        "createdAt": "2024-01-01T00:00:00.000Z",
-        "updatedAt": "2024-01-01T00:00:00.000Z", 
-        "id": "production-ready",
-        "name": "production-ready"
-      }
-    ],
-    "meta": {
-      "templateCredsSetupCompleted": true
+    "Procesar Mensaje": {
+      "main": [
+        [
+          {
+            "node": "¿Es Lead Válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
-    "id": "lead-processor-whatsapp-fixed",
-    "versionId": "2.0.0"
-  }
+    "¿Es Lead Válido?": {
+      "main": [
+        [
+          {
+            "node": "Guardar Lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Enviar Confirmación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Lead": {
+      "main": [
+        [
+          {
+            "node": "Activar Asignación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["leads", "whatsapp", "procesamiento"],
+  "triggerCount": 0,
+  "updatedAt": "2024-08-09T05:47:00.000Z",
+  "versionId": "proc-whatsapp-leads-v2.1",
+  "name": "Procesador WhatsApp Leads",
+  "active": true,
+  "id": "proc-whatsapp-leads",
+  "hash": "whatsapp-leads-processor"
+}

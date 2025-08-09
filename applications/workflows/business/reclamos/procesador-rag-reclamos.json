@@ -1,113 +1,41 @@
 {
-  "name": "Complaint RAG Processor",
+  "meta": {
+    "instanceId": "rag-processor-001"
+  },
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "webhook/complaint/rag-process",
-        "responseMode": "responseNode",
+        "path": "procesar-rag-reclamo",
         "options": {}
       },
-      "id": "webhook-complaint-input",
-      "name": "Complaint Input Webhook",
+      "id": "webhook-rag-trigger",
+      "name": "Webhook RAG",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [240, 300],
-      "webhookId": "complaint-rag-processor"
+      "webhookId": "rag-claims-processor"
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.tenant_id }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "isNotEmpty"
-              }
-            },
-            {
-              "leftValue": "={{ $json.complaint_text }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "isNotEmpty"
-              }
-            }
-          ],
-          "combineOperation": "all"
-        }
+        "jsCode": "// Procesar consulta de reclamo para RAG\nconst input = $input.first().json;\n\n// Extraer información de la consulta\nconst consulta = {\n  reclamo_id: input.reclamo_id || input.id,\n  query: input.query || input.consulta || input.mensaje,\n  context: input.context || '',\n  user_id: input.user_id || 'sistema',\n  session_id: input.session_id || `session_${Date.now()}`,\n  tipo_busqueda: input.tipo || 'semantica'\n};\n\n// Limpiar y preparar query\nconst queryLimpia = consulta.query\n  .toLowerCase()\n  .replace(/[^a-záéíóúñü0-9\\s]/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\n// Palabras clave para categorización\nconst categorias = {\n  garantia: /garantía|garantia|defecto|falla|reparación|cambio/i,\n  servicio: /servicio|atención|asesor|cita|turno|horario/i,\n  financiero: /financiamiento|crédito|pago|cuota|interés/i,\n  entrega: /entrega|demora|retraso|fecha|plazo/i,\n  tecnico: /motor|frenos|transmisión|eléctrico|mecánico/i\n};\n\nconst categoria = Object.keys(categorias).find(cat => \n  categorias[cat].test(consulta.query)\n) || 'general';\n\nconst resultado = {\n  ...consulta,\n  query_procesada: queryLimpia,\n  categoria_detectada: categoria,\n  timestamp: new Date().toISOString(),\n  embedding_requerido: true\n};\n\nreturn [{ json: resultado }];"
       },
-      "id": "validate-complaint",
-      "name": "Validate Complaint",
-      "type": "n8n-nodes-base.if",
+      "id": "process-query",
+      "name": "Procesar Consulta",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "/*** COMPLAINT RAG PROCESSOR - SRP: Solo análisis IA con RAG ***/\nconst webhookData = $input.first().json;\n\n
-      },
-      "id": "normalize-complaint",
-      "name": "Normalize Complaint",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [680, 300]
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/tenant_config",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "headers": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "sendHeaders": true,
+        "headerParameters": {
           "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
-            },
             {
               "name": "Authorization",
-              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
-            }
-          ]
-        },
-        "qs": {
-          "parameters": [
-            {
-              "name": "concesionario_id",
-              "value": "eq.{{ $json.tenant_id }}"
-            },
-            {
-              "name": "select",
-              "value": "*"
-            }
-          ]
-        }
-      },
-      "id": "load-tenant-config",
-      "name": "Load Tenant Config",
-      "type": "n8n-nodes-base.httpRequestV3",
-      "typeVersion": 4.1,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https:
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "headers": {
-          "parameters": [
-            {
-              "name": "x-goog-api-key", 
-              "value": "={{ $vars.GEMINI_API_KEY }}"
+              "value": "Bearer {{ $vars.OPENAI_API_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -115,40 +43,69 @@
             }
           ]
         },
-        "body": {
+        "sendBody": true,
+        "bodyParameters": {
           "parameters": [
             {
-              "name": "content",
-              "value": "={\n  \"parts\": [\n    {\n      \"text\": \"{{ $('Normalize Complaint').first().json.complaint_text }}\"\n    }\n  ]\n}"
+              "name": "input",
+              "value": "={{ $json.query_procesada }}"
             },
             {
-              "name": "taskType",
-              "value": "RETRIEVAL_QUERY"
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "encoding_format",
+              "value": "float"
             }
           ]
-        }
+        },
+        "options": {}
       },
       "id": "generate-embedding",
-      "name": "Generate Embedding",
-      "type": "n8n-nodes-base.httpRequestV3", 
-      "typeVersion": 4.1,
+      "name": "Generar Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH similarity_search AS (\n  SELECT \n    id,\n    titulo,\n    contenido,\n    categoria,\n    metadata,\n    (embedding <=> '{{ JSON.stringify($json.data[0].embedding) }}'::vector) as distancia\n  FROM documentos_conocimiento\n  WHERE categoria = '{{ $('Procesar Consulta').first().json.categoria_detectada }}'\n     OR categoria = 'general'\n  ORDER BY distancia\n  LIMIT 5\n)\nSELECT \n  *,\n  (1 - distancia) as similitud\nFROM similarity_search\nWHERE distancia < 0.8;",
+        "options": {}
+      },
+      "id": "search-knowledge",
+      "name": "Buscar Conocimiento",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [900, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construir contexto para LLM\nconst query = $('Procesar Consulta').first().json;\nconst documentos = $input.all();\n\n// Construir contexto relevante\nconst contexto = documentos\n  .filter(doc => doc.json.similitud > 0.3)\n  .map(doc => `**${doc.json.titulo}**\\n${doc.json.contenido}`)\n  .join('\\n\\n---\\n\\n');\n\n// Preparar prompt para el LLM\nconst prompt = `Eres un asistente especializado en resolver reclamos de concesionarios automotrices.\n\nCONSULTA DEL CLIENTE:\n${query.query}\n\nCATEGORÍA: ${query.categoria_detectada}\n\nCONTEXTO RELEVANTE:\n${contexto}\n\nINSTRUCCIONES:\n1. Proporciona una respuesta clara y profesional\n2. Usa el contexto proporcionado como base\n3. Si no tienes información suficiente, indica qué pasos seguir\n4. Incluye referencias a políticas o procedimientos cuando sea relevante\n5. Mantén un tono empático y orientado a la solución\n\nRESPUESTA:`;\n\nconst resultado = {\n  query_original: query.query,\n  categoria: query.categoria_detectada,\n  contexto_encontrado: contexto,\n  documentos_relevantes: documentos.length,\n  prompt_generado: prompt,\n  session_id: query.session_id,\n  reclamo_id: query.reclamo_id\n};\n\nreturn [{ json: resultado }];"
+      },
+      "id": "build-context",
+      "name": "Construir Contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [1120, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/rpc/search_knowledge_base",
-        "authentication": "genericCredentialType", 
-        "genericAuthType": "httpHeaderAuth",
-        "headers": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
           "parameters": [
             {
-              "name": "apikey",
-              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
-            },
-            {
               "name": "Authorization",
-              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
+              "value": "Bearer {{ $vars.OPENAI_API_KEY }}"
             },
             {
               "name": "Content-Type",
@@ -156,353 +113,143 @@
             }
           ]
         },
-        "body": {
+        "sendBody": true,
+        "bodyParameters": {
           "parameters": [
             {
-              "name": "query_embedding",
-              "value": "={{ JSON.stringify($('Generate Embedding').first().json.embedding.values) }}"
+              "name": "model",
+              "value": "gpt-4o-mini"
             },
             {
-              "name": "tenant_filter",
-              "value": "={{ $('Normalize Complaint').first().json.tenant_id }}"
+              "name": "messages",
+              "value": "={{ [{ role: 'user', content: $json.prompt_generado }] }}"
             },
             {
-              "name": "similarity_threshold",
-              "value": 0.7
+              "name": "temperature",
+              "value": 0.3
             },
             {
-              "name": "max_results",
-              "value": 10
+              "name": "max_tokens",
+              "value": 1000
             }
           ]
-        }
+        },
+        "options": {}
       },
-      "id": "vector-search",
-      "name": "Vector Search",
-      "type": "n8n-nodes-base.httpRequestV3",
-      "typeVersion": 4.1,
+      "id": "generate-response",
+      "name": "Generar Respuesta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [1340, 300]
     },
     {
       "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ $json.length }}",
-              "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "gt"
-              }
-            }
-          ],
-          "combineOperation": "all"
-        }
-      },
-      "id": "check-knowledge-found",
-      "name": "Check Knowledge Found",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1560, 300]
-    },
-    {
-      "parameters": {
-        "operation": "create",
-        "resource": "execution",
-        "workflowId": "rerank-cohere-documentos",
-        "data": "={{ JSON.stringify({ query: $('Normalize Complaint').first().json.complaint_text, documents: $input.all().map(i => i.json), tenant_id: $('Normalize Complaint').first().json.tenant_id }) }}"
-      },
-      "id": "rerank-cohere-documents",
-      "name": "Rerank Documents (Cohere)",
-      "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [1680, 200]
-    },
-    {
-      "parameters": {
-        "jsCode": "
-      },
-      "id": "build-enhanced-prompt",
-      "name": "Build Enhanced Prompt",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1780, 200]
-    },
-    {
-      "parameters": {
-        "jsCode": "
-      },
-      "id": "build-basic-prompt",
-      "name": "Build Basic Prompt",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1780, 400]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https:
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "headers": {
-          "parameters": [
-            {
-              "name": "x-goog-api-key",
-              "value": "={{ $vars.GEMINI_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
+        "operation": "insert",
+        "table": "rag_interacciones",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "reclamo_id": "={{ $('Construir Contexto').first().json.reclamo_id }}",
+            "query": "={{ $('Construir Contexto').first().json.query_original }}",
+            "categoria": "={{ $('Construir Contexto').first().json.categoria }}",
+            "respuesta": "={{ $json.choices[0].message.content }}",
+            "documentos_utilizados": "={{ $('Construir Contexto').first().json.documentos_relevantes }}",
+            "session_id": "={{ $('Construir Contexto').first().json.session_id }}",
+            "metadata": "={{ JSON.stringify({\n  contexto_longitud: $('Construir Contexto').first().json.contexto_encontrado.length,\n  tokens_utilizados: $json.usage.total_tokens,\n  modelo: 'gpt-4o-mini',\n  timestamp: new Date().toISOString()\n}) }}",
+            "fecha_interaccion": "={{ new Date().toISOString() }}"
+          }
         },
-        "body": {
-          "parameters": [
-            {
-              "name": "contents",
-              "value": "=[\n  {\n    \"parts\": [\n      {\n        \"text\": \"{{ $json.enhanced_prompt }}\"\n      }\n    ]\n  }\n]"
-            },
-            {
-              "name": "generationConfig",
-              "value": "={\n  \"temperature\": 0.1,\n  \"topK\": 40,\n  \"topP\": 0.8,\n  \"maxOutputTokens\": 2048\n}"
-            }
-          ]
-        }
+        "options": {}
       },
-      "id": "gemini-analysis",
-      "name": "Gemini Analysis",
-      "type": "n8n-nodes-base.httpRequestV3",
-      "typeVersion": 4.1,
-      "position": [2000, 300]
+      "id": "log-interaction",
+      "name": "Registrar Interacción",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1560, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "
+        "jsCode": "// Formatear respuesta final\nconst respuestaLLM = $('Generar Respuesta').first().json;\nconst contexto = $('Construir Contexto').first().json;\n\nconst respuestaFinal = {\n  success: true,\n  reclamo_id: contexto.reclamo_id,\n  query: contexto.query_original,\n  categoria: contexto.categoria,\n  respuesta: respuestaLLM.choices[0].message.content,\n  documentos_consultados: contexto.documentos_relevantes,\n  session_id: contexto.session_id,\n  timestamp: new Date().toISOString(),\n  metadata: {\n    tokens_used: respuestaLLM.usage.total_tokens,\n    processing_time: Date.now() - new Date($('Procesar Consulta').first().json.timestamp).getTime(),\n    model: 'gpt-4o-mini'\n  }\n};\n\nreturn [{ json: respuestaFinal }];"
       },
-      "id": "process-ai-response",
-      "name": "Process AI Response",
+      "id": "format-response",
+      "name": "Formatear Respuesta",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2220, 300]
-    },
-    {
-      "parameters": {
-        "operation": "create",
-        "resource": "execution",
-        "workflowId": "complaint-auto-assignment",
-        "data": "={{ JSON.stringify($json) }}"
-      },
-      "id": "trigger-assignment",
-      "name": "Trigger Assignment",
-      "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [2440, 300]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Reclamo procesado con IA + RAG. Iniciando asignación automática.\",\n  \"analysis_data\": {\n    \"classification\": {{ JSON.stringify($('Process AI Response').first().json.ai_analysis.clasificacion) }},\n    \"rag_used\": {{ $('Process AI Response').first().json.processing_metadata.used_rag }},\n    \"documents_found\": {{ $('Process AI Response').first().json.processing_metadata.documents_found }},\n    \"next_step\": \"auto_assignment\"\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
-      },
-      "id": "success-response",
-      "name": "Success Response",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [2660, 300]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"Datos de reclamo inválidos. Verifique tenant_id y complaint_text.\",\n  \"error_details\": {\n    \"tenant_id_present\": {{ !!$json.tenant_id }},\n    \"complaint_text_present\": {{ !!$json.complaint_text }}\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}",
-        "options": {
-          "responseCode": 400
-        }
-      },
-      "id": "error-response",
-      "name": "Error Response",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 2,
-      "position": [460, 500]
+      "position": [1780, 300]
     }
   ],
   "connections": {
-    "Complaint Input Webhook": {
+    "Webhook RAG": {
       "main": [
         [
           {
-            "node": "Validate Complaint",
+            "node": "Procesar Consulta",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Validate Complaint": {
+    "Procesar Consulta": {
       "main": [
         [
           {
-            "node": "Normalize Complaint",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Error Response",
+            "node": "Generar Embedding",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Normalize Complaint": {
+    "Generar Embedding": {
       "main": [
         [
           {
-            "node": "Load Tenant Config",
+            "node": "Buscar Conocimiento",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Load Tenant Config": {
+    "Buscar Conocimiento": {
       "main": [
         [
           {
-            "node": "Generate Embedding",
+            "node": "Construir Contexto",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generate Embedding": {
+    "Construir Contexto": {
       "main": [
         [
           {
-            "node": "Vector Search",
+            "node": "Generar Respuesta",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Vector Search": {
+    "Generar Respuesta": {
       "main": [
         [
           {
-            "node": "Check Knowledge Found",
+            "node": "Registrar Interacción",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Knowledge Found": {
-      "main": [
-        [
+          },
           {
-            "node": "Rerank Documents (Cohere)",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Build Basic Prompt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Rerank Documents (Cohere)": {
-      "main": [
-        [
-          {
-            "node": "Build Enhanced Prompt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Enhanced Prompt": {
-      "main": [
-        [
-          {
-            "node": "Gemini Analysis",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Basic Prompt": {
-      "main": [
-        [
-          {
-            "node": "Gemini Analysis",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gemini Analysis": {
-      "main": [
-        [
-          {
-            "node": "Process AI Response",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Build Enhanced Prompt": {
-      "main": [
-        [
-          {
-            "node": "Process AI Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Basic Prompt": {
-      "main": [
-        [
-          {
-            "node": "Process AI Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Process AI Response": {
-      "main": [
-        [
-          {
-            "node": "Trigger Assignment",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Trigger Assignment": {
-      "main": [
-        [
-          {
-            "node": "Success Response",
+            "node": "Formatear Respuesta",
             "type": "main",
             "index": 0
           }
@@ -515,29 +262,12 @@
     "executionOrder": "v1"
   },
   "staticData": null,
-  "tags": [
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "srp",
-      "name": "srp"
-    },
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "reclamos",
-      "name": "reclamos"
-    },
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "rag",
-      "name": "rag"
-    }
-  ],
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
-  "id": "complaint-rag-processor",
-  "versionId": "1.0.0"
+  "tags": ["reclamos", "rag", "ia", "conocimiento"],
+  "triggerCount": 0,
+  "updatedAt": "2024-08-09T05:47:00.000Z",
+  "versionId": "rag-processor-v2.1",
+  "name": "Procesador RAG Reclamos",
+  "active": true,
+  "id": "rag-claims-processor",
+  "hash": "rag-knowledge-processor"
 }

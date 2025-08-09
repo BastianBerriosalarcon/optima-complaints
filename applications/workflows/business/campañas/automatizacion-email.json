@@ -1,244 +1,258 @@
 {
-  "name": "Campaña - Automatización Email",
-  "description": "Workflow para enviar emails masivos como parte de una campaña de automatización.",
-  "tags": ["campaign", "email", "automation", "marketing"],
+  "name": "Automatización Email Marketing",
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "webhook/email/bulk-send",
-        "responseMode": "responseNode",
+        "method": "POST",
+        "url": "={{ $vars.WEBHOOK_URL }}/campañas/email",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "options": {}
       },
-      "id": "webhook-email-bulk-send",
-      "name": "Webhook Envío Email Masivo",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1.1,
-      "position": [200, 300]
+      "id": "webhook-campañas-email",
+      "name": "Webhook Campañas Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [240, 300],
+      "webhookId": "campaign-email-webhook"
     },
     {
       "parameters": {
-        "values": {
-          "string": [
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "name": "original_tenant_id",
-              "value": "={{ $json.tenant_id }}"
-            },
-            {
-              "name": "original_total_recipients",
-              "value": "={{ $json.recipients.length }}"
-            },
-            {
-              "name": "original_email_subject",
-              "value": "={{ $json.email_subject }}"
-            },
-            {
-              "name": "original_email_html",
-              "value": "={{ $json.email_html }}"
-            },
-            {
-              "name": "original_email_text",
-              "value": "={{ $json.email_text }}"
+              "id": "tenant-validation",
+              "leftValue": "={{ $json.concesionario_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "set-initial-data",
-      "name": "Set Initial Data",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 1,
-      "position": [300, 300]
+      "id": "validar-tenant",
+      "name": "Validar Tenant",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
     },
     {
       "parameters": {
-        "operation": "create",
-        "resource": "execution",
-        "workflowId": "tenant-config-loader",
-        "data": "={{ JSON.stringify({ tenant_id: $json.original_tenant_id, email_subject: $json.original_email_subject, email_html: $json.original_email_html, email_text: $json.original_email_text, recipients: $json.recipients, campaign_id: $json.campaign_id }) }}"
-      },
-      "id": "trigger-tenant-loader",
-      "name": "Cargar Configuración Tenant",
-      "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
-      "position": [400, 300]
-    },
-    {
-      "parameters": {
-        "functionCode": "
-      },
-      "id": "prepare-recipients",
-      "name": "Preparar Destinatarios",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [600, 300]
-    },
-    {
-      "parameters": {
-        "mode": "iterate"
-      },
-      "id": "iterate-recipients",
-      "name": "Iterar Destinatarios",
-      "type": "n8n-nodes-base.itemLists",
-      "typeVersion": 1,
-      "position": [800, 300]
-    },
-    {
-      "parameters": {
-        "functionCode": "
-      },
-      "id": "prepare-email-message",
-      "name": "Preparar Mensaje Email",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [1000, 300]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $vars.N8N_WEBHOOK_URL }}/webhook/send-email", 
-        "bodyParameters": {
-          "parameters": [
+        "operation": "select",
+        "schema": {
+          "value": "public"
+        },
+        "table": {
+          "value": "clientes"
+        },
+        "where": {
+          "values": [
             {
-              "name": "to",
-              "value": "={{ $json.to }}"
+              "column": "concesionario_id",
+              "condition": "equal",
+              "value": "={{ $json.concesionario_id }}"
             },
             {
-              "name": "subject",
-              "value": "={{ $json.subject }}"
-            },
-            {
-              "name": "html",
-              "value": "={{ $json.html }}"
-            },
-            {
-              "name": "text",
-              "value": "={{ $json.text }}"
-            },
-            {
-              "name": "from",
-              "value": "={{ $json.from }}"
+              "column": "activo",
+              "condition": "equal",
+              "value": true
             }
           ]
         },
         "options": {}
       },
-      "id": "send-email-message",
-      "name": "Enviar Mensaje Email",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [1200, 300]
+      "id": "obtener-clientes",
+      "name": "Obtener Clientes",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 240],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase OptimaCX"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "email-data",
+              "name": "email_data",
+              "value": "={{ {\n  destinatario: $json.email,\n  nombre: $json.nombre_completo,\n  asunto: $('webhook-campañas-email').first().$json.asunto,\n  plantilla: $('webhook-campañas-email').first().$json.plantilla,\n  variables: {\n    nombre_cliente: $json.nombre_completo,\n    concesionario: $json.concesionario_nombre,\n    telefono: $json.telefono,\n    contenido_personalizado: $('webhook-campañas-email').first().$json.contenido || ''\n  }\n} }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "preparar-email",
+      "name": "Preparar Email",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [900, 240]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email_data.destinatario }}",
+        "subject": "={{ $json.email_data.asunto }}",
+        "emailType": "html",
+        "message": "=<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"utf-8\">\n    <style>\n        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n        .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n        .header { background-color: #f8f9fa; padding: 20px; text-align: center; }\n        .content { padding: 20px; }\n        .footer { background-color: #f8f9fa; padding: 15px; font-size: 12px; }\n    </style>\n</head>\n<body>\n    <div class=\"container\">\n        <div class=\"header\">\n            <h2>{{ $json.email_data.variables.concesionario }}</h2>\n        </div>\n        <div class=\"content\">\n            <p>Estimado/a {{ $json.email_data.variables.nombre_cliente }},</p>\n            {{ $json.email_data.variables.contenido_personalizado }}\n            <p>Saludos cordiales,<br>Equipo {{ $json.email_data.variables.concesionario }}</p>\n        </div>\n        <div class=\"footer\">\n            <p>Este es un mensaje automático. Para consultas, contáctanos al {{ $json.email_data.variables.telefono }}</p>\n        </div>\n    </div>\n</body>\n</html>",
+        "options": {}
+      },
+      "id": "enviar-email",
+      "name": "Enviar Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1120, 240],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-tenant",
+          "name": "SMTP Tenant"
+        }
+      }
     },
     {
       "parameters": {
         "operation": "insert",
-        "schema": "public",
-        "table": "campaign_logs", 
-        "columns": "campaign_id, tenant_id, recipient_id, email, message_content, status, response_data, created_at",
-        "additionalFields": {
-          "values": "={{ [$json.campaign_id, $json.tenant_id, $json.recipient_id, $json.to, $json.original_email_html || $json.original_email_text, $node[\"Enviar Mensaje Email\"].json.success ? 'sent' : 'failed', JSON.stringify($node[\"Enviar Mensaje Email\"].json), new Date().toISOString()] }}"
-        }
+        "schema": {
+          "value": "public"
+        },
+        "table": {
+          "value": "log_campañas"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "concesionario_id": "={{ $('webhook-campañas-email').first().$json.concesionario_id }}",
+            "tipo_campaña": "email",
+            "destinatario": "={{ $json.email_data.destinatario }}",
+            "asunto": "={{ $json.email_data.asunto }}",
+            "estado": "enviado",
+            "fecha_envio": "={{ new Date().toISOString() }}",
+            "metadata": "={{ JSON.stringify($json.email_data) }}"
+          }
+        },
+        "options": {}
       },
-      "id": "log-campaign-send",
-      "name": "Registrar Envío Campaña",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [1400, 300]
+      "id": "registrar-envio",
+      "name": "Registrar Envío",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 240],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase OptimaCX"
+        }
+      }
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Campaña de Email iniciada. Verifique logs para el estado de cada envío.\",\n  \"campaign_id\": \"={{ $json.campaign_id || 'manual_email_bulk_send' }}\",\n  \"total_recipients\": \"={{ $('Set Initial Data').first().json.original_total_recipients }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+        "responseBody": "={{ {\n  success: true,\n  mensaje: 'Campaña de email ejecutada exitosamente',\n  total_enviados: $('obtener-clientes').all().length,\n  concesionario_id: $('webhook-campañas-email').first().$json.concesionario_id\n} }}"
       },
-      "id": "success-response",
+      "id": "respuesta-exitosa",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [1600, 300]
+      "typeVersion": 1.1,
+      "position": [1560, 240]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: false,\n  error: 'Tenant ID requerido',\n  mensaje: 'El campo concesionario_id es obligatorio para ejecutar campañas'\n} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error-tenant",
+      "name": "Error Tenant",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 400]
     }
   ],
+  "pinData": {},
   "connections": {
-    "Webhook Envío Email Masivo": {
+    "webhook-campañas-email": {
       "main": [
         [
           {
-            "node": "Set Initial Data",
+            "node": "validar-tenant",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Set Initial Data": {
+    "validar-tenant": {
       "main": [
         [
           {
-            "node": "Cargar Configuración Tenant",
+            "node": "obtener-clientes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "error-tenant",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Cargar Configuración Tenant": {
+    "obtener-clientes": {
       "main": [
         [
           {
-            "node": "Preparar Destinatarios",
+            "node": "preparar-email",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Preparar Destinatarios": {
+    "preparar-email": {
       "main": [
         [
           {
-            "node": "Iterar Destinatarios",
+            "node": "enviar-email",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Iterar Destinatarios": {
+    "enviar-email": {
       "main": [
         [
           {
-            "node": "Preparar Mensaje Email",
+            "node": "registrar-envio",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Preparar Mensaje Email": {
+    "registrar-envio": {
       "main": [
         [
           {
-            "node": "Enviar Mensaje Email",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Enviar Mensaje Email": {
-      "main": [
-        [
-          {
-            "node": "Registrar Envío Campaña",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Registrar Envío Campaña": {
-      "main": [
-        [
-          {
-            "node": "Respuesta Exitosa",
+            "node": "respuesta-exitosa",
             "type": "main",
             "index": 0
           }
@@ -246,9 +260,22 @@
       ]
     }
   },
+  "active": false,
   "settings": {
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  }
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "campaign-email-automation"
+  },
+  "id": "automatizacion-email",
+  "tags": [
+    {
+      "createdAt": "2024-01-15T10:00:00.000Z",
+      "updatedAt": "2024-01-15T10:00:00.000Z",
+      "id": "campaigns",
+      "name": "campaigns"
+    }
+  ]
 }

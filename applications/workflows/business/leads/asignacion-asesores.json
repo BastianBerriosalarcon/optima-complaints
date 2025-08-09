@@ -1,267 +1,268 @@
 {
-  "name": "Lead - Gestión y Persistencia",
-  "description": "Workflow enfocado en crear/actualizar leads y persistir información en base de datos",
-  "tags": ["lead", "database", "crud", "srp"],
+  "meta": {
+    "instanceId": "asign-asesores-001"
+  },
   "nodes": [
     {
       "parameters": {
-        "workflowId": "{{ $json.workflowId }}"
+        "httpMethod": "POST",
+        "path": "asignar-asesor-lead",
+        "options": {}
       },
-      "id": "workflow-trigger",
-      "name": "Trigger del Workflow",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 1,
-      "position": [200, 300]
+      "id": "webhook-assignment",
+      "name": "Webhook Asignación",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "lead-assignment-trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  l.*,\n  c.id as concesionario_id,\n  c.nombre as concesionario_nombre\nFROM leads l\nLEFT JOIN concesionarios c ON l.concesionario_id = c.id\nWHERE l.id = {{ $json.lead_id }}\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "get-lead-data",
+      "name": "Obtener Datos Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [460, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH asesor_cargas AS (\n  SELECT \n    a.id,\n    a.nombre,\n    a.email,\n    a.telefono,\n    a.concesionario_id,\n    a.especialidad,\n    a.activo,\n    COALESCE(COUNT(l.id), 0) as leads_asignados,\n    a.capacidad_maxima,\n    (a.capacidad_maxima - COALESCE(COUNT(l.id), 0)) as capacidad_disponible\n  FROM asesores a\n  LEFT JOIN leads l ON a.id = l.asesor_id \n    AND l.estado IN ('nuevo', 'contactado', 'seguimiento')\n    AND l.fecha_contacto >= NOW() - INTERVAL '7 days'\n  WHERE a.activo = true\n    AND ({{ $json.concesionario_id ? 'a.concesionario_id = ' + $json.concesionario_id : '1=1' }})\n  GROUP BY a.id, a.nombre, a.email, a.telefono, a.concesionario_id, a.especialidad, a.activo, a.capacidad_maxima\n  HAVING capacidad_disponible > 0\n)\nSELECT *\nFROM asesor_cargas\nORDER BY \n  CASE \n    WHEN '{{ $json.prioridad }}' = 'alta' THEN especialidad = 'premium'\n    ELSE 1\n  END DESC,\n  capacidad_disponible DESC,\n  leads_asignados ASC\nLIMIT 1;",
+        "options": {}
+      },
+      "id": "find-best-advisor",
+      "name": "Encontrar Mejor Asesor",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [680, 300],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.context.has_existing_lead }}",
-              "operation": "equal",
-              "value2": true
+              "id": "asesor-disponible",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "is-existing-lead",
-      "name": "¿Lead Existente?",
+      "id": "check-advisor-available",
+      "name": "¿Asesor Disponible?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [400, 300]
+      "typeVersion": 2,
+      "position": [900, 300]
     },
     {
       "parameters": {
-        "functionCode": "
-  estado: estadoMap[analysis.intencion] || 'nuevo',
-  origen: 'whatsapp',
-  intencion_detectada: analysis.intencion,
-  nivel_interes: analysis.nivel_interes,
-      },
-      "id": "prepare-new-lead",
-      "name": "Preparar Nuevo Lead",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [600, 240]
-    },
-    {
-      "parameters": {
-        "functionCode": "
-  nivel_interes: analysis.nivel_interes,
-      },
-      "id": "prepare-update-lead",
-      "name": "Preparar Actualización Lead",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [600, 360]
-    },
-    {
-      "parameters": {
-        "operation": "insert",
-        "schema": "public",
+        "operation": "update",
         "table": "leads",
-        "columns": "concesionario_id, telefono_cliente, nombre_cliente, email_cliente, estado, origen, intencion_detectada, nivel_interes, lead_score, vehiculo_interes, presupuesto_estimado, notas_ia, metadata",
-        "additionalFields": {
-          "values": "={{ [$json.concesionario_id, $json.telefono_cliente, $json.nombre_cliente, $json.email_cliente, $json.estado, $json.origen, $json.intencion_detectada, $json.nivel_interes, $json.lead_score, JSON.stringify($json.vehiculo_interes), $json.presupuesto_estimado, $json.notas_ia, JSON.stringify($json.metadata)] }}"
-        }
-      },
-      "id": "create-lead",
-      "name": "Crear Lead en BD",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [800, 240]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE leads SET nombre_cliente = COALESCE($2, nombre_cliente), email_cliente = COALESCE($3, email_cliente), nivel_interes = $4, lead_score = $5, vehiculo_interes = COALESCE($6::jsonb, vehiculo_interes), presupuesto_estimado = COALESCE($7, presupuesto_estimado), notas_ia = CONCAT(notas_ia, '\n', $8), metadata = metadata || $9::jsonb, updated_at = NOW() WHERE id = $1 RETURNING *",
-        "additionalFields": {
-          "queryParameters": "={{ [$json.lead_id, $json.nombre_cliente, $json.email_cliente, $json.nivel_interes, $json.lead_score, JSON.stringify($json.vehiculo_interes), $json.presupuesto_estimado, $json.nueva_nota, JSON.stringify($json.metadata_update)] }}"
-        }
-      },
-      "id": "update-lead",
-      "name": "Actualizar Lead en BD",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [800, 360]
-    },
-    {
-      "parameters": {
-      },
-      "id": "format-success-response",
-      "name": "Formatear Respuesta",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [1000, 300]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO audit_log (entity_type, entity_id, action, tenant_id, user_id, changes, metadata, created_at) VALUES ('lead', $1, $2, $3, 'system', $4, $5, NOW())",
-        "additionalFields": {
-          "queryParameters": "={{ [$json.lead_id, $json.operation, $json.processing.tenant_id, JSON.stringify($json.lead_data), JSON.stringify($json.processing)] }}"
-        }
-      },
-      "id": "log-audit",
-      "name": "Registrar Auditoría",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [1200, 300]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "string": [
+        "updateKey": "id",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "asesor_id": "={{ $('Encontrar Mejor Asesor').first().json.id }}",
+            "estado": "asignado",
+            "fecha_asignacion": "={{ new Date().toISOString() }}",
+            "metadata": "={{ JSON.stringify({ \n  asesor_nombre: $('Encontrar Mejor Asesor').first().json.nombre,\n  asesor_email: $('Encontrar Mejor Asesor').first().json.email,\n  capacidad_previa: $('Encontrar Mejor Asesor').first().json.leads_asignados,\n  fecha_asignacion: new Date().toISOString()\n}) }}"
+          }
+        },
+        "where": {
+          "values": [
             {
-              "value1": "={{ $json.next_step.workflow }}",
-              "operation": "equal",
-              "value2": "advisor-assignment"
+              "column": "id",
+              "condition": "=",
+              "value": "={{ $('webhook-assignment').first().json.lead_id }}"
             }
           ]
+        },
+        "options": {}
+      },
+      "id": "update-lead-assignment",
+      "name": "Actualizar Asignación Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1120, 200],
+      "credentials": {
+        "postgres": {
+          "id": "supabase-main",
+          "name": "Supabase Main DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Encontrar Mejor Asesor').first().json.email }}",
+        "subject": "🎯 Nuevo Lead Asignado - {{ $('Obtener Datos Lead').first().json.nombre }}",
+        "message": "=Hola {{ $('Encontrar Mejor Asesor').first().json.nombre }},\n\nSe te ha asignado un nuevo lead:\n\n👤 **Cliente:** {{ $('Obtener Datos Lead').first().json.nombre }}\n📱 **Teléfono:** {{ $('Obtener Datos Lead').first().json.telefono }}\n💬 **Mensaje inicial:** {{ $('Obtener Datos Lead').first().json.mensaje_inicial }}\n🔥 **Prioridad:** {{ $('Obtener Datos Lead').first().json.prioridad }}\n📅 **Fecha contacto:** {{ new Date($('Obtener Datos Lead').first().json.fecha_contacto).toLocaleString() }}\n\n**Acción requerida:** Contactar al cliente en las próximas 2 horas.\n\nAccede al CRM: https://crm.optimacx.com/leads/{{ $('webhook-assignment').first().json.lead_id }}\n\nSaludos,\nSistema OptimaCX",
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "ccEmail": "gerencia@optimacx.com",
+          "bccEmail": ""
         }
       },
-      "id": "check-next-workflow",
-      "name": "¿Requiere Asesor?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [1400, 300]
+      "id": "notify-advisor",
+      "name": "Notificar Asesor",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 200],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-optimacx",
+          "name": "SMTP OptimaCX"
+        }
+      }
     },
     {
       "parameters": {
-        "operation": "create",
-        "resource": "execution",
-        "workflowId": "lead-notifications-workflow",
-        "data": "={{ JSON.stringify($json) }}"
+        "method": "POST",
+        "url": "https://api.whatsapp.com/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $vars.WHATSAPP_TOKEN }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $('Encontrar Mejor Asesor').first().json.telefono }}"
+            },
+            {
+              "name": "text",
+              "value": "🎯 Nuevo lead asignado: {{ $('Obtener Datos Lead').first().json.nombre }} - {{ $('Obtener Datos Lead').first().json.telefono }}. Mensaje: {{ $('Obtener Datos Lead').first().json.mensaje_inicial }}. Prioridad: {{ $('Obtener Datos Lead').first().json.prioridad }}. Contactar ASAP."
+            }
+          ]
+        },
+        "options": {}
       },
-      "id": "trigger-advisor-workflow",
-      "name": "Activar Asignación Asesor",
-      "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
-      "position": [1600, 260]
+      "id": "whatsapp-notification",
+      "name": "WhatsApp Asesor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 400]
     },
     {
       "parameters": {
-        "operation": "create",
-        "resource": "execution",
-        "workflowId": "automated-response-workflow",
-        "data": "={{ JSON.stringify($json) }}"
+        "sendTo": "gerencia@optimacx.com",
+        "subject": "⚠️ Sin Asesores Disponibles - Lead No Asignado",
+        "message": "=**ALERTA:** No se pudo asignar el siguiente lead por falta de asesores disponibles:\n\n👤 **Cliente:** {{ $('Obtener Datos Lead').first().json.nombre }}\n📱 **Teléfono:** {{ $('Obtener Datos Lead').first().json.telefono }}\n💬 **Mensaje:** {{ $('Obtener Datos Lead').first().json.mensaje_inicial }}\n🔥 **Prioridad:** {{ $('Obtener Datos Lead').first().json.prioridad }}\n\n**Acción requerida:** Revisar capacidad de asesores o asignación manual.\n\nAcceso directo: https://crm.optimacx.com/leads/{{ $('webhook-assignment').first().json.lead_id }}\n\nSistema OptimaCX",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
       },
-      "id": "trigger-response-workflow",
-      "name": "Activar Respuesta Automática",
-      "type": "n8n-nodes-base.n8n",
-      "typeVersion": 1,
-      "position": [1600, 340]
+      "id": "alert-no-advisor",
+      "name": "Alerta Sin Asesor",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1120, 400],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-optimacx",
+          "name": "SMTP OptimaCX"
+        }
+      }
     }
   ],
   "connections": {
-    "Trigger del Workflow": {
+    "Webhook Asignación": {
       "main": [
         [
           {
-            "node": "¿Lead Existente?",
+            "node": "Obtener Datos Lead",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "¿Lead Existente?": {
+    "Obtener Datos Lead": {
       "main": [
         [
           {
-            "node": "Preparar Actualización Lead",
+            "node": "Encontrar Mejor Asesor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encontrar Mejor Asesor": {
+      "main": [
+        [
+          {
+            "node": "¿Asesor Disponible?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Asesor Disponible?": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Asignación Lead",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Preparar Nuevo Lead",
+            "node": "Alerta Sin Asesor",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Preparar Nuevo Lead": {
+    "Actualizar Asignación Lead": {
       "main": [
         [
           {
-            "node": "Crear Lead en BD",
+            "node": "Notificar Asesor",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Preparar Actualización Lead": {
-      "main": [
-        [
+          },
           {
-            "node": "Actualizar Lead en BD",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Crear Lead en BD": {
-      "main": [
-        [
-          {
-            "node": "Formatear Respuesta",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Actualizar Lead en BD": {
-      "main": [
-        [
-          {
-            "node": "Formatear Respuesta",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Formatear Respuesta": {
-      "main": [
-        [
-          {
-            "node": "Registrar Auditoría",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Registrar Auditoría": {
-      "main": [
-        [
-          {
-            "node": "¿Requiere Asesor?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Requiere Asesor?": {
-      "main": [
-        [
-          {
-            "node": "Activar Asignación Asesor",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Activar Respuesta Automática",
+            "node": "WhatsApp Asesor",
             "type": "main",
             "index": 0
           }
@@ -269,9 +270,17 @@
       ]
     }
   },
+  "pinData": {},
   "settings": {
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  }
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["leads", "asignacion", "asesores"],
+  "triggerCount": 0,
+  "updatedAt": "2024-08-09T05:47:00.000Z",
+  "versionId": "asign-asesores-v2.1",
+  "name": "Asignación Automática Asesores",
+  "active": true,
+  "id": "asign-asesores-auto",
+  "hash": "automatic-advisor-assignment"
 }

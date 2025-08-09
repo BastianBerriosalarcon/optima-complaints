@@ -1,7 +1,13 @@
 {
   "name": "Leads - Filtro de Leads Existentes",
   "description": "Recibe una lista de clientes y la filtra para excluir aquellos que ya son leads activos en el sistema.",
-  "tags": ["leads", "prospeccion", "filtro", "duplicados", "srp"],
+  "tags": [
+    "leads",
+    "prospeccion",
+    "filtro",
+    "duplicados",
+    "srp"
+  ],
   "nodes": [
     {
       "parameters": {
@@ -10,8 +16,11 @@
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2,
-      "position": [240, 300]
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -24,8 +33,11 @@
       "id": "query-existing-leads",
       "name": "1. Consultar Leads Activos",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2,
-      "position": [460, 300]
+      "typeVersion": 2.1,
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -34,8 +46,11 @@
       "id": "filter-clients",
       "name": "2. Filtrar Clientes",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [680, 300]
+      "typeVersion": 2.1,
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -47,8 +62,11 @@
       "id": "trigger-sender-workflow",
       "name": "3. Disparar Envío WhatsApp",
       "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2,
-      "position": [900, 300]
+      "typeVersion": 2.1,
+      "position": [
+        900,
+        300
+      ]
     }
   ],
   "connections": {
@@ -86,5 +104,7 @@
       ]
     }
   },
-  "settings": { "saveExecutionProgress": true }
+  "settings": {
+    "saveExecutionProgress": true
+  }
 }
