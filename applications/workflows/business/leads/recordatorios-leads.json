@@ -1,7 +1,7 @@
 {
-  "meta": {
-    "instanceId": "leads-reminders-system-001"
-  },
+  "name": "Recordatorios de Leads",
+  "description": "Sistema automatizado de recordatorios para leads según políticas de escalación",
+  "tags": ["leads", "recordatorios", "escalación", "seguimiento", "asesores"],
   "nodes": [
     {
       "parameters": {
@@ -15,146 +15,123 @@
         }
       },
       "id": "schedule-trigger",
-      "name": "Trigger Cada 2 Horas",
+      "name": "Programar Recordatorios",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.1,
       "position": [240, 300]
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Obtener leads que requieren recordatorios según las políticas de escalación\nWITH leads_requieren_recordatorio AS (\n  -- Leads asignados sin primer contacto (> 2 horas)\n  SELECT \n    'primer_contacto' as tipo_recordatorio,\n    'alta' as prioridad,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.modelo_interes,\n    l.estado,\n    l.prioridad as lead_prioridad,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    a.email as asesor_email,\n    l.fecha_asignacion,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_asignacion))/3600 as horas_sin_contacto,\n    NULL as fecha_ultimo_recordatorio\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.estado = 'asignado'\n    AND l.fecha_primer_contacto IS NULL\n    AND l.fecha_asignacion < NOW() - INTERVAL '2 hours'\n    AND l.fecha_asignacion > NOW() - INTERVAL '48 hours'\n    AND a.activo = true\n    \n  UNION ALL\n  \n  -- Leads en seguimiento sin actividad reciente (> 24 horas)\n  SELECT \n    'seguimiento_inactivo' as tipo_recordatorio,\n    CASE WHEN l.prioridad = 'alta' THEN 'alta' ELSE 'media' END as prioridad,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.modelo_interes,\n    l.estado,\n    l.prioridad as lead_prioridad,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    a.email as asesor_email,\n    l.fecha_ultimo_seguimiento,\n    EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto)))/3600 as horas_sin_contacto,\n    NULL as fecha_ultimo_recordatorio\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.estado IN ('contactado', 'seguimiento', 'en_seguimiento')\n    AND COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto) < NOW() - INTERVAL '24 hours'\n    AND l.fecha_creacion > NOW() - INTERVAL '30 days'\n    AND a.activo = true\n    \n  UNION ALL\n  \n  -- Leads prioritarios sin actividad (> 4 horas) - Escalación crítica\n  SELECT \n    'escalacion_critica' as tipo_recordatorio,\n    'critica' as prioridad,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.modelo_interes,\n    l.estado,\n    l.prioridad as lead_prioridad,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    a.email as asesor_email,\n    l.fecha_asignacion,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_asignacion))/3600 as horas_sin_contacto,\n    NULL as fecha_ultimo_recordatorio\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.prioridad = 'alta'\n    AND l.estado = 'asignado'\n    AND l.fecha_primer_contacto IS NULL\n    AND l.fecha_asignacion < NOW() - INTERVAL '4 hours'\n    AND a.activo = true\n    \n  UNION ALL\n  \n  -- Leads tibios que requieren reactivación (> 7 días)\n  SELECT \n    'reactivacion_tibio' as tipo_recordatorio,\n    'baja' as prioridad,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.modelo_interes,\n    l.estado,\n    l.prioridad as lead_prioridad,\n    l.concesionario_id,\n    con.nombre as concesionario_nombre,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    a.email as asesor_email,\n    l.fecha_ultimo_seguimiento,\n    EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto)))/24/3600 as dias_sin_contacto,\n    NULL as fecha_ultimo_recordatorio\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.estado IN ('contactado', 'seguimiento')\n    AND COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto) < NOW() - INTERVAL '7 days'\n    AND l.fecha_creacion > NOW() - INTERVAL '60 days'\n    AND a.activo = true\n)\nSELECT \n  lrr.*\nFROM leads_requieren_recordatorio lrr\nWHERE NOT EXISTS (\n  -- Evitar spam: no enviar si ya se envió recordatorio en las últimas 4 horas\n  SELECT 1 FROM recordatorios_leads rl\n  WHERE rl.lead_id = lrr.lead_id\n    AND rl.tipo_recordatorio = lrr.tipo_recordatorio\n    AND rl.enviado_at > NOW() - INTERVAL '4 hours'\n)\nORDER BY \n  CASE prioridad\n    WHEN 'critica' THEN 1\n    WHEN 'alta' THEN 2\n    WHEN 'media' THEN 3\n    WHEN 'baja' THEN 4\n  END,\n  horas_sin_contacto DESC\nLIMIT 30; -- Procesar máximo 30 recordatorios por ejecución",
-        "options": {}
+        "jsCode": "// Validar configuración de recordatorios\ntry {\n  const configuracion = {\n    intervalos_horas: 2,\n    max_recordatorios_batch: 30,\n    politicas_escalacion: {\n      primer_contacto: {\n        tiempo_limite_horas: 2,\n        prioridad: 'alta',\n        ventana_maxima_horas: 48\n      },\n      seguimiento_inactivo: {\n        tiempo_limite_horas: 24,\n        prioridad: 'media',\n        ventana_maxima_dias: 30\n      },\n      escalacion_critica: {\n        tiempo_limite_horas: 4,\n        prioridad: 'critica',\n        solo_alta_prioridad: true\n      },\n      reactivacion_tibio: {\n        tiempo_limite_dias: 7,\n        prioridad: 'baja',\n        ventana_maxima_dias: 60\n      }\n    },\n    frecuencia_minima_recordatorios_horas: 4,\n    templates_disponibles: ['primer_contacto', 'seguimiento', 'escalacion', 'reactivacion'],\n    timestamp: new Date().toISOString()\n  };\n  \n  return [{\n    json: {\n      configuracion_valida: true,\n      configuracion,\n      estado: 'inicializado'\n    }\n  }];\n  \n} catch (error) {\n  return [{\n    json: {\n      configuracion_valida: false,\n      error: error.message,\n      estado: 'error_configuracion',\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
       },
-      "id": "get-reminders",
-      "name": "Obtener Recordatorios Pendientes",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [460, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Procesar y categorizar recordatorios por tipo y prioridad\nconst items = $input.all();\nconst recordatoriosPorTipo = {\n  primer_contacto: [],\n  seguimiento_inactivo: [],\n  escalacion_critica: [],\n  reactivacion_tibio: []\n};\n\n// Templates de recordatorios\nconst templates = {\n  primer_contacto: {\n    titulo: '⏰ Recordatorio: Lead sin contactar',\n    urgencia: 'media',\n    accion: 'Contactar al cliente inmediatamente',\n    template_email: 'primer_contacto'\n  },\n  seguimiento_inactivo: {\n    titulo: '📋 Recordatorio: Lead requiere seguimiento',\n    urgencia: 'media',\n    accion: 'Realizar seguimiento programado',\n    template_email: 'seguimiento'\n  },\n  escalacion_critica: {\n    titulo: '🚨 ESCALACIÓN: Lead prioritario abandonado',\n    urgencia: 'critica',\n    accion: 'Intervención inmediata requerida',\n    template_email: 'escalacion'\n  },\n  reactivacion_tibio: {\n    titulo: '🔄 Recordatorio: Reactivar lead tibio',\n    urgencia: 'baja',\n    accion: 'Intentar reactivación del cliente',\n    template_email: 'reactivacion'\n  }\n};\n\nfor (const item of items) {\n  const data = item.json;\n  const template = templates[data.tipo_recordatorio];\n  \n  if (!template) continue;\n  \n  // Calcular tiempo transcurrido en formato legible\n  let tiempoTranscurrido = '';\n  if (data.horas_sin_contacto) {\n    const horas = Math.floor(data.horas_sin_contacto);\n    const mins = Math.floor((data.horas_sin_contacto % 1) * 60);\n    if (horas >= 24) {\n      const dias = Math.floor(horas / 24);\n      const horasRest = horas % 24;\n      tiempoTranscurrido = `${dias}d ${horasRest}h sin contacto`;\n    } else {\n      tiempoTranscurrido = `${horas}h ${mins}m sin contacto`;\n    }\n  } else if (data.dias_sin_contacto) {\n    tiempoTranscurrido = `${Math.floor(data.dias_sin_contacto)} días sin contacto`;\n  }\n  \n  const recordatorio = {\n    // Datos básicos\n    tipo_recordatorio: data.tipo_recordatorio,\n    prioridad: data.prioridad,\n    titulo: template.titulo,\n    urgencia: template.urgencia,\n    accion_requerida: template.accion,\n    template_email: template.template_email,\n    \n    // Datos del lead\n    lead_id: data.lead_id,\n    cliente_nombre: data.nombre_cliente,\n    cliente_telefono: data.telefono_cliente,\n    modelo_interes: data.modelo_interes,\n    estado_lead: data.estado,\n    prioridad_lead: data.lead_prioridad,\n    \n    // Datos del concesionario\n    concesionario_id: data.concesionario_id,\n    concesionario_nombre: data.concesionario_nombre,\n    \n    // Datos del asesor\n    asesor_id: data.asesor_asignado_id,\n    asesor_nombre: data.asesor_nombre,\n    asesor_email: data.asesor_email,\n    \n    // Tiempo y métricas\n    tiempo_transcurrido: tiempoTranscurrido,\n    horas_sin_contacto: data.horas_sin_contacto,\n    \n    // Metadatos\n    timestamp: new Date().toISOString(),\n    requiere_escalamiento: data.prioridad === 'critica',\n    link_crm: `https://crm.optimacx.com/leads/${data.lead_id}`\n  };\n  \n  recordatoriosPorTipo[data.tipo_recordatorio].push(recordatorio);\n}\n\n// Convertir a formato para N8N\nconst resultado = [];\nfor (const [tipo, recordatorios] of Object.entries(recordatoriosPorTipo)) {\n  if (recordatorios.length > 0) {\n    resultado.push({\n      json: {\n        tipo_recordatorio: tipo,\n        total_recordatorios: recordatorios.length,\n        recordatorios: recordatorios,\n        timestamp_procesamiento: new Date().toISOString()\n      }\n    });\n  }\n}\n\nreturn resultado;"
-      },
-      "id": "process-reminders",
-      "name": "Procesar Recordatorios",
+      "id": "validate-config",
+      "name": "Validar Configuración",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [680, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Expandir recordatorios individuales para envío\nconst tiposData = $input.all();\nconst recordatoriosIndividuales = [];\n\nfor (const tipoItem of tiposData) {\n  const tipoData = tipoItem.json;\n  \n  for (const recordatorio of tipoData.recordatorios) {\n    recordatoriosIndividuales.push({ json: recordatorio });\n  }\n}\n\nreturn recordatoriosIndividuales;"
-      },
-      "id": "expand-individual",
-      "name": "Expandir Recordatorios",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "sendTo": "={{ $json.asesor_email }}",
-        "cc": "={{ $json.urgencia === 'critica' ? 'jefe.ventas@' + $json.concesionario_id + '.optimacx.com' : '' }}",
-        "subject": "{{ $json.titulo }} - {{ $json.cliente_nombre }}",
-        "message": "=**{{ $json.titulo.toUpperCase() }}**\\n\\n👤 **Detalles del Lead:**\\n• Cliente: {{ $json.cliente_nombre }}\\n• Teléfono: {{ $json.cliente_telefono }}\\n• Modelo de Interés: {{ $json.modelo_interes }}\\n• Estado Actual: {{ $json.estado_lead.toUpperCase() }}\\n• Prioridad: {{ $json.prioridad_lead.toUpperCase() }}\\n• Concesionario: {{ $json.concesionario_nombre }}\\n\\n⏰ **Tiempo sin Contacto:**\\n{{ $json.tiempo_transcurrido }}\\n\\n⚡ **Acción Requerida:**\\n{{ $json.accion_requerida }}\\n\\n{{ $json.urgencia === 'critica' ? '🚨 **NOTA CRÍTICA:** Este es un lead de alta prioridad que requiere atención INMEDIATA. Se ha escalado automáticamente al Jefe de Ventas.' : '' }}\\n\\n🔗 **Acciones Rápidas:**\\n• Ver Lead en CRM: {{ $json.link_crm }}\\n• Llamar Cliente: {{ $json.cliente_telefono }}\\n• WhatsApp: https://wa.me/{{ $json.cliente_telefono.replace(/\\D/g, '') }}\\n\\n💡 **Recordatorio:** \\n{{ $json.template_email === 'primer_contacto' ? 'El primer contacto es crucial para la conversión. Contacte al cliente dentro de las próximas 2 horas.' : '' }}\\n{{ $json.template_email === 'seguimiento' ? 'Mantenga el momentum del lead. Un seguimiento oportuno mejora las posibilidades de venta.' : '' }}\\n{{ $json.template_email === 'escalacion' ? 'Lead prioritario abandonado. Requiere intervención inmediata para evitar pérdida.' : '' }}\\n{{ $json.template_email === 'reactivacion' ? 'Oportunidad de reactivar cliente tibio. Use técnicas de reconexión para regenerar interés.' : '' }}\\n\\n---\\nSistema de Recordatorios OptimaCX\\nFecha: {{ new Date($json.timestamp).toLocaleString() }}",
-        "options": {
-          "allowUnauthorizedCerts": false,
-          "priority": "={{ $json.urgencia === 'critica' ? 'high' : 'normal' }}"
-        }
-      },
-      "id": "send-reminder-email",
-      "name": "Enviar Recordatorio Email",
-      "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [1120, 300],
-      "credentials": {
-        "smtp": {
-          "id": "smtp-optimacx",
-          "name": "SMTP OptimaCX"
-        }
-      }
+      "position": [400, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
           "conditions": [
             {
-              "id": "es-escalacion",
-              "leftValue": "={{ $json.urgencia }}",
-              "rightValue": "critica",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
+              "leftValue": "={{ $json.configuracion_valida }}",
+              "operator": { "type": "boolean", "operation": "isTrue" },
+              "rightValue": ""
             }
           ],
           "combinator": "and"
         },
         "options": {}
       },
-      "id": "check-escalation",
-      "name": "¿Requiere Escalación?",
+      "id": "check-config-valid",
+      "name": "¿Configuración Válida?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1340, 300]
+      "position": [600, 300]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://graph.facebook.com/v18.0/{{ $vars.WHATSAPP_PHONE_ID }}/messages",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
+        "operation": "executeQuery",
+        "query": "WITH politicas AS (\n  SELECT \n    $1::integer as primer_contacto_horas,\n    $2::integer as seguimiento_horas,\n    $3::integer as escalacion_horas,\n    $4::integer as reactivacion_dias,\n    $5::integer as frecuencia_minima_horas,\n    $6::integer as max_resultados\n),\nleads_requieren_recordatorio AS (\n  -- Leads asignados sin primer contacto\n  SELECT \n    'primer_contacto' as tipo_recordatorio,\n    'alta' as prioridad,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.modelo_interes,\n    l.estado,\n    l.prioridad_seguimiento as lead_prioridad,\n    l.concesionario_id,\n    c.nombre as concesionario_nombre,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    a.email as asesor_email,\n    l.fecha_asignacion,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_asignacion))/3600 as horas_sin_contacto,\n    NULL::numeric as dias_sin_contacto\n  FROM leads l\n  JOIN concesionarios c ON l.concesionario_id = c.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  CROSS JOIN politicas p\n  WHERE l.estado = 'asignado'\n    AND l.fecha_primer_contacto IS NULL\n    AND l.fecha_asignacion < NOW() - INTERVAL '1 hour' * p.primer_contacto_horas\n    AND l.fecha_asignacion > NOW() - INTERVAL '48 hours'\n    AND a.activo = true\n    \n  UNION ALL\n  \n  -- Leads en seguimiento sin actividad reciente\n  SELECT \n    'seguimiento_inactivo' as tipo_recordatorio,\n    CASE WHEN l.prioridad_seguimiento = 'alta' THEN 'alta' ELSE 'media' END as prioridad,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.modelo_interes,\n    l.estado,\n    l.prioridad_seguimiento as lead_prioridad,\n    l.concesionario_id,\n    c.nombre as concesionario_nombre,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    a.email as asesor_email,\n    l.fecha_ultimo_seguimiento,\n    EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto)))/3600 as horas_sin_contacto,\n    NULL::numeric as dias_sin_contacto\n  FROM leads l\n  JOIN concesionarios c ON l.concesionario_id = c.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  CROSS JOIN politicas p\n  WHERE l.estado IN ('contactado', 'en_seguimiento')\n    AND COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto) < NOW() - INTERVAL '1 hour' * p.seguimiento_horas\n    AND l.fecha_creacion > NOW() - INTERVAL '30 days'\n    AND a.activo = true\n    \n  UNION ALL\n  \n  -- Leads prioritarios sin actividad - Escalación crítica\n  SELECT \n    'escalacion_critica' as tipo_recordatorio,\n    'critica' as prioridad,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.modelo_interes,\n    l.estado,\n    l.prioridad_seguimiento as lead_prioridad,\n    l.concesionario_id,\n    c.nombre as concesionario_nombre,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    a.email as asesor_email,\n    l.fecha_asignacion,\n    EXTRACT(EPOCH FROM (NOW() - l.fecha_asignacion))/3600 as horas_sin_contacto,\n    NULL::numeric as dias_sin_contacto\n  FROM leads l\n  JOIN concesionarios c ON l.concesionario_id = c.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  CROSS JOIN politicas p\n  WHERE l.prioridad_seguimiento = 'alta'\n    AND l.estado = 'asignado'\n    AND l.fecha_primer_contacto IS NULL\n    AND l.fecha_asignacion < NOW() - INTERVAL '1 hour' * p.escalacion_horas\n    AND a.activo = true\n    \n  UNION ALL\n  \n  -- Leads tibios que requieren reactivación\n  SELECT \n    'reactivacion_tibio' as tipo_recordatorio,\n    'baja' as prioridad,\n    l.id as lead_id,\n    l.nombre_cliente,\n    l.telefono_cliente,\n    l.modelo_interes,\n    l.estado,\n    l.prioridad_seguimiento as lead_prioridad,\n    l.concesionario_id,\n    c.nombre as concesionario_nombre,\n    l.asesor_asignado_id,\n    a.nombre as asesor_nombre,\n    a.email as asesor_email,\n    l.fecha_ultimo_seguimiento,\n    NULL::numeric as horas_sin_contacto,\n    EXTRACT(EPOCH FROM (NOW() - COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto)))/86400 as dias_sin_contacto\n  FROM leads l\n  JOIN concesionarios c ON l.concesionario_id = c.id\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  CROSS JOIN politicas p\n  WHERE l.estado IN ('contactado', 'en_seguimiento')\n    AND COALESCE(l.fecha_ultimo_seguimiento, l.fecha_primer_contacto) < NOW() - INTERVAL '1 day' * p.reactivacion_dias\n    AND l.fecha_creacion > NOW() - INTERVAL '60 days'\n    AND a.activo = true\n)\nSELECT \n  lrr.*\nFROM leads_requieren_recordatorio lrr\nCROSS JOIN politicas p\nWHERE NOT EXISTS (\n  SELECT 1 FROM recordatorios_leads rl\n  WHERE rl.lead_id = lrr.lead_id\n    AND rl.tipo_recordatorio = lrr.tipo_recordatorio\n    AND rl.enviado_at > NOW() - INTERVAL '1 hour' * p.frecuencia_minima_horas\n)\nORDER BY \n  CASE lrr.prioridad\n    WHEN 'critica' THEN 1\n    WHEN 'alta' THEN 2\n    WHEN 'media' THEN 3\n    WHEN 'baja' THEN 4\n  END,\n  COALESCE(lrr.horas_sin_contacto, lrr.dias_sin_contacto * 24) DESC\nLIMIT (SELECT max_resultados FROM politicas);",
+        "additionalFields": {
+          "queryParameters": "={{ [\n  $json.configuracion.politicas_escalacion.primer_contacto.tiempo_limite_horas,\n  $json.configuracion.politicas_escalacion.seguimiento_inactivo.tiempo_limite_horas,\n  $json.configuracion.politicas_escalacion.escalacion_critica.tiempo_limite_horas,\n  $json.configuracion.politicas_escalacion.reactivacion_tibio.tiempo_limite_dias,\n  $json.configuracion.frecuencia_minima_recordatorios_horas,\n  $json.configuracion.max_recordatorios_batch\n] }}"
+        }
+      },
+      "id": "get-pending-reminders",
+      "name": "Obtener Recordatorios Pendientes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
             {
-              "name": "Authorization",
-              "value": "Bearer {{ $vars.WHATSAPP_TOKEN }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
+              "value1": "={{ $input.all().length }}",
+              "operation": "greaterThan",
+              "value2": 0
             }
           ]
-        },
-        "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
+        }
+      },
+      "id": "has-reminders",
+      "name": "¿Hay Recordatorios?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar y categorizar recordatorios con validación robusta\ntry {\n  const items = $input.all();\n  const configuracion = $('Validar Configuración').first().json.configuracion;\n  \n  // Templates de recordatorios\n  const templates = {\n    primer_contacto: {\n      titulo: '⏰ Recordatorio: Lead sin contactar',\n      urgencia: 'media',\n      accion: 'Contactar al cliente inmediatamente',\n      template_email: 'primer_contacto',\n      color: '#FF8800'\n    },\n    seguimiento_inactivo: {\n      titulo: '📋 Recordatorio: Lead requiere seguimiento',\n      urgencia: 'media',\n      accion: 'Realizar seguimiento programado',\n      template_email: 'seguimiento',\n      color: '#0088FF'\n    },\n    escalacion_critica: {\n      titulo: '🚨 ESCALACIÓN: Lead prioritario abandonado',\n      urgencia: 'critica',\n      accion: 'Intervención inmediata requerida',\n      template_email: 'escalacion',\n      color: '#FF0000'\n    },\n    reactivacion_tibio: {\n      titulo: '🔄 Recordatorio: Reactivar lead tibio',\n      urgencia: 'baja',\n      accion: 'Intentar reactivación del cliente',\n      template_email: 'reactivacion',\n      color: '#888888'\n    }\n  };\n  \n  const recordatorios = [];\n  \n  for (const item of items) {\n    const data = item.json;\n    const template = templates[data.tipo_recordatorio];\n    \n    if (!template) {\n      console.log(`Template no encontrado para: ${data.tipo_recordatorio}`);\n      continue;\n    }\n    \n    // Validar datos esenciales\n    if (!data.lead_id || !data.asesor_email || !data.nombre_cliente) {\n      console.log(`Datos incompletos para recordatorio: ${data.lead_id}`);\n      continue;\n    }\n    \n    // Calcular tiempo transcurrido legible\n    let tiempoTranscurrido = '';\n    if (data.horas_sin_contacto !== null && data.horas_sin_contacto !== undefined) {\n      const horas = Math.floor(data.horas_sin_contacto);\n      const mins = Math.floor((data.horas_sin_contacto % 1) * 60);\n      if (horas >= 24) {\n        const dias = Math.floor(horas / 24);\n        const horasRest = horas % 24;\n        tiempoTranscurrido = `${dias}d ${horasRest}h sin contacto`;\n      } else {\n        tiempoTranscurrido = `${horas}h ${mins}m sin contacto`;\n      }\n    } else if (data.dias_sin_contacto !== null && data.dias_sin_contacto !== undefined) {\n      tiempoTranscurrido = `${Math.floor(data.dias_sin_contacto)} días sin contacto`;\n    } else {\n      tiempoTranscurrido = 'Tiempo no calculado';\n    }\n    \n    const recordatorio = {\n      // Datos básicos validados\n      tipo_recordatorio: data.tipo_recordatorio,\n      prioridad: data.prioridad,\n      titulo: template.titulo,\n      urgencia: template.urgencia,\n      accion_requerida: template.accion,\n      template_email: template.template_email,\n      color: template.color,\n      \n      // Datos del lead validados\n      lead_id: data.lead_id,\n      cliente_nombre: data.nombre_cliente || 'Cliente sin nombre',\n      cliente_telefono: data.telefono_cliente || 'Sin teléfono',\n      modelo_interes: data.modelo_interes || 'No especificado',\n      estado_lead: data.estado || 'Desconocido',\n      prioridad_lead: data.lead_prioridad || 'media',\n      \n      // Datos del concesionario\n      concesionario_id: data.concesionario_id,\n      concesionario_nombre: data.concesionario_nombre || 'Concesionario no identificado',\n      \n      // Datos del asesor\n      asesor_id: data.asesor_asignado_id,\n      asesor_nombre: data.asesor_nombre || 'Asesor sin nombre',\n      asesor_email: data.asesor_email,\n      \n      // Tiempo y métricas\n      tiempo_transcurrido: tiempoTranscurrido,\n      horas_sin_contacto: data.horas_sin_contacto,\n      dias_sin_contacto: data.dias_sin_contacto,\n      \n      // Metadatos\n      timestamp: new Date().toISOString(),\n      requiere_escalamiento: data.prioridad === 'critica',\n      requiere_cc_supervisor: template.urgencia === 'critica',\n      link_crm: `https://crm.optimacx.com/leads/${data.lead_id}`,\n      link_whatsapp: `https://wa.me/${(data.telefono_cliente || '').replace(/\\D/g, '')}`,\n      \n      // Estado de procesamiento\n      procesado: true,\n      errores: []\n    };\n    \n    recordatorios.push({ json: recordatorio });\n  }\n  \n  if (recordatorios.length === 0) {\n    return [{\n      json: {\n        procesado: false,\n        message: 'No hay recordatorios válidos para procesar',\n        total_items: items.length,\n        timestamp: new Date().toISOString()\n      }\n    }];\n  }\n  \n  return recordatorios;\n  \n} catch (error) {\n  return [{\n    json: {\n      status: 'error',\n      message: 'Error al procesar recordatorios',\n      error: error.message,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
+      },
+      "id": "process-reminders",
+      "name": "Procesar Recordatorios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
             {
-              "name": "messaging_product",
-              "value": "whatsapp"
-            },
-            {
-              "name": "to",
-              "value": "+56912345678"
-            },
-            {
-              "name": "type",
-              "value": "text"
-            },
-            {
-              "name": "text",
-              "value": "={{ { body: `🚨 ESCALACIÓN CRÍTICA: ${$json.titulo} - ${$json.cliente_nombre} (${$json.concesionario_nombre}). Asesor: ${$json.asesor_nombre}. ${$json.tiempo_transcurrido}. Revisar inmediatamente: ${$json.link_crm}` } }}"
+              "leftValue": "={{ $json.procesado }}",
+              "operator": { "type": "boolean", "operation": "isTrue" },
+              "rightValue": ""
             }
-          ]
+          ],
+          "combinator": "and"
         },
         "options": {}
       },
-      "id": "send-escalation-whatsapp",
-      "name": "WhatsApp Escalación",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1560, 200]
+      "id": "check-processed",
+      "name": "¿Procesado Correctamente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "email": "={{ $json.asesor_email }}",
+        "cc": "={{ $json.requiere_cc_supervisor ? 'supervisor@' + $json.concesionario_id + '.optimacx.com' : '' }}",
+        "subject": "={{ $json.titulo }} - {{ $json.cliente_nombre }}",
+        "emailFormat": "html",
+        "message": "=<!DOCTYPE html>\n<html>\n<head>\n  <style>\n    .recordatorio { font-family: Arial; padding: 20px; border-left: 5px solid {{ $json.color }}; margin: 10px 0; }\n    .header { font-size: 18px; font-weight: bold; color: {{ $json.color }}; margin-bottom: 15px; }\n    .datos-lead { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }\n    .tiempo { background: #fff3cd; padding: 10px; margin: 10px 0; border-radius: 5px; font-weight: bold; }\n    .accion { background: #d4edda; padding: 10px; margin: 10px 0; border-radius: 5px; font-weight: bold; }\n    .acciones-rapidas { background: #e6f3ff; padding: 15px; margin: 10px 0; border-radius: 5px; }\n    .recordatorio-especial { background: #f8d7da; padding: 10px; margin: 10px 0; border-radius: 5px; }\n    .footer { font-size: 12px; color: #666; margin-top: 20px; }\n  </style>\n</head>\n<body>\n  <div class=\"recordatorio\">\n    <div class=\"header\">{{ $json.titulo.toUpperCase() }}</div>\n    \n    <div class=\"datos-lead\">\n      <strong>👤 Detalles del Lead:</strong><br>\n      • <strong>Cliente:</strong> {{ $json.cliente_nombre }}<br>\n      • <strong>Teléfono:</strong> {{ $json.cliente_telefono }}<br>\n      • <strong>Modelo de Interés:</strong> {{ $json.modelo_interes }}<br>\n      • <strong>Estado Actual:</strong> {{ $json.estado_lead.toUpperCase() }}<br>\n      • <strong>Prioridad:</strong> {{ $json.prioridad_lead.toUpperCase() }}<br>\n      • <strong>Concesionario:</strong> {{ $json.concesionario_nombre }}\n    </div>\n    \n    <div class=\"tiempo\">\n      <strong>⏰ Tiempo sin Contacto:</strong><br>\n      {{ $json.tiempo_transcurrido }}\n    </div>\n    \n    <div class=\"accion\">\n      <strong>⚡ Acción Requerida:</strong><br>\n      {{ $json.accion_requerida }}\n    </div>\n    \n    {{ $json.urgencia === 'critica' ? '<div class=\"recordatorio-especial\"><strong>🚨 NOTA CRÍTICA:</strong> Este es un lead de alta prioridad que requiere atención INMEDIATA. Se ha escalado automáticamente al supervisor.</div>' : '' }}\n    \n    <div class=\"acciones-rapidas\">\n      <strong>🔗 Acciones Rápidas:</strong><br>\n      • <a href=\"{{ $json.link_crm }}\" target=\"_blank\">Ver Lead en CRM</a><br>\n      • <strong>Llamar Cliente:</strong> {{ $json.cliente_telefono }}<br>\n      • <a href=\"{{ $json.link_whatsapp }}\" target=\"_blank\">WhatsApp</a>\n    </div>\n    \n    <div class=\"recordatorio-especial\">\n      <strong>💡 Recordatorio:</strong><br>\n      {{ $json.template_email === 'primer_contacto' ? 'El primer contacto es crucial para la conversión. Contacte al cliente dentro de las próximas 2 horas.' : '' }}\n      {{ $json.template_email === 'seguimiento' ? 'Mantenga el momentum del lead. Un seguimiento oportuno mejora las posibilidades de venta.' : '' }}\n      {{ $json.template_email === 'escalacion' ? 'Lead prioritario abandonado. Requiere intervención inmediata para evitar pérdida.' : '' }}\n      {{ $json.template_email === 'reactivacion' ? 'Oportunidad de reactivar cliente tibio. Use técnicas de reconexión para regenerar interés.' : '' }}\n    </div>\n    \n    <div class=\"footer\">\n      Sistema de Recordatorios OptimaCX<br>\n      Fecha: {{ new Date($json.timestamp).toLocaleString() }}\n    </div>\n  </div>\n</body>\n</html>",
+        "options": {
+          "priority": "={{ $json.urgencia === 'critica' ? 'high' : 'normal' }}"
+        }
+      },
+      "id": "send-reminder-email",
+      "name": "Enviar Email Recordatorio",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1600, 300]
     },
     {
       "parameters": {
@@ -165,188 +142,128 @@
           "value": {
             "lead_id": "={{ $json.lead_id }}",
             "asesor_id": "={{ $json.asesor_id }}",
-            "concesionario_id": "={{ $json.concesionario_id }}",
             "tipo_recordatorio": "={{ $json.tipo_recordatorio }}",
             "prioridad": "={{ $json.prioridad }}",
-            "canal": "email",
-            "destinatario": "={{ $json.asesor_email }}",
             "titulo": "={{ $json.titulo }}",
-            "mensaje": "={{ $json.accion_requerida }}",
+            "template_usado": "={{ $json.template_email }}",
+            "destinatario_email": "={{ $json.asesor_email }}",
+            "tiene_cc_supervisor": "={{ $json.requiere_cc_supervisor }}",
+            "tiempo_sin_contacto": "={{ $json.tiempo_transcurrido }}",
+            "estado": "enviado",
             "enviado_at": "={{ $json.timestamp }}",
-            "escalado": "={{ $json.requiere_escalamiento }}",
-            "metadata": "={{ JSON.stringify({\n              tiempo_transcurrido: $json.tiempo_transcurrido,\n              horas_sin_contacto: $json.horas_sin_contacto,\n              urgencia: $json.urgencia,\n              template_usado: $json.template_email\n            }) }}"
+            "metadata": "={{ JSON.stringify({\n  horas_sin_contacto: $json.horas_sin_contacto,\n  dias_sin_contacto: $json.dias_sin_contacto,\n  urgencia: $json.urgencia,\n  escalado: $json.requiere_escalamiento,\n  cliente_nombre: $json.cliente_nombre,\n  modelo_interes: $json.modelo_interes\n}) }}"
           }
-        },
-        "options": {}
+        }
       },
       "id": "log-reminder",
       "name": "Registrar Recordatorio",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [1560, 400],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
+      "typeVersion": 2.1,
+      "position": [1800, 300]
     },
     {
       "parameters": {
-        "operation": "update",
-        "table": "leads",
-        "updateKey": "id",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "fecha_ultimo_recordatorio": "={{ $json.timestamp }}",
-            "total_recordatorios": "COALESCE(total_recordatorios, 0) + 1",
-            "observaciones": "={{ $json.observaciones ? $json.observaciones + ' | ' : '' }}Recordatorio enviado: {{ $json.tipo_recordatorio }} - {{ new Date($json.timestamp).toLocaleString() }}"
-          }
-        },
-        "where": {
-          "values": [
+        "conditions": {
+          "boolean": [
             {
-              "column": "id",
-              "value": "={{ $json.lead_id }}"
-            },
-            {
-              "column": "concesionario_id",
-              "value": "={{ $json.concesionario_id }}"
+              "value1": "={{ $json.requiere_escalamiento }}",
+              "operation": "equal",
+              "value2": true
             }
           ]
-        },
-        "options": {}
-      },
-      "id": "update-lead-reminder",
-      "name": "Actualizar Lead",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [1780, 400],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
         }
-      }
+      },
+      "id": "requires-escalation",
+      "name": "¿Requiere Escalación?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1800, 500]
     },
     {
       "parameters": {
-        "jsCode": "// Generar resumen de recordatorios enviados\nconst recordatorios = $input.all();\nconst resumen = {\n  total_recordatorios: recordatorios.length,\n  por_tipo: {},\n  por_prioridad: {},\n  escalaciones: 0,\n  por_concesionario: {},\n  timestamp: new Date().toISOString()\n};\n\nfor (const rec of recordatorios) {\n  const data = rec.json;\n  \n  // Contar por tipo\n  resumen.por_tipo[data.tipo_recordatorio] = (resumen.por_tipo[data.tipo_recordatorio] || 0) + 1;\n  \n  // Contar por prioridad\n  resumen.por_prioridad[data.prioridad] = (resumen.por_prioridad[data.prioridad] || 0) + 1;\n  \n  // Contar escalaciones\n  if (data.urgencia === 'critica') {\n    resumen.escalaciones++;\n  }\n  \n  // Contar por concesionario\n  const concKey = data.concesionario_nombre;\n  if (!resumen.por_concesionario[concKey]) {\n    resumen.por_concesionario[concKey] = 0;\n  }\n  resumen.por_concesionario[concKey]++;\n}\n\nreturn [{ json: resumen }];"
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "notificaciones-leads",
+        "data": "={{ JSON.stringify({\n  tipo_notificacion: 'escalacion_recordatorio',\n  lead_id: $json.lead_id,\n  concesionario_id: $json.concesionario_id,\n  prioridad: 'critica',\n  mensaje: 'Recordatorio escalado por falta de atención: ' + $json.titulo,\n  datos_escalacion: {\n    tipo_recordatorio: $json.tipo_recordatorio,\n    tiempo_transcurrido: $json.tiempo_transcurrido,\n    asesor_original: $json.asesor_nombre\n  }\n}) }}"
+      },
+      "id": "trigger-escalation",
+      "name": "Escalar Recordatorio",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 2.1,
+      "position": [2000, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar resumen de recordatorios enviados\ntry {\n  const recordatorios = $input.all();\n  \n  const resumen = {\n    total_recordatorios: recordatorios.length,\n    por_tipo: {},\n    por_prioridad: {},\n    por_urgencia: {},\n    escalados: 0,\n    con_supervisor: 0,\n    asesores_notificados: new Set(),\n    concesionarios_afectados: new Set(),\n    errores: 0,\n    timestamp: new Date().toISOString(),\n    estado: 'completado'\n  };\n  \n  for (const recordatorio of recordatorios) {\n    const data = recordatorio.json;\n    \n    // Verificar si es respuesta de error\n    if (data.status === 'error') {\n      resumen.errores++;\n      continue;\n    }\n    \n    // Contar por tipo\n    resumen.por_tipo[data.tipo_recordatorio] = (resumen.por_tipo[data.tipo_recordatorio] || 0) + 1;\n    \n    // Contar por prioridad\n    resumen.por_prioridad[data.prioridad] = (resumen.por_prioridad[data.prioridad] || 0) + 1;\n    \n    // Contar por urgencia\n    resumen.por_urgencia[data.urgencia] = (resumen.por_urgencia[data.urgencia] || 0) + 1;\n    \n    // Contar especiales\n    if (data.requiere_escalamiento) resumen.escalados++;\n    if (data.requiere_cc_supervisor) resumen.con_supervisor++;\n    \n    // Recopilar asesores y concesionarios únicos\n    if (data.asesor_email) resumen.asesores_notificados.add(data.asesor_email);\n    if (data.concesionario_id) resumen.concesionarios_afectados.add(data.concesionario_id);\n  }\n  \n  // Convertir Sets a números\n  resumen.asesores_unicos = resumen.asesores_notificados.size;\n  resumen.concesionarios_unicos = resumen.concesionarios_afectados.size;\n  delete resumen.asesores_notificados;\n  delete resumen.concesionarios_afectados;\n  \n  return [{ json: resumen }];\n  \n} catch (error) {\n  return [{\n    json: {\n      status: 'error',\n      message: 'Error al generar resumen',\n      error: error.message,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
       },
       "id": "generate-summary",
       "name": "Generar Resumen",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de error por configuración inválida\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Configuración de recordatorios inválida',\n    error_details: $json,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "config-error-response",
+      "name": "Error Configuración",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [800, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta cuando no hay recordatorios pendientes\nreturn [{\n  json: {\n    status: 'success',\n    message: 'No hay recordatorios pendientes',\n    total_leads_revisados: 0,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "no-reminders-response",
+      "name": "Sin Recordatorios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1200, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de error en procesamiento\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Error en el procesamiento de recordatorios',\n    error_details: $json,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "processing-error-response",
+      "name": "Error Procesamiento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1600, 500]
     }
   ],
   "connections": {
-    "Trigger Cada 2 Horas": {
-      "main": [
-        [
-          {
-            "node": "Obtener Recordatorios Pendientes",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Obtener Recordatorios Pendientes": {
-      "main": [
-        [
-          {
-            "node": "Procesar Recordatorios",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Procesar Recordatorios": {
-      "main": [
-        [
-          {
-            "node": "Expandir Recordatorios",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Expandir Recordatorios": {
-      "main": [
-        [
-          {
-            "node": "Enviar Recordatorio Email",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Enviar Recordatorio Email": {
-      "main": [
-        [
-          {
-            "node": "¿Requiere Escalación?",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Registrar Recordatorio",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Requiere Escalación?": {
-      "main": [
-        [
-          {
-            "node": "WhatsApp Escalación",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Registrar Recordatorio": {
-      "main": [
-        [
-          {
-            "node": "Actualizar Lead",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Actualizar Lead": {
-      "main": [
-        [
-          {
-            "node": "Generar Resumen",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Programar Recordatorios": { "main": [[{ "node": "Validar Configuración", "type": "main", "index": 0 }]] },
+    "Validar Configuración": { "main": [[{ "node": "¿Configuración Válida?", "type": "main", "index": 0 }]] },
+    "¿Configuración Válida?": { "main": [
+      [{ "node": "Obtener Recordatorios Pendientes", "type": "main", "index": 0 }],
+      [{ "node": "Error Configuración", "type": "main", "index": 0 }]
+    ] },
+    "Obtener Recordatorios Pendientes": { "main": [[{ "node": "¿Hay Recordatorios?", "type": "main", "index": 0 }]] },
+    "¿Hay Recordatorios?": { "main": [
+      [{ "node": "Procesar Recordatorios", "type": "main", "index": 0 }],
+      [{ "node": "Sin Recordatorios", "type": "main", "index": 0 }]
+    ] },
+    "Procesar Recordatorios": { "main": [[{ "node": "¿Procesado Correctamente?", "type": "main", "index": 0 }]] },
+    "¿Procesado Correctamente?": { "main": [
+      [{ "node": "Enviar Email Recordatorio", "type": "main", "index": 0 }],
+      [{ "node": "Error Procesamiento", "type": "main", "index": 0 }]
+    ] },
+    "Enviar Email Recordatorio": { "main": [
+      [{ "node": "Registrar Recordatorio", "type": "main", "index": 0 }],
+      [{ "node": "¿Requiere Escalación?", "type": "main", "index": 0 }]
+    ] },
+    "Registrar Recordatorio": { "main": [[{ "node": "Generar Resumen", "type": "main", "index": 0 }]] },
+    "¿Requiere Escalación?": { "main": [
+      [{ "node": "Escalar Recordatorio", "type": "main", "index": 0 }]
+    ] },
+    "Escalar Recordatorio": { "main": [[{ "node": "Generar Resumen", "type": "main", "index": 0 }]] }
   },
-  "pinData": {},
   "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": ["leads", "recordatorios", "seguimiento"],
-  "triggerCount": 0,
-  "updatedAt": "2024-08-09T05:47:00.000Z",
-  "versionId": "leads-reminders-v2.1",
-  "name": "Recordatorios Automáticos de Leads",
-  "active": true,
-  "id": "recordatorios-leads",
-  "hash": "leads-reminders-system"
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 300
+  }
 }

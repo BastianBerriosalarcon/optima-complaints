@@ -1,12 +1,13 @@
 {
-  "meta": {
-    "instanceId": "prospection-response-handler-001"
-  },
+  "name": "Manejador de Respuestas de Prospección",
+  "description": "Procesa respuestas de WhatsApp para prospección, analiza con IA y actualiza estado de leads",
+  "tags": ["leads", "prospección", "respuestas", "ia", "srp"],
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "prospection-response",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "webhook-trigger",
@@ -18,385 +19,261 @@
     },
     {
       "parameters": {
-        "jsCode": "// Procesar webhook de respuesta desde Chatwoot/WhatsApp\nconst payload = $input.first().json;\n\n// Extraer datos del webhook\nconst webhookData = {\n  // Datos de Chatwoot\n  account_id: payload.account?.id,\n  conversation_id: payload.conversation?.id,\n  message_id: payload.id,\n  \n  // Datos del mensaje\n  content: payload.content || '',\n  message_type: payload.message_type,\n  created_at: payload.created_at,\n  \n  // Datos del contacto/cliente\n  contact_phone: payload.conversation?.contact_inbox?.source_id?.replace(/\\D/g, ''),\n  contact_name: payload.sender?.name || payload.conversation?.contact_inbox?.name,\n  \n  // Metadatos\n  inbox_id: payload.conversation?.inbox_id,\n  source_platform: 'whatsapp'\n};\n\n// Validaciones básicas\nif (!webhookData.account_id) {\n  throw new Error('Account ID requerido para identificar concesionario');\n}\n\nif (!webhookData.contact_phone) {\n  throw new Error('Número de teléfono requerido para identificar lead');\n}\n\nif (!webhookData.content || webhookData.content.trim() === '') {\n  throw new Error('Mensaje vacío - no procesar');\n}\n\n// Solo procesar mensajes entrantes del cliente\nif (webhookData.message_type !== 'incoming') {\n  throw new Error('Solo procesar mensajes entrantes');\n}\n\nreturn [{ json: webhookData }];"
+        "jsCode": "// Validar payload de webhook de respuesta WhatsApp\nconst payload = $input.first().json || {};\n\n// Validaciones básicas\nconst validations = {\n  has_account_id: !!(payload.account?.id),\n  has_conversation_id: !!(payload.conversation?.id),\n  has_message_content: !!(payload.content && payload.content.trim()),\n  is_incoming: payload.message_type === 'incoming',\n  has_contact_phone: !!(payload.conversation?.contact_inbox?.source_id)\n};\n\nconst missing_fields = Object.entries(validations)\n  .filter(([key, value]) => !value)\n  .map(([key]) => key);\n\nconst valid = missing_fields.length === 0;\n\nif (!valid) {\n  return [{\n    json: {\n      valid: false,\n      missing_fields,\n      error: 'Payload de webhook inválido',\n      payload_received: payload\n    }\n  }];\n}\n\n// Procesar datos del webhook\nconst webhookData = {\n  valid: true,\n  account_id: payload.account.id,\n  conversation_id: payload.conversation.id,\n  message_id: payload.id,\n  content: payload.content.trim(),\n  message_type: payload.message_type,\n  created_at: payload.created_at,\n  contact_phone: payload.conversation.contact_inbox.source_id.replace(/\\D/g, ''),\n  contact_name: payload.sender?.name || payload.conversation?.contact_inbox?.name || 'Cliente sin nombre',\n  inbox_id: payload.conversation?.inbox_id,\n  source_platform: 'whatsapp',\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: webhookData }];"
       },
-      "id": "process-webhook",
-      "name": "Procesar Webhook",
+      "id": "validate-webhook",
+      "name": "Validar Webhook",
       "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "operator": { "type": "boolean", "operation": "isTrue" },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-valid-webhook",
+      "name": "¿Webhook Válido?",
+      "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [600, 300]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Identificar concesionario y lead desde el teléfono\nWITH concesionario_config AS (\n  SELECT \n    tc.tenant_id,\n    tc.chatwoot_account_id,\n    c.id as concesionario_id,\n    c.nombre as concesionario_nombre,\n    tc.ai_config,\n    tc.workflow_variables\n  FROM tenant_configurations tc\n  JOIN concesionarios c ON tc.tenant_id = c.id::text\n  WHERE tc.chatwoot_account_id = $1\n),\nlead_info AS (\n  SELECT \n    l.id as lead_id,\n    l.telefono_cliente,\n    l.nombre_cliente,\n    l.estado as estado_actual,\n    l.modelo_interes,\n    l.fuente_lead,\n    l.asesor_asignado_id,\n    l.concesionario_id,\n    l.fecha_creacion,\n    a.nombre as asesor_nombre,\n    a.email as asesor_email\n  FROM leads l\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.telefono_cliente LIKE '%' || $2 || '%'\n    AND l.concesionario_id = (SELECT concesionario_id FROM concesionario_config)\n    AND l.fuente_lead = 'excel_masivo'\n    AND l.estado IN ('prospección_enviada', 'respondido')\n  ORDER BY l.fecha_creacion DESC\n  LIMIT 1\n)\nSELECT \n  cc.*,\n  li.lead_id,\n  li.telefono_cliente,\n  li.nombre_cliente,\n  li.estado_actual,\n  li.modelo_interes,\n  li.asesor_asignado_id,\n  li.asesor_nombre,\n  li.asesor_email,\n  li.fecha_creacion\nFROM concesionario_config cc\nCROSS JOIN lead_info li;",
-        "options": {},
+        "query": "WITH concesionario_config AS (\n  SELECT \n    tc.tenant_id,\n    tc.chatwoot_account_id,\n    c.id as concesionario_id,\n    c.nombre as concesionario_nombre\n  FROM tenant_configurations tc\n  JOIN concesionarios c ON tc.tenant_id = c.id::text\n  WHERE tc.chatwoot_account_id = $1\n),\nlead_info AS (\n  SELECT \n    l.id as lead_id,\n    l.telefono_cliente,\n    l.nombre_cliente,\n    l.estado as estado_actual,\n    l.modelo_interes,\n    l.fuente_lead,\n    l.asesor_asignado_id,\n    l.concesionario_id,\n    COALESCE(a.nombre, 'Sin asignar') as asesor_nombre,\n    a.email as asesor_email\n  FROM leads l\n  LEFT JOIN asesores a ON l.asesor_asignado_id = a.id\n  WHERE l.telefono_cliente LIKE '%' || $2 || '%'\n    AND l.concesionario_id = (SELECT concesionario_id FROM concesionario_config)\n    AND l.fuente_lead = 'excel_masivo'\n    AND l.estado IN ('prospección_enviada', 'respondido')\n  ORDER BY l.fecha_creacion DESC\n  LIMIT 1\n)\nSELECT \n  cc.*,\n  li.lead_id,\n  li.telefono_cliente,\n  li.nombre_cliente,\n  li.estado_actual,\n  li.modelo_interes,\n  li.asesor_asignado_id,\n  li.asesor_nombre,\n  li.asesor_email\nFROM concesionario_config cc\nCROSS JOIN lead_info li;",
         "additionalFields": {
-          "mode": "multiple",
-          "queryReplacement": [
-            "={{ $json.account_id }}",
-            "={{ $json.contact_phone }}"
-          ]
+          "queryParameters": "={{ [$json.account_id, $json.contact_phone] }}"
         }
       },
       "id": "identify-lead",
-      "name": "Identificar Lead y Concesionario",
+      "name": "Identificar Lead",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [680, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
+      "typeVersion": 2.1,
+      "position": [800, 300]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
+        "conditions": {
+          "number": [
             {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "x-goog-api-key",
-              "value": "{{ $vars.GEMINI_API_KEY }}"
+              "value1": "={{ $input.all().length }}",
+              "operation": "greaterThan",
+              "value2": 0
             }
           ]
-        },
-        "sendBody": true,
-        "body": "={\n  \"contents\": [{\n    \"parts\": [{\n      \"text\": \"Eres un especialista en análisis de respuestas de clientes para el concesionario {{ $json.concesionario_nombre }}.\\n\\nCONTEXTO:\\n- Cliente: {{ $json.nombre_cliente }}\\n- Modelo de interés: {{ $json.modelo_interes }}\\n- Respuesta recibida: '{{ $('Procesar Webhook').item.json.content }}'\\n\\nINSTRUCCIONES:\\nAnaliza la respuesta y clasifica la intención del cliente:\\n\\n1. INTENCIÓN PRINCIPAL:\\n   - 'positivo': Cliente muestra interés (sí, me interesa, quiero información, etc.)\\n   - 'negativo': Cliente rechaza explícitamente (no me interesa, no contactar, etc.)\\n   - 'consulta': Cliente hace preguntas específicas (precio, características, etc.)\\n   - 'neutral': Respuesta ambigua o irrelevante\\n\\n2. NIVEL DE INTERÉS (1-10):\\n   - 9-10: Muy interesado, listo para comprar\\n   - 7-8: Interesado, necesita más información\\n   - 4-6: Interés moderado\\n   - 1-3: Poco o ningún interés\\n\\n3. ACCIÓN RECOMENDADA:\\n   - 'contactar_inmediato': Asignar a asesor urgente\\n   - 'enviar_informacion': Enviar catálogo/precios\\n   - 'seguimiento_programado': Agendar contacto futuro\\n   - 'no_contactar': Marcar como no interesado\\n\\n4. EXTRACCIÓN DE DATOS:\\n   - Preguntas específicas del cliente\\n   - Presupuesto mencionado\\n   - Urgencia de compra\\n   - Preferencias adicionales\\n\\nRESPONDE SOLO EN FORMATO JSON:\\n{\\n  \\\"intencion\\\": \\\"positivo|negativo|consulta|neutral\\\",\\n  \\\"nivel_interes\\\": numero_1_10,\\n  \\\"accion_recomendada\\\": \\\"contactar_inmediato|enviar_informacion|seguimiento_programado|no_contactar\\\",\\n  \\\"preguntas_cliente\\\": [\\\"lista de preguntas específicas\\\"],\\n  \\\"presupuesto_mencionado\\\": \\\"monto si se menciona\\\",\\n  \\\"urgencia_compra\\\": \\\"inmediata|corto_plazo|largo_plazo|no_especificada\\\",\\n  \\\"observaciones\\\": \\\"análisis detallado de la respuesta\\\",\\n  \\\"requiere_escalamiento\\\": true|false\\n}\"\n    }]\n  }],\n  \"generationConfig\": {\n    \"temperature\": 0.3,\n    \"topK\": 40,\n    \"topP\": 0.8,\n    \"maxOutputTokens\": 1024\n  }\n}",
-        "options": {}
+        }
+      },
+      "id": "lead-found",
+      "name": "¿Lead Encontrado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analizar respuesta del cliente con IA\ntry {\n  const webhookData = $('Validar Webhook').first().json;\n  const leadData = $input.first().json;\n  \n  // Análisis básico sin IA (versión mínima)\n  const contenido = webhookData.content.toLowerCase();\n  \n  let intencion = 'neutral';\n  let nivel_interes = 5;\n  let accion_recomendada = 'seguimiento_programado';\n  \n  // Palabras clave positivas\n  const palabrasPositivas = ['si', 'sí', 'interesa', 'quiero', 'información', 'precio', 'cuanto', 'cuesta', 'cuando', 'donde'];\n  // Palabras clave negativas\n  const palabrasNegativas = ['no', 'nunca', 'jamás', 'eliminar', 'borrar', 'stop', 'basta'];\n  \n  if (palabrasPositivas.some(palabra => contenido.includes(palabra))) {\n    intencion = 'positivo';\n    nivel_interes = 8;\n    accion_recomendada = 'contactar_inmediato';\n  } else if (palabrasNegativas.some(palabra => contenido.includes(palabra))) {\n    intencion = 'negativo';\n    nivel_interes = 1;\n    accion_recomendada = 'no_contactar';\n  } else if (contenido.includes('?')) {\n    intencion = 'consulta';\n    nivel_interes = 6;\n    accion_recomendada = 'enviar_informacion';\n  }\n  \n  // Determinar nuevo estado del lead\n  let nuevoEstado = 'respondido';\n  if (intencion === 'positivo' && nivel_interes >= 7) {\n    nuevoEstado = 'caliente';\n  } else if (intencion === 'negativo') {\n    nuevoEstado = 'perdido';\n  } else if (intencion === 'consulta') {\n    nuevoEstado = 'en_seguimiento';\n  }\n  \n  const analisisIA = {\n    intencion,\n    nivel_interes,\n    accion_recomendada,\n    preguntas_cliente: contenido.includes('?') ? [contenido] : [],\n    presupuesto_mencionado: null,\n    urgencia_compra: 'no_especificada',\n    observaciones: `Análisis básico del mensaje: ${contenido.substring(0, 100)}`,\n    requiere_escalamiento: nivel_interes >= 8\n  };\n  \n  const resultado = {\n    lead_id: leadData.lead_id,\n    concesionario_id: leadData.concesionario_id,\n    telefono_cliente: leadData.telefono_cliente,\n    nombre_cliente: leadData.nombre_cliente,\n    asesor_asignado_id: leadData.asesor_asignado_id,\n    asesor_nombre: leadData.asesor_nombre,\n    asesor_email: leadData.asesor_email,\n    mensaje_cliente: webhookData.content,\n    conversation_id: webhookData.conversation_id,\n    message_id: webhookData.message_id,\n    analisis_ia: analisisIA,\n    nuevo_estado: nuevoEstado,\n    prioridad: nivel_interes >= 8 ? 'alta' : nivel_interes <= 3 ? 'baja' : 'media',\n    timestamp: new Date().toISOString(),\n    requiere_notificacion: nivel_interes >= 7,\n    accion_siguiente: accion_recomendada\n  };\n  \n  return [{ json: resultado }];\n  \n} catch (error) {\n  return [{\n    json: {\n      status: 'error',\n      message: 'Error al analizar respuesta del cliente',\n      error: error.message,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
       },
       "id": "analyze-response",
-      "name": "Analizar Respuesta con IA",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Procesar respuesta de Gemini y preparar datos para flujo\nconst webhookData = $('Procesar Webhook').item.json;\nconst leadData = $('Identificar Lead y Concesionario').item.json;\nconst geminiResponse = $input.first().json;\n\n// Extraer análisis de IA\nlet analisisIA;\ntry {\n  const content = geminiResponse.candidates[0].content.parts[0].text;\n  // Limpiar la respuesta para extraer solo el JSON\n  const jsonMatch = content.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    analisisIA = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error('No se encontró JSON válido en respuesta de IA');\n  }\n} catch (error) {\n  // Fallback si falla el parsing\n  analisisIA = {\n    intencion: 'neutral',\n    nivel_interes: 5,\n    accion_recomendada: 'seguimiento_programado',\n    preguntas_cliente: [],\n    presupuesto_mencionado: null,\n    urgencia_compra: 'no_especificada',\n    observaciones: 'Error en análisis de IA: ' + error.message,\n    requiere_escalamiento: false\n  };\n}\n\n// Determinar nuevo estado del lead\nlet nuevoEstado = 'respondido';\nif (analisisIA.intencion === 'positivo' && analisisIA.nivel_interes >= 7) {\n  nuevoEstado = 'caliente';\n} else if (analisisIA.intencion === 'negativo') {\n  nuevoEstado = 'perdido';\n} else if (analisisIA.intencion === 'consulta') {\n  nuevoEstado = 'en_seguimiento';\n}\n\n// Calcular prioridad\nlet prioridad = 'media';\nif (analisisIA.nivel_interes >= 8 || analisisIA.urgencia_compra === 'inmediata') {\n  prioridad = 'alta';\n} else if (analisisIA.nivel_interes <= 3 || analisisIA.intencion === 'negativo') {\n  prioridad = 'baja';\n}\n\nconst resultado = {\n  // Datos del webhook y lead\n  lead_id: leadData.lead_id,\n  concesionario_id: leadData.concesionario_id,\n  telefono_cliente: leadData.telefono_cliente,\n  nombre_cliente: leadData.nombre_cliente,\n  asesor_asignado_id: leadData.asesor_asignado_id,\n  asesor_nombre: leadData.asesor_nombre,\n  asesor_email: leadData.asesor_email,\n  \n  // Datos del mensaje\n  mensaje_cliente: webhookData.content,\n  conversation_id: webhookData.conversation_id,\n  message_id: webhookData.message_id,\n  \n  // Análisis de IA\n  analisis_ia: analisisIA,\n  \n  // Estados calculados\n  nuevo_estado: nuevoEstado,\n  prioridad: prioridad,\n  \n  // Metadatos\n  timestamp: new Date().toISOString(),\n  requiere_notificacion: analisisIA.requiere_escalamiento || prioridad === 'alta',\n  accion_siguiente: analisisIA.accion_recomendada\n};\n\nreturn [{ json: resultado }];"
-      },
-      "id": "process-analysis",
-      "name": "Procesar Análisis",
+      "name": "Analizar Respuesta",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1120, 300]
+      "typeVersion": 2.1,
+      "position": [1200, 300]
     },
     {
       "parameters": {
-        "operation": "insert",
-        "table": "respuestas_prospeccion",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "lead_id": "={{ $json.lead_id }}",
-            "concesionario_id": "={{ $json.concesionario_id }}",
-            "mensaje_cliente": "={{ $json.mensaje_cliente }}",
-            "intencion_detectada": "={{ $json.analisis_ia.intencion }}",
-            "nivel_interes": "={{ $json.analisis_ia.nivel_interes }}",
-            "urgencia_compra": "={{ $json.analisis_ia.urgencia_compra }}",
-            "presupuesto_mencionado": "={{ $json.analisis_ia.presupuesto_mencionado }}",
-            "preguntas_cliente": "={{ JSON.stringify($json.analisis_ia.preguntas_cliente) }}",
-            "accion_recomendada": "={{ $json.analisis_ia.accion_recomendada }}",
-            "observaciones_ia": "={{ $json.analisis_ia.observaciones }}",
-            "fecha_respuesta": "={{ $json.timestamp }}",
-            "conversation_id": "={{ $json.conversation_id }}",
-            "message_id": "={{ $json.message_id }}",
-            "metadata": "={{ JSON.stringify({\n              requiere_escalamiento: $json.analisis_ia.requiere_escalamiento,\n              prioridad_calculada: $json.prioridad,\n              asesor_actual: $json.asesor_nombre\n            }) }}"
-          }
-        },
-        "options": {}
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "notEqual",
+              "value2": "error"
+            }
+          ]
+        }
+      },
+      "id": "analysis-success",
+      "name": "¿Análisis Exitoso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO respuestas_prospeccion (lead_id, concesionario_id, mensaje_cliente, intencion_analizada, nivel_interes, accion_recomendada, nuevo_estado, conversation_id, message_id, fecha_respuesta, analisis_detalle) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.lead_id, $json.concesionario_id, $json.mensaje_cliente, $json.analisis_ia.intencion, $json.analisis_ia.nivel_interes, $json.analisis_ia.accion_recomendada, $json.nuevo_estado, $json.conversation_id, $json.message_id, $json.timestamp, JSON.stringify($json.analisis_ia)] }}"
+        }
       },
       "id": "save-response",
       "name": "Guardar Respuesta",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [1340, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
+      "typeVersion": 2.1,
+      "position": [1600, 300]
     },
     {
       "parameters": {
-        "operation": "update",
-        "table": "leads",
-        "updateKey": "id",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "estado": "={{ $json.nuevo_estado }}",
-            "prioridad": "={{ $json.prioridad }}",
-            "nivel_interes": "={{ $json.analisis_ia.nivel_interes }}",
-            "ultima_respuesta": "={{ $json.mensaje_cliente }}",
-            "fecha_ultima_respuesta": "={{ $json.timestamp }}",
-            "observaciones": "={{ `Respuesta automática procesada: ${$json.analisis_ia.intencion}. Nivel interés: ${$json.analisis_ia.nivel_interes}/10. Acción: ${$json.analisis_ia.accion_recomendada}` }}"
-          }
-        },
-        "where": {
-          "values": [
-            {
-              "column": "id",
-              "value": "={{ $json.lead_id }}"
-            },
-            {
-              "column": "concesionario_id",
-              "value": "={{ $json.concesionario_id }}"
-            }
-          ]
-        },
-        "options": {}
+        "operation": "executeQuery",
+        "query": "UPDATE leads SET estado = $1, fecha_ultimo_seguimiento = $2, prioridad_seguimiento = $3, observaciones = COALESCE(observaciones, '') || CASE WHEN COALESCE(observaciones, '') = '' THEN '' ELSE ' | ' END || $4 WHERE id = $5",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.nuevo_estado, $json.timestamp, $json.prioridad, $json.analisis_ia.observaciones, $json.lead_id] }}"
+        }
       },
       "id": "update-lead",
       "name": "Actualizar Lead",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [1560, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "requiere-notificacion",
-              "leftValue": "={{ $json.requiere_notificacion }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "check-notification",
-      "name": "¿Requiere Notificación?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1780, 300]
-    },
-    {
-      "parameters": {
-        "sendTo": "={{ $json.asesor_email }}, ventas@{{ $json.concesionario_id }}.optimacx.com",
-        "subject": "🔥 Respuesta Prioritaria: {{ $json.nombre_cliente }} - {{ $json.analisis_ia.intencion.toUpperCase() }}",
-        "message": "=**RESPUESTA DE PROSPECCIÓN PRIORITARIA**\\n\\n📋 **Detalles del Lead:**\\n• Cliente: {{ $json.nombre_cliente }}\\n• Teléfono: {{ $json.telefono_cliente }}\\n• Modelo de Interés: {{ $('Identificar Lead y Concesionario').item.json.modelo_interes }}\\n• Asesor Asignado: {{ $json.asesor_nombre }}\\n\\n💬 **Respuesta del Cliente:**\\n{{ $json.mensaje_cliente }}\\n\\n🤖 **Análisis IA:**\\n• Intención: {{ $json.analisis_ia.intencion.toUpperCase() }}\\n• Nivel de Interés: {{ $json.analisis_ia.nivel_interes }}/10\\n• Urgencia: {{ $json.analisis_ia.urgencia_compra }}\\n• Acción Recomendada: {{ $json.analisis_ia.accion_recomendada }}\\n\\n📝 **Preguntas del Cliente:**\\n{{ $json.analisis_ia.preguntas_cliente.length > 0 ? $json.analisis_ia.preguntas_cliente.join('\\n• ') : 'Ninguna pregunta específica' }}\\n\\n💰 **Presupuesto Mencionado:**\\n{{ $json.analisis_ia.presupuesto_mencionado || 'No especificado' }}\\n\\n🚀 **Próximos Pasos:**\\n{{ $json.analisis_ia.observaciones }}\\n\\n---\\n⚡ **ACCIÓN REQUERIDA:** {{ $json.accion_siguiente.toUpperCase() }}\\n\\n🔗 **Ver en CRM:** https://crm.optimacx.com/leads/{{ $json.lead_id }}\\n\\nSistema OptimaCX",
-        "options": {
-          "allowUnauthorizedCerts": false,
-          "priority": "high"
-        }
-      },
-      "id": "send-notification",
-      "name": "Notificar Asesor",
-      "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [2000, 200],
-      "credentials": {
-        "smtp": {
-          "id": "smtp-optimacx",
-          "name": "SMTP OptimaCX"
-        }
-      }
+      "position": [1800, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
+          "boolean": [
             {
-              "id": "es-positivo-alto",
-              "leftValue": "={{ $json.analisis_ia.intencion }}",
-              "rightValue": "positivo",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            },
-            {
-              "id": "nivel-alto",
-              "leftValue": "={{ $json.analisis_ia.nivel_interes }}",
-              "rightValue": 8,
-              "operator": {
-                "type": "number",
-                "operation": "gte"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "check-hot-lead",
-      "name": "¿Lead Caliente?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [2000, 400]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "{{ $vars.N8N_WEBHOOK_BASE }}/webhook/assign-priority-lead",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
+              "value1": "={{ $json.requiere_notificacion }}",
+              "operation": "equal",
+              "value2": true
             }
           ]
-        },
-        "sendBody": true,
-        "body": "={\n  \"lead_id\": {{ $json.lead_id }},\n  \"concesionario_id\": \"{{ $json.concesionario_id }}\",\n  \"prioridad\": \"critica\",\n  \"motivo\": \"respuesta_positiva_alta\",\n  \"datos_respuesta\": {\n    \"intencion\": \"{{ $json.analisis_ia.intencion }}\",\n    \"nivel_interes\": {{ $json.analisis_ia.nivel_interes }},\n    \"urgencia\": \"{{ $json.analisis_ia.urgencia_compra }}\",\n    \"mensaje\": \"{{ $json.mensaje_cliente }}\"\n  }\n}",
-        "options": {}
+        }
+      },
+      "id": "requires-notification",
+      "name": "¿Requiere Notificación?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "notificaciones-leads",
+        "data": "={{ JSON.stringify({\n  tipo_notificacion: 'respuesta_prospeccion',\n  lead_id: $json.lead_id,\n  concesionario_id: $json.concesionario_id,\n  prioridad: $json.prioridad,\n  mensaje: 'Cliente respondió a prospección: ' + $json.mensaje_cliente,\n  asesor_email: $json.asesor_email,\n  datos_respuesta: $json.analisis_ia\n}) }}"
+      },
+      "id": "trigger-notification",
+      "name": "Enviar Notificación",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 2.1,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.nuevo_estado }}",
+              "operation": "equal",
+              "value2": "caliente"
+            }
+          ]
+        }
+      },
+      "id": "is-hot-lead",
+      "name": "¿Lead Caliente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [2000, 500]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "asignacion-asesores",
+        "data": "={{ JSON.stringify({\n  lead_id: $json.lead_id,\n  prioridad: 'critica',\n  motivo: 'respuesta_positiva_alta',\n  datos_respuesta: $json.analisis_ia\n}) }}"
       },
       "id": "trigger-priority-assignment",
-      "name": "Activar Asignación Prioritaria",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [2220, 320]
+      "name": "Asignación Prioritaria",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 2.1,
+      "position": [2200, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta exitosa para webhook\nreturn [{\n  json: {\n    status: 'success',\n    message: 'Respuesta de prospección procesada exitosamente',\n    lead_id: $json.lead_id,\n    nuevo_estado: $json.nuevo_estado,\n    accion_tomada: $json.accion_siguiente,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de error por webhook inválido\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Webhook inválido para respuesta de prospección',\n    missing_fields: $json.missing_fields,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "webhook-error-response",
+      "name": "Error Webhook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [800, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta cuando no se encuentra el lead\nconst webhookData = $('Validar Webhook').first().json;\nreturn [{\n  json: {\n    status: 'not_found',\n    message: 'Lead no encontrado para el teléfono proporcionado',\n    contact_phone: webhookData.contact_phone,\n    account_id: webhookData.account_id,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "lead-not-found-response",
+      "name": "Lead No Encontrado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1200, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de error en análisis\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Error en el análisis de la respuesta',\n    error_details: $json,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "analysis-error-response",
+      "name": "Error Análisis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1600, 500]
     }
   ],
   "connections": {
-    "Webhook Respuesta WhatsApp": {
-      "main": [
-        [
-          {
-            "node": "Procesar Webhook",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Procesar Webhook": {
-      "main": [
-        [
-          {
-            "node": "Identificar Lead y Concesionario",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Identificar Lead y Concesionario": {
-      "main": [
-        [
-          {
-            "node": "Analizar Respuesta con IA",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Analizar Respuesta con IA": {
-      "main": [
-        [
-          {
-            "node": "Procesar Análisis",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Procesar Análisis": {
-      "main": [
-        [
-          {
-            "node": "Guardar Respuesta",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Guardar Respuesta": {
-      "main": [
-        [
-          {
-            "node": "Actualizar Lead",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Actualizar Lead": {
-      "main": [
-        [
-          {
-            "node": "¿Requiere Notificación?",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "¿Lead Caliente?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Requiere Notificación?": {
-      "main": [
-        [
-          {
-            "node": "Notificar Asesor",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Lead Caliente?": {
-      "main": [
-        [
-          {
-            "node": "Activar Asignación Prioritaria",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Webhook Respuesta WhatsApp": { "main": [[{ "node": "Validar Webhook", "type": "main", "index": 0 }]] },
+    "Validar Webhook": { "main": [[{ "node": "¿Webhook Válido?", "type": "main", "index": 0 }]] },
+    "¿Webhook Válido?": { "main": [
+      [{ "node": "Identificar Lead", "type": "main", "index": 0 }],
+      [{ "node": "Error Webhook", "type": "main", "index": 0 }]
+    ] },
+    "Identificar Lead": { "main": [[{ "node": "¿Lead Encontrado?", "type": "main", "index": 0 }]] },
+    "¿Lead Encontrado?": { "main": [
+      [{ "node": "Analizar Respuesta", "type": "main", "index": 0 }],
+      [{ "node": "Lead No Encontrado", "type": "main", "index": 0 }]
+    ] },
+    "Analizar Respuesta": { "main": [[{ "node": "¿Análisis Exitoso?", "type": "main", "index": 0 }]] },
+    "¿Análisis Exitoso?": { "main": [
+      [{ "node": "Guardar Respuesta", "type": "main", "index": 0 }],
+      [{ "node": "Error Análisis", "type": "main", "index": 0 }]
+    ] },
+    "Guardar Respuesta": { "main": [[{ "node": "Actualizar Lead", "type": "main", "index": 0 }]] },
+    "Actualizar Lead": { "main": [
+      [{ "node": "¿Requiere Notificación?", "type": "main", "index": 0 }],
+      [{ "node": "¿Lead Caliente?", "type": "main", "index": 0 }]
+    ] },
+    "¿Requiere Notificación?": { "main": [
+      [{ "node": "Enviar Notificación", "type": "main", "index": 0 }]
+    ] },
+    "¿Lead Caliente?": { "main": [
+      [{ "node": "Asignación Prioritaria", "type": "main", "index": 0 }]
+    ] },
+    "Enviar Notificación": { "main": [[{ "node": "Respuesta Exitosa", "type": "main", "index": 0 }]] },
+    "Asignación Prioritaria": { "main": [[{ "node": "Respuesta Exitosa", "type": "main", "index": 0 }]] }
   },
-  "pinData": {},
   "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": ["leads", "prospección", "respuestas", "ia"],
-  "triggerCount": 0,
-  "updatedAt": "2024-08-09T05:47:00.000Z",
-  "versionId": "prospection-response-v2.1",
-  "name": "Manejador de Respuestas de Prospección",
-  "active": true,
-  "id": "manejador-respuestas-prospeccion",
-  "hash": "prospection-response-handler"
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 300
+  }
 }

@@ -1,12 +1,13 @@
 {
-  "meta": {
-    "instanceId": "excel-leads-processor-001"
-  },
+  "name": "Procesador de Excel Leads",
+  "description": "Procesa archivos Excel con leads masivos, valida datos y los inserta en el sistema",
+  "tags": ["leads", "excel", "masivo", "import", "validación"],
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "upload-excel-leads",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "webhook-trigger",
@@ -18,66 +19,86 @@
     },
     {
       "parameters": {
-        "jsCode": "// Procesar carga de archivo Excel con validaciones de concesionario\nconst payload = $input.first().json;\n\n// Validar estructura del payload\nif (!payload.concesionario_id) {\n  throw new Error('concesionario_id es requerido');\n}\n\nif (!payload.archivo_excel) {\n  throw new Error('archivo_excel es requerido');\n}\n\nif (!payload.usuario_carga_id) {\n  throw new Error('usuario_carga_id es requerido');\n}\n\n// Validar permisos del usuario\nconst rolesPermitidos = ['jefe_ventas', 'admin', 'gerencia'];\nif (!payload.usuario_rol || !rolesPermitidos.includes(payload.usuario_rol)) {\n  throw new Error(`Rol ${payload.usuario_rol} no autorizado para carga masiva`);\n}\n\nconst metadata = {\n  concesionario_id: payload.concesionario_id,\n  usuario_carga_id: payload.usuario_carga_id,\n  usuario_rol: payload.usuario_rol,\n  archivo_nombre: payload.archivo_nombre || 'leads_import.xlsx',\n  archivo_excel: payload.archivo_excel, // Base64 encoded\n  timestamp_carga: new Date().toISOString(),\n  validaciones: {\n    estructura_requerida: ['nombre', 'telefono', 'email', 'modelo_interes'],\n    campos_opcionales: ['observaciones', 'presupuesto', 'urgencia']\n  }\n};\n\nreturn [{ json: metadata }];"
+        "jsCode": "// Validar payload de carga de Excel con validaciones robustas\ntry {\n  const payload = $input.first().json || {};\n  \n  // Validaciones de estructura requerida\n  const validaciones = {\n    has_concesionario_id: !!(payload.concesionario_id),\n    has_usuario_carga_id: !!(payload.usuario_carga_id),\n    has_archivo_excel: !!(payload.archivo_excel),\n    has_usuario_rol: !!(payload.usuario_rol),\n    valid_usuario_rol: ['jefe_ventas', 'admin', 'gerencia'].includes(payload.usuario_rol)\n  };\n  \n  const missing_fields = Object.entries(validaciones)\n    .filter(([key, value]) => !value)\n    .map(([key]) => key);\n  \n  const valid = missing_fields.length === 0;\n  \n  if (!valid) {\n    return [{\n      json: {\n        valid: false,\n        missing_fields,\n        error: 'Payload de carga Excel inválido',\n        payload_received: {\n          concesionario_id: payload.concesionario_id,\n          usuario_carga_id: payload.usuario_carga_id,\n          usuario_rol: payload.usuario_rol,\n          has_archivo: !!(payload.archivo_excel)\n        }\n      }\n    }];\n  }\n  \n  // Procesar datos válidos\n  const uploadData = {\n    valid: true,\n    concesionario_id: payload.concesionario_id,\n    usuario_carga_id: payload.usuario_carga_id,\n    usuario_rol: payload.usuario_rol,\n    archivo_nombre: payload.archivo_nombre || 'leads_import.xlsx',\n    archivo_excel: payload.archivo_excel,\n    timestamp_carga: new Date().toISOString(),\n    configuracion: {\n      campos_requeridos: ['nombre', 'telefono', 'email', 'modelo_interes'],\n      campos_opcionales: ['observaciones', 'presupuesto', 'urgencia'],\n      max_leads_batch: 1000,\n      porcentaje_error_maximo: 0.5\n    }\n  };\n  \n  return [{ json: uploadData }];\n  \n} catch (error) {\n  return [{\n    json: {\n      valid: false,\n      error: 'Error al validar payload',\n      error_message: error.message,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
       },
       "id": "validate-upload",
       "name": "Validar Carga",
       "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "operator": { "type": "boolean", "operation": "isTrue" },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-valid-upload",
+      "name": "¿Carga Válida?",
+      "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [600, 300]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Verificar configuración del concesionario y permisos\nSELECT \n  c.id as concesionario_id,\n  c.nombre as concesionario_nombre,\n  c.activo,\n  tc.workflow_variables,\n  tc.whatsapp_config,\n  u.id as usuario_id,\n  u.nombre as usuario_nombre,\n  u.rol,\n  u.activo as usuario_activo\nFROM concesionarios c\nJOIN tenant_configurations tc ON c.id::text = tc.tenant_id\nJOIN usuarios u ON u.concesionario_id = c.id\nWHERE c.id = $1\n  AND u.id = $2\n  AND c.activo = true\n  AND u.activo = true\n  AND u.rol IN ('jefe_ventas', 'admin', 'gerencia');",
-        "options": {},
+        "query": "SELECT \n  c.id as concesionario_id,\n  c.nombre as concesionario_nombre,\n  c.activo,\n  u.id as usuario_id,\n  u.nombre as usuario_nombre,\n  u.email as usuario_email,\n  u.rol,\n  u.activo as usuario_activo\nFROM concesionarios c\nJOIN usuarios u ON u.concesionario_id = c.id\nWHERE c.id = $1\n  AND u.id = $2\n  AND c.activo = true\n  AND u.activo = true\n  AND u.rol = ANY($3);",
         "additionalFields": {
-          "mode": "multiple",
-          "queryReplacement": [
-            "={{ $json.concesionario_id }}",
-            "={{ $json.usuario_carga_id }}"
-          ]
+          "queryParameters": "={{ [$json.concesionario_id, $json.usuario_carga_id, ['jefe_ventas', 'admin', 'gerencia']] }}"
         }
       },
       "id": "verify-permissions",
       "name": "Verificar Permisos",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [680, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Procesar archivo Excel y extraer datos de leads\nconst uploadData = $('Validar Carga').item.json;\nconst permissionsData = $input.first().json;\n\n// Simular procesamiento de Excel (en producción usarías una librería como xlsx)\n// Para este ejemplo, asumimos que el archivo ya viene procesado como JSON\nconst excelBase64 = uploadData.archivo_excel;\n\n// Datos de ejemplo que se extraerían del Excel\nconst leadsSample = [\n  {\n    nombre: \"Juan Pérez\",\n    telefono: \"+56912345678\",\n    email: \"juan.perez@email.com\",\n    modelo_interes: \"Toyota Corolla\",\n    observaciones: \"Cliente referido\",\n    presupuesto: \"15000000\",\n    urgencia: \"alta\"\n  },\n  {\n    nombre: \"María González\",\n    telefono: \"+56987654321\",\n    email: \"maria.gonzalez@email.com\",\n    modelo_interes: \"Honda Civic\",\n    observaciones: \"Busca financiamiento\",\n    presupuesto: \"12000000\",\n    urgencia: \"media\"\n  }\n];\n\n// En producción, aquí procesarías el Excel real:\n// const XLSX = require('xlsx');\n// const buffer = Buffer.from(excelBase64, 'base64');\n// const workbook = XLSX.read(buffer, {type: 'buffer'});\n// const worksheet = workbook.Sheets[workbook.SheetNames[0]];\n// const leadsData = XLSX.utils.sheet_to_json(worksheet);\n\nconst leadsData = leadsSample; // Usar datos de ejemplo\n\n// Validar y limpiar datos\nconst leadsValidados = [];\nconst errores = [];\n\nfor (let i = 0; i < leadsData.length; i++) {\n  const lead = leadsData[i];\n  const erroresLead = [];\n  \n  // Validaciones básicas\n  if (!lead.nombre || lead.nombre.trim() === '') {\n    erroresLead.push('Nombre es requerido');\n  }\n  \n  if (!lead.telefono || lead.telefono.trim() === '') {\n    erroresLead.push('Teléfono es requerido');\n  } else {\n    // Limpiar formato de teléfono\n    lead.telefono = lead.telefono.replace(/\\D/g, '');\n    if (lead.telefono.length < 8) {\n      erroresLead.push('Teléfono debe tener al menos 8 dígitos');\n    }\n    // Agregar prefijo +56 si no lo tiene\n    if (!lead.telefono.startsWith('56')) {\n      lead.telefono = '56' + lead.telefono;\n    }\n    lead.telefono = '+' + lead.telefono;\n  }\n  \n  if (!lead.email || !lead.email.includes('@')) {\n    erroresLead.push('Email inválido');\n  }\n  \n  if (!lead.modelo_interes || lead.modelo_interes.trim() === '') {\n    erroresLead.push('Modelo de interés es requerido');\n  }\n  \n  if (erroresLead.length > 0) {\n    errores.push({\n      fila: i + 2, // +2 porque Excel empieza en 1 y hay header\n      datos: lead,\n      errores: erroresLead\n    });\n  } else {\n    // Agregar datos del concesionario\n    lead.concesionario_id = uploadData.concesionario_id;\n    lead.fuente_lead = 'excel_masivo';\n    lead.estado = 'pendiente_validacion';\n    lead.usuario_carga_id = uploadData.usuario_carga_id;\n    lead.fecha_carga = uploadData.timestamp_carga;\n    \n    leadsValidados.push(lead);\n  }\n}\n\nconst resultado = {\n  concesionario_id: uploadData.concesionario_id,\n  concesionario_nombre: permissionsData.concesionario_nombre,\n  usuario_carga: permissionsData.usuario_nombre,\n  archivo_nombre: uploadData.archivo_nombre,\n  timestamp_procesamiento: new Date().toISOString(),\n  \n  // Estadísticas\n  total_filas_procesadas: leadsData.length,\n  leads_validos: leadsValidados.length,\n  leads_con_errores: errores.length,\n  \n  // Datos\n  leads_validados: leadsValidados,\n  errores_validacion: errores,\n  \n  // Estado del procesamiento\n  procesamiento_exitoso: errores.length === 0 || (errores.length / leadsData.length) < 0.5\n};\n\nreturn [{ json: resultado }];"
-      },
-      "id": "process-excel",
-      "name": "Procesar Excel",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [900, 300]
+      "typeVersion": 2.1,
+      "position": [800, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
+          "number": [
+            {
+              "value1": "={{ $input.all().length }}",
+              "operation": "greaterThan",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "permissions-valid",
+      "name": "¿Permisos Válidos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar archivo Excel y validar datos\ntry {\n  const uploadData = $('Validar Carga').first().json;\n  const permissionsData = $input.first().json;\n  \n  // Para demo usar datos de ejemplo\n  const leadsSample = [\n    {\n      nombre: \"Juan Pérez García\",\n      telefono: \"912345678\",\n      email: \"juan.perez@email.com\",\n      modelo_interes: \"Toyota Corolla\",\n      observaciones: \"Cliente referido\",\n      presupuesto: \"15000000\",\n      urgencia: \"alta\"\n    },\n    {\n      nombre: \"María González López\",\n      telefono: \"987654321\",\n      email: \"maria.gonzalez@email.com\",\n      modelo_interes: \"Honda Civic\",\n      observaciones: \"Busca financiamiento\",\n      presupuesto: \"12000000\",\n      urgencia: \"media\"\n    }\n  ];\n  \n  const leadsData = leadsSample;\n  \n  if (leadsData.length > uploadData.configuracion.max_leads_batch) {\n    throw new Error(`Excede el límite de ${uploadData.configuracion.max_leads_batch} leads por lote`);\n  }\n  \n  const leadsValidados = [];\n  const errores = [];\n  \n  for (let i = 0; i < leadsData.length; i++) {\n    const lead = { ...leadsData[i] };\n    const erroresLead = [];\n    \n    // Validar campos requeridos\n    if (!lead.nombre || typeof lead.nombre !== 'string' || lead.nombre.trim() === '') {\n      erroresLead.push('Nombre es requerido');\n    } else {\n      lead.nombre = lead.nombre.trim();\n    }\n    \n    if (!lead.telefono) {\n      erroresLead.push('Teléfono es requerido');\n    } else {\n      lead.telefono = String(lead.telefono).replace(/\\D/g, '');\n      if (lead.telefono.length < 8) {\n        erroresLead.push('Teléfono debe tener al menos 8 dígitos');\n      } else {\n        if (lead.telefono.length === 8) {\n          lead.telefono = '569' + lead.telefono;\n        } else if (!lead.telefono.startsWith('56')) {\n          lead.telefono = '56' + lead.telefono;\n        }\n        lead.telefono = '+' + lead.telefono;\n      }\n    }\n    \n    if (!lead.email || !lead.email.includes('@')) {\n      erroresLead.push('Email inválido');\n    } else {\n      lead.email = lead.email.trim().toLowerCase();\n    }\n    \n    if (!lead.modelo_interes || lead.modelo_interes.trim() === '') {\n      erroresLead.push('Modelo de interés es requerido');\n    } else {\n      lead.modelo_interes = lead.modelo_interes.trim();\n    }\n    \n    if (erroresLead.length > 0) {\n      errores.push({\n        fila: i + 2,\n        datos_originales: leadsData[i],\n        errores: erroresLead\n      });\n    } else {\n      lead.concesionario_id = uploadData.concesionario_id;\n      lead.fuente_lead = 'excel_masivo';\n      lead.estado = 'nuevo';\n      lead.usuario_carga_id = uploadData.usuario_carga_id;\n      lead.fecha_carga = uploadData.timestamp_carga;\n      lead.prioridad_seguimiento = lead.urgencia || 'media';\n      \n      leadsValidados.push(lead);\n    }\n  }\n  \n  const porcentajeError = leadsData.length > 0 ? errores.length / leadsData.length : 0;\n  const procesamiento_exitoso = porcentajeError <= uploadData.configuracion.porcentaje_error_maximo;\n  \n  const resultado = {\n    concesionario_id: uploadData.concesionario_id,\n    concesionario_nombre: permissionsData.concesionario_nombre,\n    usuario_carga: permissionsData.usuario_nombre,\n    archivo_nombre: uploadData.archivo_nombre,\n    timestamp_procesamiento: new Date().toISOString(),\n    total_filas_procesadas: leadsData.length,\n    leads_validos: leadsValidados.length,\n    leads_con_errores: errores.length,\n    porcentaje_error: Math.round(porcentajeError * 100),\n    leads_validados: leadsValidados,\n    errores_validacion: errores,\n    procesamiento_exitoso\n  };\n  \n  return [{ json: resultado }];\n  \n} catch (error) {\n  return [{\n    json: {\n      status: 'error',\n      message: 'Error al procesar archivo Excel',\n      error: error.message,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
+      },
+      "id": "process-excel",
+      "name": "Procesar Excel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
           "conditions": [
             {
-              "id": "procesamiento-exitoso",
               "leftValue": "={{ $json.procesamiento_exitoso }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
+              "operator": { "type": "boolean", "operation": "isTrue" },
+              "rightValue": ""
             }
           ],
           "combinator": "and"
@@ -88,323 +109,100 @@
       "name": "¿Procesamiento Exitoso?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1120, 300]
+      "position": [1400, 300]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Verificar leads duplicados antes de insertar\nWITH leads_nuevos AS (\n  SELECT \n    unnest(ARRAY[{{ $json.leads_validados.map((lead, index) => `'${lead.telefono}'`).join(',') }}]) as telefono_nuevo,\n    unnest(ARRAY[{{ $json.leads_validados.map((lead, index) => `'${lead.email}'`).join(',') }}]) as email_nuevo,\n    unnest(ARRAY[{{ $json.leads_validados.map((lead, index) => `'${lead.nombre}'`).join(',') }}]) as nombre_nuevo\n),\nduplicados AS (\n  SELECT DISTINCT\n    ln.telefono_nuevo,\n    ln.email_nuevo,\n    ln.nombre_nuevo,\n    l.id as lead_existente_id,\n    l.estado as estado_existente,\n    l.fecha_creacion\n  FROM leads_nuevos ln\n  LEFT JOIN leads l ON (\n    l.telefono_cliente = ln.telefono_nuevo \n    OR l.email_cliente = ln.email_nuevo\n  )\n  AND l.concesionario_id = $1\n  AND l.estado NOT IN ('perdido', 'archivado')\n)\nSELECT \n  telefono_nuevo,\n  email_nuevo,\n  nombre_nuevo,\n  lead_existente_id,\n  estado_existente,\n  fecha_creacion,\n  CASE \n    WHEN lead_existente_id IS NOT NULL THEN 'duplicado'\n    ELSE 'nuevo'\n  END as status\nFROM duplicados\nORDER BY telefono_nuevo;",
-        "options": {},
+        "query": "INSERT INTO leads (\n  concesionario_id,\n  nombre_cliente,\n  telefono_cliente,\n  email_cliente,\n  modelo_interes,\n  observaciones,\n  presupuesto_estimado,\n  prioridad_seguimiento,\n  fuente_lead,\n  estado,\n  usuario_creacion_id,\n  fecha_creacion\n) \nSELECT \n  $1 as concesionario_id,\n  unnest($2::text[]) as nombre_cliente,\n  unnest($3::text[]) as telefono_cliente,\n  unnest($4::text[]) as email_cliente,\n  unnest($5::text[]) as modelo_interes,\n  unnest($6::text[]) as observaciones,\n  unnest($7::integer[]) as presupuesto_estimado,\n  unnest($8::text[]) as prioridad_seguimiento,\n  'excel_masivo' as fuente_lead,\n  'nuevo' as estado,\n  $9 as usuario_creacion_id,\n  NOW() as fecha_creacion\nRETURNING id, nombre_cliente, telefono_cliente, estado;",
         "additionalFields": {
-          "mode": "multiple",
-          "queryReplacement": [
-            "={{ $json.concesionario_id }}"
-          ]
+          "queryParameters": "={{ [\n  $json.concesionario_id,\n  $json.leads_validados.map(lead => lead.nombre),\n  $json.leads_validados.map(lead => lead.telefono),\n  $json.leads_validados.map(lead => lead.email),\n  $json.leads_validados.map(lead => lead.modelo_interes),\n  $json.leads_validados.map(lead => lead.observaciones || ''),\n  $json.leads_validados.map(lead => parseInt(lead.presupuesto) || null),\n  $json.leads_validados.map(lead => lead.prioridad_seguimiento || 'media'),\n  $json.usuario_carga_id\n] }}"
         }
       },
-      "id": "check-duplicates",
-      "name": "Verificar Duplicados",
+      "id": "insert-leads",
+      "name": "Insertar Leads",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [1340, 200],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Filtrar leads únicos y preparar para inserción\nconst processingData = $('Procesar Excel').item.json;\nconst duplicateCheck = $input.all();\n\n// Crear mapa de duplicados\nconst duplicadosMap = new Map();\nfor (const item of duplicateCheck) {\n  const data = item.json;\n  if (data.status === 'duplicado') {\n    duplicadosMap.set(data.telefono_nuevo, {\n      lead_existente_id: data.lead_existente_id,\n      estado_existente: data.estado_existente\n    });\n  }\n}\n\n// Filtrar leads únicos\nconst leadsUnicos = [];\nconst leadsDuplicados = [];\n\nfor (const lead of processingData.leads_validados) {\n  if (duplicadosMap.has(lead.telefono)) {\n    leadsDuplicados.push({\n      ...lead,\n      motivo_rechazo: 'Lead duplicado',\n      lead_existente_id: duplicadosMap.get(lead.telefono).lead_existente_id\n    });\n  } else {\n    leadsUnicos.push(lead);\n  }\n}\n\nconst resultado = {\n  ...processingData,\n  leads_unicos: leadsUnicos,\n  leads_duplicados: leadsDuplicados,\n  total_unicos: leadsUnicos.length,\n  total_duplicados: leadsDuplicados.length,\n  listo_para_insercion: leadsUnicos.length > 0\n};\n\nreturn [{ json: resultado }];"
-      },
-      "id": "filter-unique",
-      "name": "Filtrar Únicos",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1560, 200]
-    },
-    {
-      "parameters": {
-        "batchSize": 10,
-        "options": {}
-      },
-      "id": "split-batches",
-      "name": "Dividir en Lotes",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [1780, 200]
-    },
-    {
-      "parameters": {
-        "operation": "insert",
-        "table": "leads",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "concesionario_id": "={{ $json.concesionario_id }}",
-            "telefono_cliente": "={{ $json.telefono }}",
-            "nombre_cliente": "={{ $json.nombre }}",
-            "email_cliente": "={{ $json.email }}",
-            "modelo_interes": "={{ $json.modelo_interes }}",
-            "observaciones": "={{ $json.observaciones || '' }}",
-            "presupuesto_estimado": "={{ $json.presupuesto || null }}",
-            "prioridad": "={{ $json.urgencia || 'media' }}",
-            "fuente_lead": "excel_masivo",
-            "estado": "pendiente_prospección",
-            "usuario_carga_id": "={{ $json.usuario_carga_id }}",
-            "fecha_creacion": "={{ $json.fecha_carga }}",
-            "metadata": "={{ JSON.stringify({\n              archivo_origen: $('Procesar Excel').item.json.archivo_nombre,\n              procesado_automaticamente: true,\n              timestamp_validacion: new Date().toISOString()\n            }) }}"
-          }
-        },
-        "options": {}
-      },
-      "id": "insert-leads-batch",
-      "name": "Insertar Lote de Leads",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [2000, 200],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "// Preparar cada lead individual para inserción\nconst batchData = $input.first().json;\nconst leadsIndividuales = [];\n\nfor (const lead of batchData.leads_unicos) {\n  leadsIndividuales.push({ json: lead });\n}\n\nreturn leadsIndividuales;"
-      },
-      "id": "prepare-individual-leads",
-      "name": "Preparar Leads Individuales",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1780, 100]
-    },
-    {
-      "parameters": {
-        "operation": "insert",
-        "table": "carga_excel_log",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "concesionario_id": "={{ $json.concesionario_id }}",
-            "usuario_carga_id": "={{ $json.usuario_carga_id }}",
-            "archivo_nombre": "={{ $json.archivo_nombre }}",
-            "total_procesadas": "={{ $json.total_filas_procesadas }}",
-            "leads_validos": "={{ $json.total_unicos }}",
-            "leads_duplicados": "={{ $json.total_duplicados }}",
-            "leads_con_errores": "={{ $json.leads_con_errores }}",
-            "fecha_procesamiento": "={{ $json.timestamp_procesamiento }}",
-            "estado_procesamiento": "completado",
-            "errores_detalle": "={{ JSON.stringify($json.errores_validacion) }}",
-            "duplicados_detalle": "={{ JSON.stringify($json.leads_duplicados) }}",
-            "metadata": "={{ JSON.stringify({\n              procesamiento_exitoso: $json.procesamiento_exitoso,\n              total_insertados: $json.total_unicos\n            }) }}"
-          }
-        },
-        "options": {}
-      },
-      "id": "log-processing",
-      "name": "Registrar Procesamiento",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [2220, 200],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "sendTo": "{{ $('Verificar Permisos').item.json.usuario_nombre }}@{{ $json.concesionario_id }}.optimacx.com, jefe.ventas@{{ $json.concesionario_id }}.optimacx.com",
-        "subject": "✅ Carga Masiva Completada: {{ $json.archivo_nombre }}",
-        "message": "=**CARGA MASIVA DE LEADS COMPLETADA**\\n\\n📋 **Resumen del Procesamiento:**\\n• Archivo: {{ $json.archivo_nombre }}\\n• Concesionario: {{ $json.concesionario_nombre }}\\n• Procesado por: {{ $json.usuario_carga }}\\n• Fecha: {{ new Date($json.timestamp_procesamiento).toLocaleString() }}\\n\\n📊 **Estadísticas:**\\n• Total de filas procesadas: {{ $json.total_filas_procesadas }}\\n• Leads válidos insertados: {{ $json.total_unicos }}\\n• Leads duplicados omitidos: {{ $json.total_duplicados }}\\n• Filas con errores: {{ $json.leads_con_errores }}\\n\\n🎯 **Próximos Pasos:**\\n• Los leads válidos están listos para prospección automática\\n• Se enviará campaña de WhatsApp en las próximas horas\\n• Los asesores recibirán notificaciones de nuevos leads\\n\\n{{ $json.leads_con_errores > 0 ? '⚠️ **Errores Encontrados:**\\nRevise los detalles en el sistema para corregir las filas con errores.' : '✅ **Procesamiento 100% Exitoso**\\nTodos los leads fueron validados correctamente.' }}\\n\\n{{ $json.total_duplicados > 0 ? '🔄 **Leads Duplicados:**\\nSe omitieron ' + $json.total_duplicados + ' leads que ya existían en el sistema.' : '' }}\\n\\n🔗 **Ver en CRM:** https://crm.optimacx.com/leads/masivos\\n\\nSistema OptimaCX",
-        "options": {
-          "allowUnauthorizedCerts": false
-        }
-      },
-      "id": "send-completion-email",
-      "name": "Notificar Finalización",
-      "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [2440, 200],
-      "credentials": {
-        "smtp": {
-          "id": "smtp-optimacx",
-          "name": "SMTP OptimaCX"
-        }
-      }
+      "position": [1600, 300]
     },
     {
       "parameters": {
-        "sendTo": "{{ $('Verificar Permisos').item.json.usuario_nombre }}@{{ $json.concesionario_id }}.optimacx.com",
-        "subject": "❌ Error en Carga Masiva: {{ $json.archivo_nombre }}",
-        "message": "=**ERROR EN CARGA MASIVA DE LEADS**\\n\\n📋 **Detalles del Error:**\\n• Archivo: {{ $json.archivo_nombre }}\\n• Concesionario: {{ $json.concesionario_nombre }}\\n• Procesado por: {{ $json.usuario_carga }}\\n• Fecha: {{ new Date($json.timestamp_procesamiento).toLocaleString() }}\\n\\n❌ **Problemas Encontrados:**\\n• Total de filas procesadas: {{ $json.total_filas_procesadas }}\\n• Leads válidos: {{ $json.leads_validos }}\\n• Leads con errores: {{ $json.leads_con_errores }}\\n• Porcentaje de error: {{ Math.round(($json.leads_con_errores / $json.total_filas_procesadas) * 100) }}%\\n\\n🔧 **Errores Detallados:**\\n{{ $json.errores_validacion.map(error => `Fila ${error.fila}: ${error.errores.join(', ')}`).join('\\n') }}\\n\\n💡 **Recomendaciones:**\\n1. Revise el formato del archivo Excel\\n2. Verifique que todas las columnas requeridas estén presentes\\n3. Corrija los errores indicados y vuelva a cargar\\n\\n📋 **Formato Requerido:**\\n• Nombre (requerido)\\n• Teléfono (requerido, formato +56XXXXXXXX)\\n• Email (requerido, formato válido)\\n• Modelo de Interés (requerido)\\n• Observaciones (opcional)\\n• Presupuesto (opcional)\\n• Urgencia (opcional: alta/media/baja)\\n\\nSistema OptimaCX",
-        "options": {
-          "allowUnauthorizedCerts": false
-        }
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "asignacion-asesores",
+        "data": "={{ JSON.stringify({\n  tipo_asignacion: 'carga_masiva_excel',\n  concesionario_id: $json.concesionario_id,\n  leads_count: $json.leads_validos,\n  prioridad: 'media'\n}) }}"
       },
-      "id": "send-error-email",
-      "name": "Notificar Error",
-      "type": "n8n-nodes-base.emailSend",
+      "id": "trigger-assignment",
+      "name": "Activar Asignación",
+      "type": "n8n-nodes-base.n8n",
       "typeVersion": 2.1,
-      "position": [1340, 400],
-      "credentials": {
-        "smtp": {
-          "id": "smtp-optimacx",
-          "name": "SMTP OptimaCX"
-        }
-      }
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta exitosa de procesamiento Excel\nconst data = $('Procesar Excel').first().json;\nconst leadsInsertados = $('Insertar Leads').all();\n\nreturn [{\n  json: {\n    status: 'success',\n    message: 'Archivo Excel procesado exitosamente',\n    archivo_nombre: data.archivo_nombre,\n    resumen: {\n      total_procesadas: data.total_filas_procesadas,\n      leads_insertados: data.leads_validos,\n      leads_con_errores: data.leads_con_errores,\n      porcentaje_exito: 100 - data.porcentaje_error\n    },\n    leads_insertados: leadsInsertados.map(lead => ({\n      id: lead.json.id,\n      nombre: lead.json.nombre_cliente,\n      telefono: lead.json.telefono_cliente\n    })),\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de error por payload inválido\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Payload de carga Excel inválido',\n    missing_fields: $json.missing_fields,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "invalid-payload-response",
+      "name": "Error Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [800, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de error por permisos insuficientes\nconst uploadData = $('Validar Carga').first().json;\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Permisos insuficientes para carga masiva',\n    usuario_id: uploadData.usuario_carga_id,\n    concesionario_id: uploadData.concesionario_id,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "permissions-error-response",
+      "name": "Error Permisos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1200, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de error en procesamiento\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Error en procesamiento de archivo Excel',\n    errores_encontrados: $json.errores_validacion || [],\n    porcentaje_error: $json.porcentaje_error || 0,\n    archivo_nombre: $json.archivo_nombre,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "processing-error-response",
+      "name": "Error Procesamiento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1600, 500]
     }
   ],
   "connections": {
-    "Webhook Carga Excel": {
-      "main": [
-        [
-          {
-            "node": "Validar Carga",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Validar Carga": {
-      "main": [
-        [
-          {
-            "node": "Verificar Permisos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Verificar Permisos": {
-      "main": [
-        [
-          {
-            "node": "Procesar Excel",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Procesar Excel": {
-      "main": [
-        [
-          {
-            "node": "¿Procesamiento Exitoso?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Procesamiento Exitoso?": {
-      "main": [
-        [
-          {
-            "node": "Verificar Duplicados",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Notificar Error",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Verificar Duplicados": {
-      "main": [
-        [
-          {
-            "node": "Filtrar Únicos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Filtrar Únicos": {
-      "main": [
-        [
-          {
-            "node": "Dividir en Lotes",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Preparar Leads Individuales",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Dividir en Lotes": {
-      "main": [
-        [
-          {
-            "node": "Preparar Leads Individuales",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Preparar Leads Individuales": {
-      "main": [
-        [
-          {
-            "node": "Insertar Lote de Leads",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Insertar Lote de Leads": {
-      "main": [
-        [
-          {
-            "node": "Registrar Procesamiento",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Registrar Procesamiento": {
-      "main": [
-        [
-          {
-            "node": "Notificar Finalización",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Webhook Carga Excel": { "main": [[{ "node": "Validar Carga", "type": "main", "index": 0 }]] },
+    "Validar Carga": { "main": [[{ "node": "¿Carga Válida?", "type": "main", "index": 0 }]] },
+    "¿Carga Válida?": { "main": [
+      [{ "node": "Verificar Permisos", "type": "main", "index": 0 }],
+      [{ "node": "Error Payload", "type": "main", "index": 0 }]
+    ] },
+    "Verificar Permisos": { "main": [[{ "node": "¿Permisos Válidos?", "type": "main", "index": 0 }]] },
+    "¿Permisos Válidos?": { "main": [
+      [{ "node": "Procesar Excel", "type": "main", "index": 0 }],
+      [{ "node": "Error Permisos", "type": "main", "index": 0 }]
+    ] },
+    "Procesar Excel": { "main": [[{ "node": "¿Procesamiento Exitoso?", "type": "main", "index": 0 }]] },
+    "¿Procesamiento Exitoso?": { "main": [
+      [{ "node": "Insertar Leads", "type": "main", "index": 0 }],
+      [{ "node": "Error Procesamiento", "type": "main", "index": 0 }]
+    ] },
+    "Insertar Leads": { "main": [[{ "node": "Activar Asignación", "type": "main", "index": 0 }]] },
+    "Activar Asignación": { "main": [[{ "node": "Respuesta Exitosa", "type": "main", "index": 0 }]] }
   },
-  "pinData": {},
   "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": ["leads", "excel", "masivo", "carga"],
-  "triggerCount": 0,
-  "updatedAt": "2024-08-09T05:47:00.000Z",
-  "versionId": "excel-processor-v2.1",
-  "name": "Procesador de Excel para Leads",
-  "active": true,
-  "id": "procesador-excel-leads",
-  "hash": "excel-leads-processor"
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 600
+  }
 }
