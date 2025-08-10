@@ -66,7 +66,7 @@
     },
     {
       "parameters": {
-        "jsCode": "/*** SURVEY RESPONSE MONITOR - SRP: Solo monitoreo de respuestas ***/\nconst monitorData = $('Response Monitor Trigger').first().json;\nconst whatsappSurveys = $('Get WhatsApp Surveys').first().json;\n\n
+        "jsCode": "/*** SURVEY RESPONSE MONITOR - SRP: Solo monitoreo de respuestas ***/\nconst input = $input.first()?.json || {};\nconst data = $('Get WhatsApp Surveys').first().json || [];\nconst pending = data.filter(r => r.estado !== 'completado');\nconst clients_for_call_center = pending.map(r => ({ telefono: r.cliente_telefono, nombre_completo: r.cliente_nombre, sucursal: r.sucursal }));\nconst monitoring_stats = { total: data.length, pending: pending.length, completed: data.length - pending.length };\nreturn [{ json: { ...input, clients_for_call_center, monitoring_stats } }];"
       },
       "id": "analyze-responses",
       "name": "Analyze Responses",
@@ -116,7 +116,7 @@
     },
     {
       "parameters": {
-        "jsCode": "
+        "jsCode": "// Generar reporte final simple\nreturn [{ json: { report: 'ok', timestamp: new Date().toISOString() } }];"
       },
       "id": "generate-final-report",
       "name": "Generate Final Report",

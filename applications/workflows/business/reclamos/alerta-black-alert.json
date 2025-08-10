@@ -62,7 +62,7 @@
     },
     {
       "parameters": {
-        "jsCode": "/*** COMPLAINT BLACK ALERT - SRP: Solo notificación masiva por ley del consumidor ***/\nconst alertData = $('Black Alert Trigger').first().json;\nconst recipients = $('Get Black Alert Recipients').first().json;\n\nconst complaintData = alertData.complaint_data;\nconst aiAnalysis = alertData.ai_analysis;\nconst tenantConfig = alertData.tenant_config;\n\n
+        "jsCode": "/*** COMPLAINT BLACK ALERT - SRP: Solo notificación masiva por ley del consumidor ***/\nconst alertData = $('Black Alert Trigger').first().json || {};\nconst recipients = $('Get Black Alert Recipients').first().json || [];\n\nconst complaintData = alertData.complaint_data || {};\nconst tenantId = alertData.tenant_id || alertData.tenant || alertData.concesionario_id;\n\n// Preparar lista de correos única\nconst toList = Array.isArray(recipients) ? recipients.map(r => r.email).filter(Boolean) : [];\nconst uniqueTo = [...new Set(toList)];\n\nconst subject = `ALERTA CRÍTICA (BLACK ALERT) - Reclamo #${complaintData.id_externo || complaintData.id || 'N/A'}`;\nconst html = `<!doctype html><html><body>\n  <h2>⚠️ Black Alert Activada</h2>\n  <p>Acción inmediata requerida para el reclamo <strong>#${complaintData.id_externo || complaintData.id || 'N/A'}</strong>.</p>\n  <ul>\n    <li><strong>Cliente:</strong> ${complaintData.cliente_nombre || 'N/D'}</li>\n    <li><strong>VIN:</strong> ${complaintData.vin || 'N/D'}</li>\n    <li><strong>Sucursal:</strong> ${complaintData.sucursal_nombre || 'N/D'}</li>\n    <li><strong>Detalle:</strong> ${complaintData.detalle || 'N/D'}</li>\n  </ul>\n</body></html>`;\n\nreturn [{ json: { tenant_id: tenantId, complaint_id: complaintData.id || null, email_targets: uniqueTo.map(to => ({ to, subject, html })) } }];"
       },
       "id": "prepare-mass-alert",
       "name": "Prepare Mass Alert",
@@ -134,7 +134,7 @@
     },
     {
       "parameters": {
-        "jsCode": "
+        "jsCode": "// Generar resumen de envío de emails\nconst first = $('Prepare Mass Alert').first().json || {};\nconst emailsAttempted = (first.email_targets || []).length;\nconst emailsActuallySent = $input.all().length;\nconst successRate = emailsAttempted ? Math.round((emailsActuallySent / emailsAttempted) * 100) : 0;\nreturn [{ json: { complaint_id: first.complaint_id, email_stats: { successful_sends: emailsActuallySent, total_recipients: emailsAttempted, success_rate: successRate } } }];"
       },
       "id": "generate-alert-report",
       "name": "Generate Alert Report",

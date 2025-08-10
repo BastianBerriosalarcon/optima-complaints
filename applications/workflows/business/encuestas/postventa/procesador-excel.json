@@ -52,7 +52,7 @@
     },
     {
       "parameters": {
-        "jsCode": "/*** SURVEY EXCEL PROCESSOR - SRP: Solo procesamiento de datos Excel ***/\nconst webhookData = $input.first().json;\nconst tenantId = webhookData.tenant_id;\nconst excelData = webhookData.excel_data;\nconst uploadedBy = webhookData.uploaded_by || 'sistema';\n\n
+        "jsCode": "/*** SURVEY EXCEL PROCESSOR - SRP: Solo procesamiento de datos Excel ***/\nconst body = $input.first()?.json || {};\nconst tenantId = body.tenant_id || body.concesionario_id || null;\nconst excelData = Array.isArray(body.excel_data) ? body.excel_data : [];\nconst clients_to_survey = excelData.map(r => ({ nombre_completo: r.nombre || r.cliente_nombre || '', telefono: r.telefono || r.cliente_telefono || '', email: r.email || r.cliente_email || '', sucursal: r.sucursal || null, vehiculo_patente: r.vehiculo_patente || r.patente || '' }));\nreturn [{ json: { tenant_id: tenantId, clients_to_survey, upload_metadata: { uploaded_by: body.uploaded_by || 'sistema', rows: excelData.length }, total_clients: clients_to_survey.length } }];"
       },
       "id": "process-excel-data",
       "name": "Process Excel Data",

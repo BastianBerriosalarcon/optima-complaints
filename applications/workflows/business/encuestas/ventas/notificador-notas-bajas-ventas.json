@@ -1,188 +1,21 @@
 {
   "name": "Sales Survey - Low Score Notifier",
-  "description": "Envía notificaciones por email al jefe de ventas y gerencia cuando una encuesta de ventas tiene calificación baja (1-8) y crea un caso para seguimiento.",
-  "tags": ["sales", "survey", "notification", "low-score", "ventas", "email", "case-management"],
+  "description": "Notifica por email bajas calificaciones y crea caso de seguimiento (VENTAS).",
+  "tags": ["sales", "survey", "notification", "low-score", "ventas"],
   "nodes": [
-    {
-      "parameters": {
-        "workflowId": "{{ $json.workflowId }}"
-      },
-      "id": "sales-notification-trigger",
-      "name": "Trigger Notificación Ventas",
-      "type": "n8n-nodes-base.executeWorkflowTrigger",
-      "typeVersion": 2.1,
-      "position": [240, 300]
-    },
-    {
-      "parameters": {
-        "operation": "create",
-        "resource": "execution",
-        "workflowId": "tenant-config-loader",
-        "data": "={{ JSON.stringify({ \"concesionario_id\": $json.concesionario_id, \"config_type\": \"email_notifications\" }) }}"
-      },
-      "id": "load-tenant-config-sales",
-      "name": "Cargar Config Concesionario Ventas",
-      "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2.1,
-      "position": [460, 300]
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT u.id, u.email, u.nombre_completo, u.rol FROM usuarios u WHERE u.concesionario_id = $1 AND u.activo = true AND (u.rol IN ('jefe_ventas', 'encargado_calidad') OR u.id = $2)",
-        "additionalFields": {
-          "queryParameters": "={{ [$json.concesionario_id, $json.venta_info.asesor_ventas_id] }}"
-        }
-      },
-      "id": "get-sales-recipients",
-      "name": "Obtener Destinatarios Específicos",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.1,
-      "position": [680, 300]
-    },
-    {
-      "parameters": {
-      },
-      "id": "prepare-sales-email-data",
-      "name": "Preparar Datos Email Ventas",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2.1,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "
-      },
-      "id": "generate-sales-email-html",
-      "name": "Generar HTML Email Ventas",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2.1,
-      "position": [1120, 300]
-    },
-    {
-      "parameters": {
-        "sendTo": "={{ $json.recipients.map(r => r.email).join(',') }}",
-        "subject": "={{ $json.subject }}",
-        "emailType": "html",
-        "message": "={{ $json.html_content }}",
-        "options": {
-          "priority": "={{ $json.priority }}"
-        }
-      },
-      "id": "send-sales-notification-email",
-      "name": "Enviar Email Notificación Ventas",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
-      "position": [1340, 300]
-    },
-    {
-      "parameters": {
-        "operation": "insert",
-        "schema": "public",
-        "table": "casos_feedback_ventas",
-        "columns": "survey_id,concesionario_id,sucursal_id,asesor_ventas_id,jefe_ventas_id,encargado_calidad_id",
-        "additionalFields": {
-          "values": "={{ [$('Trigger Notificación Ventas').first().json.survey_id, $('Trigger Notificación Ventas').first().json.concesionario_id, $('Trigger Notificación Ventas').first().json.sucursal_id, $('Trigger Notificación Ventas').first().json.venta_info.asesor_ventas_id, $('Obtener Destinatarios Específicos').first().json.find(r => r.rol === 'jefe_ventas')?.id, $('Obtener Destinatarios Específicos').first().json.find(r => r.rol === 'encargado_calidad')?.id] }}"
-        }
-      },
-      "id": "create-feedback-case",
-      "name": "Crear Caso de Feedback",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.1,
-      "position": [1560, 300]
-    },
-    {
-      "parameters": {
-      },
-      "id": "log-sales-notification-sent",
-      "name": "Log Notificación y Caso Creado",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2.1,
-      "position": [1780, 300]
-    }
+    { "parameters": { "workflowId": "={{ $json.workflowId || 'upstream' }}" }, "id": "sales-notification-trigger", "name": "Trigger Notificación Ventas", "type": "n8n-nodes-base.executeWorkflowTrigger", "typeVersion": 2.1, "position": [240, 300] },
+    { "parameters": { "requestMethod": "GET", "url": "={{ $vars.SUPABASE_URL }}/rest/v1/usuarios", "sendHeaders": true, "headerParameters": { "parameters": [ { "name": "apikey", "value": "={{ $vars.SUPABASE_ANON_KEY }}" }, { "name": "Authorization", "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}" } ] }, "sendBody": false, "qs": { "parameters": [ { "name": "concesionario_id", "value": "eq.{{ $json.concesionario_id }}" }, { "name": "rol", "value": "in.(jefe_ventas,encargado_calidad)" }, { "name": "activo", "value": "eq.true" }, { "name": "select", "value": "id,email,nombre,rol" } ] } }, "id": "get-sales-recipients", "name": "Obtener Destinatarios Específicos", "type": "n8n-nodes-base.httpRequestV3", "typeVersion": 4.2, "position": [460, 300] },
+    { "parameters": { "jsCode": "// Preparar datos de correo\nconst input = $input.first()?.json || {};\nconst recipients = ($('Obtener Destinatarios Específicos').first().json || []).map(r => r.email).filter(Boolean);\nconst subject = `Alerta VENTAS: Baja calificación (${input.average_score})`;\nconst html_content = `<p>Cliente: ${input.cliente_nombre || ''} (${input.cliente_telefono || ''})</p><p>Comentario: ${input.comentario||''}</p>`;\nreturn [{ json: { ...input, recipients, subject, html_content } }];" }, "id": "prepare-sales-email-data", "name": "Preparar Datos Email Ventas", "type": "n8n-nodes-base.code", "typeVersion": 2.1, "position": [680, 300] },
+    { "parameters": { "sendTo": "={{ ($json.recipients || []).join(',') }}", "subject": "={{ $json.subject }}", "emailType": "html", "message": "={{ $json.html_content }}" }, "id": "send-sales-notification-email", "name": "Enviar Email Notificación Ventas", "type": "n8n-nodes-base.emailSend", "typeVersion": 2.1, "position": [900, 300] },
+    { "parameters": { "requestMethod": "POST", "url": "={{ $vars.SUPABASE_URL }}/rest/v1/casos_feedback_ventas", "sendHeaders": true, "headerParameters": { "parameters": [ { "name": "apikey", "value": "={{ $vars.SUPABASE_ANON_KEY }}" }, { "name": "Authorization", "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}" }, { "name": "Content-Type", "value": "application/json" }, { "name": "Prefer", "value": "return=representation" } ] }, "sendBody": true, "bodyContentType": "json", "jsonBody": "={{ JSON.stringify({ survey_id: $json.survey_id || null, concesionario_id: $json.concesionario_id, sucursal_id: $json.sucursal_id || null, asesor_ventas_id: $json.venta_info?.asesor_ventas_id || null, jefe_ventas_id: null, encargado_calidad_id: null, creado_en: new Date().toISOString() }) }}" }, "id": "create-feedback-case", "name": "Crear Caso de Feedback", "type": "n8n-nodes-base.httpRequestV3", "typeVersion": 4.2, "position": [1120, 300] },
+    { "parameters": { "jsCode": "// Log simple\nreturn [{ json: { notified: true, case_created: true, time: new Date().toISOString() } }];" }, "id": "log-sales-notification-sent", "name": "Log Notificación y Caso Creado", "type": "n8n-nodes-base.code", "typeVersion": 2.1, "position": [1340, 300] }
   ],
   "connections": {
-    "Trigger Notificación Ventas": {
-      "main": [
-        [
-          {
-            "node": "Cargar Config Concesionario Ventas",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Cargar Config Concesionario Ventas": {
-      "main": [
-        [
-          {
-            "node": "Obtener Destinatarios Específicos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Obtener Destinatarios Específicos": {
-      "main": [
-        [
-          {
-            "node": "Preparar Datos Email Ventas",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Preparar Datos Email Ventas": {
-      "main": [
-        [
-          {
-            "node": "Generar HTML Email Ventas",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Generar HTML Email Ventas": {
-      "main": [
-        [
-          {
-            "node": "Enviar Email Notificación Ventas",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Enviar Email Notificación Ventas": {
-      "main": [
-        [
-          {
-            "node": "Crear Caso de Feedback",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Crear Caso de Feedback": {
-      "main": [
-        [
-          {
-            "node": "Log Notificación y Caso Creado",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Trigger Notificación Ventas": { "main": [[{ "node": "Obtener Destinatarios Específicos", "type": "main", "index": 0 }]] },
+    "Obtener Destinatarios Específicos": { "main": [[{ "node": "Preparar Datos Email Ventas", "type": "main", "index": 0 }]] },
+    "Preparar Datos Email Ventas": { "main": [[{ "node": "Enviar Email Notificación Ventas", "type": "main", "index": 0 }]] },
+    "Enviar Email Notificación Ventas": { "main": [[{ "node": "Crear Caso de Feedback", "type": "main", "index": 0 }]] },
+    "Crear Caso de Feedback": { "main": [[{ "node": "Log Notificación y Caso Creado", "type": "main", "index": 0 }]] }
   },
-  "settings": {
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  }
+  "settings": { "saveExecutionProgress": true, "saveManualExecutions": true }
 }

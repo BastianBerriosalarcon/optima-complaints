@@ -28,7 +28,7 @@
     },
     {
       "parameters": {
-        "jsCode": "/*** COMPLAINT NOTIFICATIONS - SRP: Solo notificaciones personalizadas por rol ***/\nconst notificationData = $('Notifications Trigger').first().json;\nconst currentTarget = $input.first().json;\n\nconst complaintData = notificationData.complaint_data;\nconst aiAnalysis = notificationData.ai_analysis;\nconst tenantConfig = notificationData.tenant_config;\nconst isBlackAlert = notificationData.is_black_alert;\n\n
+  "jsCode": "/*** COMPLAINT NOTIFICATIONS - SRP: Solo notificaciones personalizadas por rol ***/\nconst notificationData = $('Notifications Trigger').first().json || {};\nconst currentTarget = $input.first().json || {};\n\nconst complaintData = notificationData.complaint_data || {};\nconst tenantId = notificationData.tenant_id || notificationData.tenant || notificationData.concesionario_id;\nconst isBlackAlert = !!notificationData.is_black_alert;\n\nconst to = currentTarget.email || currentTarget.to;\nconst role = currentTarget.rol || currentTarget.role || 'desconocido';\nconst subject = `${isBlackAlert ? '⚠️' : 'ℹ️'} Reclamo #${complaintData.id_externo || complaintData.id || 'N/A'} - Notificación (${role})`;\nconst html = `<!doctype html><html><body>\n  <h3>${isBlackAlert ? '⚠️ Black Alert' : 'Notificación de Reclamo'}</h3>\n  <p>Estimado/a,</p>\n  <p>Se informa actualización del reclamo <strong>#${complaintData.id_externo || complaintData.id || 'N/A'}</strong>.</p>\n  <ul>\n    <li><strong>Cliente:</strong> ${complaintData.cliente_nombre || 'N/D'}</li>\n    <li><strong>VIN:</strong> ${complaintData.vin || 'N/D'}</li>\n    <li><strong>Estado:</strong> ${complaintData.estado || 'N/D'}</li>\n  </ul>\n  <p>Saludos,<br/>Optimacx</p>\n</body></html>`;\n\nreturn [{ json: { to, subject, html, priority: isBlackAlert ? 'urgent' : 'normal', tenant_id: tenantId, complaint_id: complaintData.id || null } }];"
       },
       "id": "prepare-role-notification",
       "name": "Prepare Role Notification",  
@@ -81,8 +81,7 @@
           ]
         }
       },
-      "id": "send-role-notification",
-      "name": "Send Role Notification",
+  "name": "Send Role Notification",
       "type": "n8n-nodes-base.httpRequestV3",
       "typeVersion": 4.1,
       "position": [900, 300]
@@ -100,7 +99,7 @@
     },
     {
       "parameters": {
-        "jsCode": "
+        "jsCode": "// Generar reporte de notificaciones\nconst triggerJson = $('Notifications Trigger').first().json || {};\nconst splitItem = $('Split Notification Targets').first().json || {};\nconst totalTargets = Array.isArray(splitItem.notification_targets) ? splitItem.notification_targets.length : ($input.all().length || 0);\nconst sent = $input.all().length;\nconst successRate = totalTargets ? Math.round((sent / totalTargets) * 100) : 100;\nreturn [{ json: {\n  complaint_id: triggerJson.complaint_data?.id || null,\n  notification_stats: { successful_sends: sent, total_targets: totalTargets, success_rate: successRate },\n  by_role: {},\n  completed_at: new Date().toISOString(),\n  tenant_id: triggerJson.tenant_id || null,\n  is_black_alert: !!triggerJson.is_black_alert,\n  complaint_urgency: triggerJson.complaint_urgency || 'normal'\n} }];"
       },
       "id": "generate-notification-report",
       "name": "Generate Notification Report",

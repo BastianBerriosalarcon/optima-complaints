@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "
+        "jsCode": "// Validar y normalizar datos de encuesta QR\nconst input = $input.first()?.json || {};\nconst concesionario_id = input.concesionario_id || input.tenant_id || null;\nconst recomendacion = Number(input.recomendacion || 0);\nconst satisfaccion = Number(input.satisfaccion || 0);\nconst lavado = Number(input.lavado || 0);\nconst average_score = Number(input.average_score ?? ((recomendacion + satisfaccion + lavado) / 3));\nreturn [{ json: { ...input, concesionario_id, recomendacion, satisfaccion, lavado, average_score } }];"
       },
       "id": "validate-and-process-qr-data",
       "name": "Validar y Procesar Datos QR",
@@ -73,7 +73,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Encuesta QR procesada exitosamente.\",\n  \"survey_id\": \"={{ $('Registrar Encuesta QR en DB').first().json.id }}\",\n  \"average_score\": {{ $('Validar y Procesar Datos QR').first().json.average_score }}\n}"
+  "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Encuesta QR procesada exitosamente.\",\n  \"average_score\": {{ $('Validar y Procesar Datos QR').first().json.average_score }}\n}"
       },
       "id": "success-response",
       "name": "Respuesta Exitosa",

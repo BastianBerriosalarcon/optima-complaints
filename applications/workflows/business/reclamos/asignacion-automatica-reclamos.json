@@ -17,52 +17,33 @@
     },
     {
       "parameters": {
-        "method": "GET",
+        "requestMethod": "GET",
         "url": "={{ $vars.SUPABASE_URL }}/rest/v1/usuarios",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "headers": {
+        "sendHeaders": true,
+        "headerParameters": {
           "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
-            }
+            { "name": "apikey", "value": "={{ $vars.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}" }
           ]
         },
         "qs": {
           "parameters": [
-            {
-              "name": "concesionario_id",
-              "value": "eq.{{ $json.complaint_input.tenant_id }}"
-            },
-            {
-              "name": "or",
-              "value": "(rol.eq.jefe_servicio,rol.eq.asesor_servicio,rol.eq.encargado_calidad)"
-            },
-            {
-              "name": "activo",
-              "value": "eq.true"
-            },
-            {
-              "name": "select",
-              "value": "id,nombre,email,rol,sucursal_id"
-            }
+            { "name": "concesionario_id", "value": "eq.{{ $json.complaint_input.tenant_id }}" },
+            { "name": "or", "value": "(rol.eq.jefe_servicio,rol.eq.asesor_servicio,rol.eq.encargado_calidad)" },
+            { "name": "activo", "value": "eq.true" },
+            { "name": "select", "value": "id,nombre,email,rol,sucursal_id" }
           ]
         }
       },
       "id": "get-service-staff",
       "name": "Get Service Staff",
       "type": "n8n-nodes-base.httpRequestV3",
-      "typeVersion": 4.1,
+      "typeVersion": 4.2,
       "position": [460, 300]
     },
     {
       "parameters": {
-        "jsCode": "/*** COMPLAINT AUTO ASSIGNMENT - SRP: Solo asignación y persistencia ***/\nconst assignmentData = $('Auto Assignment Trigger').first().json;\nconst serviceStaff = $('Get Service Staff').first().json;\n\nconst complaintInput = assignmentData.complaint_input;\nconst aiAnalysis = assignmentData.ai_analysis;\nconst tenantConfig = assignmentData.tenant_config;\n\n
+        "jsCode": "/*** COMPLAINT AUTO ASSIGNMENT - SRP ***/\nconst assignmentData = $json;\nconst staff = $('Get Service Staff').first().json || [];\n// Elegir asesor y jefe por reglas simples\nconst jefe = staff.find(u => u.rol === 'jefe_servicio');\nconst asesor = staff.find(u => u.rol === 'asesor_servicio');\nconst calidad = staff.find(u => u.rol === 'encargado_calidad');\nconst is_black_alert = (assignmentData.ai_analysis?.puntuacion_gravedad || 0) >= 0.9;\nconst complaint_data = { ...assignmentData.complaint_input, asignado_a: asesor?.id || jefe?.id || calidad?.id || null, estado: 'abierto' };\nconst notification_targets = [\n  { role: 'jefe_servicio', user: jefe },\n  { role: 'asesor_servicio', user: asesor },\n  { role: 'encargado_calidad', user: calidad }\n].filter(x => x.user);\nreturn [{ json: { complaint_data, notification_targets, ai_analysis: assignmentData.ai_analysis, tenant_config: AssignmentData.tenant_config, is_black_alert } }];"
       },
       "id": "assign-and-prepare-data",
       "name": "Assign and Prepare Data",
@@ -72,62 +53,33 @@
     },
     {
       "parameters": {
-        "method": "POST",
+        "requestMethod": "POST",
         "url": "={{ $vars.SUPABASE_URL }}/rest/v1/reclamos",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "headers": {
+        "sendHeaders": true,
+        "headerParameters": {
           "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=representation"
-            }
+            { "name": "apikey", "value": "={{ $vars.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
           ]
         },
-        "body": {
-          "parameters": [
-            {
-              "name": "body",
-              "value": "={{ JSON.stringify($json.complaint_data) }}"
-            }
-          ]
-        }
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ JSON.stringify($json.complaint_data) }}"
       },
       "id": "save-complaint-db",
       "name": "Save Complaint DB",
       "type": "n8n-nodes-base.httpRequestV3",
-      "typeVersion": 4.1,
+      "typeVersion": 4.2,
       "position": [900, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
           "conditions": [
-            {
-              "leftValue": "={{ $('Assign and Prepare Data').first().json.is_black_alert }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "equal"
-              }
-            }
+            { "leftValue": "={{ $json.is_black_alert }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equal" } }
           ],
           "combineOperation": "all"
         }
@@ -143,7 +95,7 @@
         "operation": "create",
         "resource": "execution",
         "workflowId": "complaint-black-alert",
-        "data": "={{ JSON.stringify({\n  complaint_id: $('Save Complaint DB').first().json[0].id,\n  tenant_id: $('Assign and Prepare Data').first().json.complaint_data.concesionario_id,\n  complaint_data: $('Assign and Prepare Data').first().json.complaint_data,\n  ai_analysis: $('Assign and Prepare Data').first().json.ai_analysis,\n  tenant_config: $('Assign and Prepare Data').first().json.tenant_config\n}) }}"
+        "data": "={{ JSON.stringify({ complaint_id: $('Save Complaint DB').first().json?.[0]?.id, tenant_id: $json.complaint_data?.concesionario_id, complaint_data: $json.complaint_data, ai_analysis: $json.ai_analysis, tenant_config: $json.tenant_config }) }}"
       },
       "id": "trigger-black-alert",
       "name": "Trigger Black Alert",
@@ -156,7 +108,7 @@
         "operation": "create",
         "resource": "execution",
         "workflowId": "complaint-notifications",
-        "data": "={{ JSON.stringify({\n  complaint_id: $('Save Complaint DB').first().json[0].id,\n  notification_targets: $('Assign and Prepare Data').first().json.notification_targets,\n  complaint_data: $('Assign and Prepare Data').first().json.complaint_data,\n  ai_analysis: $('Assign and Prepare Data').first().json.ai_analysis,\n  tenant_config: $('Assign and Prepare Data').first().json.tenant_config,\n  is_black_alert: $('Assign and Prepare Data').first().json.is_black_alert\n}) }}"
+        "data": "={{ JSON.stringify({ complaint_id: $('Save Complaint DB').first().json?.[0]?.id, notification_targets: $json.notification_targets, complaint_data: $json.complaint_data, ai_analysis: $json.ai_analysis, tenant_config: $json.tenant_config, is_black_alert: $json.is_black_alert }) }}"
       },
       "id": "trigger-notifications",
       "name": "Trigger Notifications",
@@ -167,7 +119,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Reclamo asignado y guardado correctamente\",\n  \"complaint_id\": \"{{ $('Save Complaint DB').first().json[0]?.id }}\",\n  \"assigned_to\": {\n    \"jefe_servicio\": \"{{ $('Assign and Prepare Data').first().json.notification_targets.find(t => t.role === 'jefe_servicio')?.user?.nombre }}\",\n    \"asesor_servicio\": \"{{ $('Assign and Prepare Data').first().json.notification_targets.find(t => t.role === 'asesor_servicio')?.user?.nombre }}\",\n    \"encargado_calidad\": \"{{ $('Assign and Prepare Data').first().json.notification_targets.find(t => t.role === 'encargado_calidad')?.user?.nombre }}\"\n  },\n  \"classification\": {{ JSON.stringify($('Assign and Prepare Data').first().json.ai_analysis.clasificacion) }},\n  \"black_alert_triggered\": {{ $('Assign and Prepare Data').first().json.is_black_alert }},\n  \"notifications_sent\": true,\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Reclamo asignado y guardado correctamente\",\n  \"complaint_id\": \"{{ $('Save Complaint DB').first().json?.[0]?.id }}\",\n  \"black_alert_triggered\": {{ $json.is_black_alert }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
       },
       "id": "success-response",
       "name": "Success Response",
@@ -177,124 +129,16 @@
     }
   ],
   "connections": {
-    "Auto Assignment Trigger": {
-      "main": [
-        [
-          {
-            "node": "Get Service Staff",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Service Staff": {
-      "main": [
-        [
-          {
-            "node": "Assign and Prepare Data",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Assign and Prepare Data": {
-      "main": [
-        [
-          {
-            "node": "Save Complaint DB",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Save Complaint DB": {
-      "main": [
-        [
-          {
-            "node": "Check Black Alert",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Black Alert": {
-      "main": [
-        [
-          {
-            "node": "Trigger Black Alert",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Trigger Notifications",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Trigger Notifications",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Trigger Black Alert": {
-      "main": [
-        [
-          {
-            "node": "Success Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Trigger Notifications": {
-      "main": [
-        [
-          {
-            "node": "Success Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Auto Assignment Trigger": { "main": [[{ "node": "Get Service Staff", "type": "main", "index": 0 }]] },
+    "Get Service Staff": { "main": [[{ "node": "Assign and Prepare Data", "type": "main", "index": 0 }]] },
+    "Assign and Prepare Data": { "main": [[{ "node": "Save Complaint DB", "type": "main", "index": 0 }]] },
+    "Save Complaint DB": { "main": [[{ "node": "Check Black Alert", "type": "main", "index": 0 }]] },
+    "Check Black Alert": { "main": [[{ "node": "Trigger Black Alert", "type": "main", "index": 0 }, { "node": "Trigger Notifications", "type": "main", "index": 0 }], [{ "node": "Trigger Notifications", "type": "main", "index": 0 }]] },
+    "Trigger Black Alert": { "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]] },
+    "Trigger Notifications": { "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]] }
   },
-  "pinData": {},
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "srp",
-      "name": "srp"
-    },
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "reclamos",
-      "name": "reclamos"
-    },
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "assignment",
-      "name": "assignment"
-    }
-  ],
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
+  "settings": { "executionOrder": "v1" },
+  "tags": ["srp", "reclamos", "assignment"],
   "id": "complaint-auto-assignment",
-  "versionId": "1.0.0"
+  "versionId": "1.0.1"
 }

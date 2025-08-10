@@ -1,12 +1,10 @@
 {
   "name": "Survey - Response Handler",
-  "description": "Workflow enfocado en manejar respuestas de encuestas, registrarlas en BD y disparar notificaciones. Principio SRP: Una sola responsabilidad - manejo de respuestas.",
+  "description": "Maneja respuestas de encuestas: valida, registra en Supabase y notifica si la puntuación es baja (SRP).",
   "tags": ["survey", "response", "handler", "srp"],
   "nodes": [
     {
-      "parameters": {
-        "workflowId": "{{ $json.workflowId }}"
-      },
+      "parameters": { "workflowId": "={{ $json.workflowId || 'upstream' }}" },
       "id": "workflow-trigger",
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
@@ -15,7 +13,7 @@
     },
     {
       "parameters": {
-        "jsCode": "
+        "jsCode": "// Normalizar y validar respuesta\nconst input = $input.first()?.json || {};\nconst concesionario_id = input.concesionario_id || input.tenant_id || null;\nconst recomendacion = Number(input.recomendacion || 0);\nconst satisfaccion = Number(input.satisfaccion || 0);\nconst lavado = Number(input.lavado || 0);\nconst average_score = Number(input.average_score ?? ((recomendacion + satisfaccion + lavado) / 3));\nconst requires_notification = average_score <= 8;\nreturn [{ json: { ...input, concesionario_id, recomendacion, satisfaccion, lavado, average_score, requires_notification } }];"
       },
       "id": "validate-survey-response",
       "name": "Validar Respuesta Encuesta",
@@ -25,28 +23,33 @@
     },
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO encuestas (concesionario_id, sucursal_id, cliente_nombre, cliente_rut, cliente_telefono, recomendacion, satisfaccion, lavado, asesor, comentario, origen, estado, average_score) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *",
-        "additionalFields": {
-          "queryParameters": "={{ [$json.concesionario_id, $json.sucursal_id, $json.cliente_nombre, $json.cliente_rut, $json.cliente_telefono, $json.recomendacion, $json.satisfaccion, $json.lavado, $json.asesor, $json.comentario, $json.origen, $json.estado, $json.average_score] }}"
-        }
+        "requestMethod": "POST",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/encuestas",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "apikey", "value": "={{ $vars.SUPABASE_ANON_KEY }}" },
+          { "name": "Authorization", "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}" },
+          { "name": "Content-Type", "value": "application/json" },
+          { "name": "Prefer", "value": "return=representation" }
+        ]},
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ JSON.stringify({ concesionario_id: $json.concesionario_id, sucursal_id: $json.sucursal_id, cliente_nombre: $json.cliente_nombre, cliente_rut: $json.cliente_rut, cliente_telefono: $json.cliente_telefono, recomendacion: $json.recomendacion, satisfaccion: $json.satisfaccion, lavado: $json.lavado, asesor: $json.asesor, comentario: $json.comentario, origen: $json.origen || 'WhatsApp', estado: $json.estado || 'completado', average_score: $json.average_score, fecha_completado: new Date().toISOString() }) }}"
       },
       "id": "insert-survey-response",
       "name": "Registrar Encuesta",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequestV3",
+      "typeVersion": 4.2,
       "position": [680, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [
-            {
-              "value1": "={{ $('Validar Respuesta Encuesta').first().json.requires_notification }}",
-              "operation": "equal",
-              "value2": true
-            }
-          ]
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $('Validar Respuesta Encuesta').first().json.requires_notification }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equal" } }
+          ],
+          "combineOperation": "all"
         }
       },
       "id": "check-notification-required",
@@ -57,6 +60,7 @@
     },
     {
       "parameters": {
+        "jsCode": "// Preparar email de alerta por baja puntuación\nconst d = $json;\nconst subject = `Alerta: Encuesta con baja puntuación (${d.average_score})`;\nconst html = `<p>Cliente: ${d.cliente_nombre || ''} (${d.cliente_telefono || ''})</p><p>Comentario: ${d.comentario||''}</p>`;\nreturn [{ json: { ...d, subject, html } }];"
       },
       "id": "prepare-notification-data",
       "name": "Preparar Datos Notificación",
@@ -79,92 +83,23 @@
     },
     {
       "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Encuesta registrada correctamente\",\n  \"average_score\": {{ $json.average_score }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
       },
       "id": "generate-success-response",
       "name": "Generar Respuesta Éxito",
-      "type": "n8n-nodes-base.code",
+      "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 2.1,
       "position": [1340, 400]
     }
   ],
   "connections": {
-    "Trigger del Workflow": {
-      "main": [
-        [
-          {
-            "node": "Validar Respuesta Encuesta",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Validar Respuesta Encuesta": {
-      "main": [
-        [
-          {
-            "node": "Registrar Encuesta",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Registrar Encuesta": {
-      "main": [
-        [
-          {
-            "node": "¿Requiere Notificación?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Requiere Notificación?": {
-      "main": [
-        [
-          {
-            "node": "Preparar Datos Notificación",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Generar Respuesta Éxito",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Preparar Datos Notificación": {
-      "main": [
-        [
-          {
-            "node": "Disparar Notificación Baja Calificación",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Disparar Notificación Baja Calificación": {
-      "main": [
-        [
-          {
-            "node": "Generar Respuesta Éxito",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Trigger del Workflow": { "main": [[{ "node": "Validar Respuesta Encuesta", "type": "main", "index": 0 }]] },
+    "Validar Respuesta Encuesta": { "main": [[{ "node": "Registrar Encuesta", "type": "main", "index": 0 }]] },
+    "Registrar Encuesta": { "main": [[{ "node": "¿Requiere Notificación?", "type": "main", "index": 0 }]] },
+    "¿Requiere Notificación?": { "main": [[{ "node": "Preparar Datos Notificación", "type": "main", "index": 0 }], [{ "node": "Generar Respuesta Éxito", "type": "main", "index": 0 }]] },
+    "Preparar Datos Notificación": { "main": [[{ "node": "Disparar Notificación Baja Calificación", "type": "main", "index": 0 }]] },
+    "Disparar Notificación Baja Calificación": { "main": [[{ "node": "Generar Respuesta Éxito", "type": "main", "index": 0 }]] }
   },
-  "settings": {
-    "saveExecutionProgress": true,
-    "saveManualExecutions": true,
-    "callerPolicy": "workflowsFromSameOwner"
-  }
+  "settings": { "saveExecutionProgress": true, "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" }
 }

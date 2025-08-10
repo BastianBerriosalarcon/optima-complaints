@@ -17,24 +17,13 @@
     },
     {
       "parameters": {
-        "batchSize": 10,
-        "options": {}
-      },
-      "id": "batch-clients",
-      "name": "Batch Clients",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [460, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// SURVEY WHATSAPP SENDER - SRP: Solo envío masivo de encuestas\nconst campaignData = $('WhatsApp Sender Trigger').first().json;\nconst currentBatch = $input.first().json;\nconst tenantConfig = campaignData.tenant_config;\n\n// Preparar mensajes para el lote actual\nconst messages = currentBatch.map(cliente => ({\n  to: cliente.telefono,\n  mensaje: `Hola ${cliente.nombre_completo}, tu opinión es importante para nosotros. Por favor completa nuestra encuesta: ${campaignData.survey_url}?cliente=${cliente.rut}`,\n  cliente_id: cliente.id,\n  rut_cliente: cliente.rut\n}));\n\nreturn { messages, tenant_config: tenantConfig };"
+        "jsCode": "// Preparar lote y mensajes\nconst body = $json || {};\nconst clients = Array.isArray(body.clients_to_survey) ? body.clients_to_survey : [];\nconst survey_url = body.survey_url || '';\nconst tenant_config = body.tenant_config || {};\nif (!survey_url || clients.length === 0) { throw new Error('Faltan clients_to_survey o survey_url'); }\nconst messages = clients.map(c => ({ to: c.telefono, message: `Hola ${c.nombre_completo}, tu opinión es importante. Encuesta: ${survey_url}?cliente=${c.rut}`, client_data: c }));\nreturn [{ json: { messages, tenant_id: body.tenant_id, survey_link: survey_url, tenant_config } }];"
       },
       "id": "prepare-messages",
       "name": "Prepare Messages",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2.1,
-      "position": [680, 300]
+      "position": [460, 300]
     },
     {
       "parameters": {
@@ -45,349 +34,82 @@
       "name": "Split Messages",
       "type": "n8n-nodes-base.itemLists",
       "typeVersion": 3,
-      "position": [900, 300]
+      "position": [680, 300]
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https:
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "headers": {
+        "requestMethod": "POST",
+        "url": "https://graph.facebook.com/v20.0/{{ $vars.WHATSAPP_PHONE_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $vars.WHATSAPP_ACCESS_TOKEN }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
+            { "name": "Authorization", "value": "Bearer {{ $vars.WHATSAPP_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
           ]
         },
-        "body": {
-          "parameters": [
-            {
-              "name": "messaging_product",
-              "value": "whatsapp"
-            },
-            {
-              "name": "to",
-              "value": "={{ $json.to }}"
-            },
-            {
-              "name": "type",
-              "value": "text"
-            },
-            {
-              "name": "text",
-              "value": "={ \"body\": \"{{ $json.message.replace(/\"/g, '\\\\\"') }}\" }"
-            }
-          ]
-        }
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={ \n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.to }}\",\n  \"type\": \"text\",\n  \"text\": { \"preview_url\": true, \"body\": \"{{ $json.message }}\" }\n}"
       },
       "id": "send-whatsapp",
       "name": "Send WhatsApp",
       "type": "n8n-nodes-base.httpRequestV3",
-      "typeVersion": 4.1,
-      "position": [1120, 300]
+      "typeVersion": 4.2,
+      "position": [900, 300]
     },
     {
       "parameters": {
-        "method": "POST",
+        "requestMethod": "POST",
         "url": "={{ $vars.SUPABASE_URL }}/rest/v1/encuestas",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "headers": {
+        "sendHeaders": true,
+        "headerParameters": {
           "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $vars.SUPABASE_ANON_KEY }}"
-            },
-            {
-              "name": "Authorization",
-              "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "Prefer",
-              "value": "return=representation"
-            }
+            { "name": "apikey", "value": "={{ $vars.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
           ]
         },
-        "body": {
-          "parameters": [
-            {
-              "name": "concesionario_id",
-              "value": "={{ $json.tenant_id }}"
-            },
-            {
-              "name": "cliente_nombre",
-              "value": "={{ $json.client_data.nombre }}"
-            },
-            {
-              "name": "cliente_telefono",
-              "value": "={{ $json.client_data.telefono }}"
-            },
-            {
-              "name": "cliente_email",
-              "value": "={{ $json.client_data.email }}"
-            },
-            {
-              "name": "cliente_rut",
-              "value": "={{ $json.client_data.rut }}"
-            },  
-            {
-              "name": "sucursal",
-              "value": "={{ $json.client_data.sucursal }}"
-            },
-            {
-              "name": "fecha_atencion",
-              "value": "={{ $json.client_data.fecha_atencion }}"
-            },
-            {
-              "name": "tipo_servicio",
-              "value": "={{ $json.client_data.tipo_servicio }}"
-            },
-            {
-              "name": "asesor_servicio",
-              "value": "={{ $json.client_data.asesor_servicio }}"
-            },
-            {
-              "name": "vehiculo_patente",
-              "value": "={{ $json.client_data.vehiculo_patente }}"
-            },
-            {
-              "name": "origen",
-              "value": "WhatsApp"
-            },
-            {
-              "name": "estado",
-              "value": "enviado"
-            },
-            {
-              "name": "survey_link",
-              "value": "={{ $json.survey_link }}"
-            },
-            {
-              "name": "fecha_envio",
-              "value": "={{ new Date().toISOString() }}"
-            },
-            {
-              "name": "whatsapp_message_id",
-              "value": "={{ $('Send WhatsApp').first().json.messages?.[0]?.id }}"
-            }
-          ]
-        }
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={{ JSON.stringify({\n  concesionario_id: $json.tenant_id,\n  cliente_nombre: $json.client_data?.nombre,\n  cliente_telefono: $json.client_data?.telefono,\n  cliente_email: $json.client_data?.email,\n  cliente_rut: $json.client_data?.rut,\n  sucursal: $json.client_data?.sucursal,\n  fecha_atencion: $json.client_data?.fecha_atencion,\n  tipo_servicio: $json.client_data?.tipo_servicio,\n  asesor_servicio: $json.client_data?.asesor_servicio,\n  vehiculo_patente: $json.client_data?.vehiculo_patente,\n  origen: 'WhatsApp',\n  estado: 'enviado',\n  survey_link: $json.survey_link,\n  fecha_envio: new Date().toISOString(),\n  whatsapp_message_id: $('Send WhatsApp').first().json.messages?.[0]?.id || null\n}) }}"
       },
       "id": "register-survey",
       "name": "Register Survey",
       "type": "n8n-nodes-base.httpRequestV3",
-      "typeVersion": 4.1,
-      "position": [1340, 300]
+      "typeVersion": 4.2,
+      "position": [1120, 300]
     },
     {
-      "parameters": {
-        "amount": 2,
-        "unit": "seconds"
-      },
+      "parameters": { "amount": 2, "unit": "seconds" },
       "id": "rate-limit-delay",
       "name": "Rate Limit Delay",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 2.1,
-      "position": [1560, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "
-      },
-      "id": "batch-statistics",
-      "name": "Batch Statistics",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2.1,
-      "position": [1780, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "
-      },
-      "id": "schedule-monitoring",
-      "name": "Schedule Monitoring",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2.1,
-      "position": [2000, 300]
-    },
-    {
-      "parameters": {
-        "operation": "create",
-        "resource": "execution",
-        "workflowId": "survey-response-monitor",
-        "data": "={{ JSON.stringify($json) }}",
-        "options": {
-          "startAt": "={{ $json.schedule_time }}"
-        }
-      },
-      "id": "trigger-monitoring",
-      "name": "Trigger Monitoring",
-      "type": "n8n-nodes-base.n8n",
-      "typeVersion": 2.1,
-      "position": [2220, 300]
+      "position": [1340, 300]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Campaña WhatsApp enviada correctamente. Monitoreo programado en 6 horas.\",\n  \"campaign_data\": {\n    \"total_sent\": {{ $('WhatsApp Sender Trigger').first().json.clients_to_survey.length }},\n    \"batch_reports\": {{ JSON.stringify($('Batch Statistics').all()) }},\n    \"monitoring_scheduled\": \"{{ $json.schedule_time }}\"\n  },\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Mensajes enviados y registros creados\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
       },
       "id": "success-response",
-      "name": "Success Response", 
+      "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 2.1,
-      "position": [2440, 300]
+      "position": [1560, 300]
     }
   ],
   "connections": {
-    "WhatsApp Sender Trigger": {
-      "main": [
-        [
-          {
-            "node": "Batch Clients",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Batch Clients": {
-      "main": [
-        [
-          {
-            "node": "Prepare Messages",
-            "type": "main", 
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Messages": {
-      "main": [
-        [
-          {
-            "node": "Split Messages",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Split Messages": {
-      "main": [
-        [
-          {
-            "node": "Send WhatsApp",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send WhatsApp": {
-      "main": [
-        [
-          {
-            "node": "Register Survey",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Register Survey": {
-      "main": [
-        [
-          {
-            "node": "Rate Limit Delay",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Rate Limit Delay": {
-      "main": [
-        [
-          {
-            "node": "Batch Statistics", 
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Batch Statistics": {
-      "main": [
-        [
-          {
-            "node": "Schedule Monitoring",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Schedule Monitoring": {
-      "main": [
-        [
-          {
-            "node": "Trigger Monitoring",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Trigger Monitoring": {
-      "main": [
-        [
-          {
-            "node": "Success Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "WhatsApp Sender Trigger": { "main": [[{ "node": "Prepare Messages", "type": "main", "index": 0 }]] },
+    "Prepare Messages": { "main": [[{ "node": "Split Messages", "type": "main", "index": 0 }]] },
+    "Split Messages": { "main": [[{ "node": "Send WhatsApp", "type": "main", "index": 0 }]] },
+    "Send WhatsApp": { "main": [[{ "node": "Register Survey", "type": "main", "index": 0 }]] },
+    "Register Survey": { "main": [[{ "node": "Rate Limit Delay", "type": "main", "index": 0 }]] },
+    "Rate Limit Delay": { "main": [[{ "node": "Success Response", "type": "main", "index": 0 }]] }
   },
-  "pinData": {},
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "srp",
-      "name": "srp"
-    },
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "survey",
-      "name": "survey"
-    },
-    {
-      "createdAt": "2024-01-01T00:00:00.000Z",
-      "updatedAt": "2024-01-01T00:00:00.000Z",
-      "id": "whatsapp",
-      "name": "whatsapp"
-    }
-  ],
-  "meta": {
-    "templateCredsSetupCompleted": true
-  },
+  "settings": { "executionOrder": "v1" },
+  "tags": ["srp", "survey", "whatsapp"],
   "id": "survey-whatsapp-sender",
-  "versionId": "1.0.0"
+  "versionId": "1.0.1"
 }

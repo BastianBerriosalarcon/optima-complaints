@@ -1,16 +1,13 @@
 {
   "name": "Agregador de Métricas de Reclamos",
-  "description": "Workflow que calcula y agrega métricas de reclamos (estado, tipo, sucursal, tiempos) para optimizar dashboards.",
+  "description": "Calcula métricas de reclamos de las últimas 24h y las guarda para dashboards.",
   "tags": ["dashboard", "metrics", "complaints", "aggregation"],
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
-            {
-              "field": "hours",
-              "hoursInterval": 4
-            }
+            { "field": "hours", "hoursInterval": 4 }
           ]
         }
       },
@@ -23,7 +20,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "-- Consulta para agregar métricas de reclamos de las últimas 24 horas\nSELECT \n    concesionario_id,\n    estado,\n    tipo_reclamo,\n    sucursal,\n    COUNT(*) as total_reclamos,\n    AVG(EXTRACT(EPOCH FROM (fecha_cierre - fecha_creacion))/3600) as tiempo_resolucion_horas,\n    COUNT(*) FILTER (WHERE black_alert = true) as total_black_alerts\nFROM \n    reclamos\nWHERE \n    fecha_creacion >= NOW() - INTERVAL '24 hours'\nGROUP BY \n    concesionario_id, estado, tipo_reclamo, sucursal;"
+        "query": "-- Agregación por concesionario/estado/tipo/sucursal (últimas 24h)\nSELECT\n  concesionario_id,\n  estado,\n  tipo_reclamo,\n  sucursal,\n  COUNT(*) AS total_reclamos,\n  AVG(EXTRACT(EPOCH FROM (COALESCE(fecha_cierre, NOW()) - fecha_creacion)) / 3600) AS tiempo_resolucion_horas,\n  COUNT(*) FILTER (WHERE black_alert = true) AS total_black_alerts\nFROM reclamos\nWHERE fecha_creacion >= NOW() - INTERVAL '24 hours'\nGROUP BY concesionario_id, estado, tipo_reclamo, sucursal;"
       },
       "id": "query-complaint-metrics",
       "name": "Consultar Métricas de Reclamos",
@@ -33,7 +30,7 @@
     },
     {
       "parameters": {
-        "jsCode": "
+        "jsCode": "// Consolida métricas por concesionario (SRP)\nconst rows = $input.all().map(i => i.json);\nconst byDealer = {};\nfor (const r of rows) {\n  const k = String(r.concesionario_id);\n  if (!byDealer[k]) {\n    byDealer[k] = {\n      concesionario_id: r.concesionario_id,\n      periodo: 'last_24h',\n      fecha_calculo: new Date().toISOString(),\n      total_pendientes: 0,\n      total_en_proceso: 0,\n      total_cerrados: 0,\n      total_reclamos: 0,\n      distribucion_por_tipo: {},\n      distribucion_por_sucursal: {},\n      tiempo_resolucion_promedio_horas: 0,\n      total_black_alerts: 0,\n      __accTiempo: 0\n    };\n  }\n  const d = byDealer[k];\n  const count = Number(r.total_reclamos) || 0;\n  d.total_reclamos += count;\n  const estado = (r.estado || '').toLowerCase();\n  if (estado === 'pendiente') d.total_pendientes += count;\n  else if (estado === 'en_proceso' || estado === 'en proceso') d.total_en_proceso += count;\n  else if (estado === 'cerrado') d.total_cerrados += count;\n  const tipo = String(r.tipo_reclamo || 'desconocido');\n  d.distribucion_por_tipo[tipo] = (d.distribucion_por_tipo[tipo] || 0) + count;\n  const suc = String(r.sucursal || 'sin_sucursal');\n  d.distribucion_por_sucursal[suc] = (d.distribucion_por_sucursal[suc] || 0) + count;\n  const avgHoras = Number(r.tiempo_resolucion_horas) || 0;\n  d.__accTiempo += avgHoras * count;\n  d.total_black_alerts += Number(r.total_black_alerts) || 0;\n}\nconst out = Object.values(byDealer).map(d => {\n  d.tiempo_resolucion_promedio_horas = d.total_reclamos > 0 ? Number((d.__accTiempo / d.total_reclamos).toFixed(2)) : 0;\n  delete d.__accTiempo;\n  return d;\n});\nreturn out.map(json => ({ json }));"
       },
       "id": "process-metrics",
       "name": "Procesar Métricas",
@@ -43,56 +40,52 @@
     },
     {
       "parameters": {
-        "operation": "upsert",
-        "schema": "public",
-        "table": "metricas_dashboard_reclamos",
-        "conflictKey": "concesionario_id,periodo,fecha_calculo",
-        "columns": "concesionario_id,periodo,fecha_calculo,total_pendientes,total_en_proceso,total_cerrados,total_reclamos,distribucion_por_tipo,distribucion_por_sucursal,tiempo_resolucion_promedio_horas,total_black_alerts",
-        "additionalFields": {
-          "values": "={{ [$json.concesionario_id, $json.periodo, $json.fecha_calculo, $json.total_pendientes, $json.total_en_proceso, $json.total_cerrados, $json.total_reclamos, JSON.stringify($json.distribucion_por_tipo), JSON.stringify($json.distribucion_por_sucursal), $json.tiempo_resolucion_promedio_horas, $json.total_black_alerts] }}"
+        "method": "POST",
+        "url": "={{ $vars.SUPABASE_URL }}/rest/v1/metricas_dashboard_reclamos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "headers": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $vars.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $vars.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates,return=representation" }
+          ]
+        },
+        "qs": {
+          "parameters": [
+            { "name": "on_conflict", "value": "concesionario_id,periodo,fecha_calculo" }
+          ]
+        },
+        "jsonContentType": "application/json",
+        "sendBody": true,
+        "body": {
+          "parameters": [
+            { "name": "concesionario_id", "value": "={{ $json.concesionario_id }}" },
+            { "name": "periodo", "value": "={{ $json.periodo }}" },
+            { "name": "fecha_calculo", "value": "={{ $json.fecha_calculo }}" },
+            { "name": "total_pendientes", "value": "={{ $json.total_pendientes }}" },
+            { "name": "total_en_proceso", "value": "={{ $json.total_en_proceso }}" },
+            { "name": "total_cerrados", "value": "={{ $json.total_cerrados }}" },
+            { "name": "total_reclamos", "value": "={{ $json.total_reclamos }}" },
+            { "name": "distribucion_por_tipo", "value": "={{ JSON.stringify($json.distribucion_por_tipo) }}" },
+            { "name": "distribucion_por_sucursal", "value": "={{ JSON.stringify($json.distribucion_por_sucursal) }}" },
+            { "name": "tiempo_resolucion_promedio_horas", "value": "={{ $json.tiempo_resolucion_promedio_horas }}" },
+            { "name": "total_black_alerts", "value": "={{ $json.total_black_alerts }}" }
+          ]
         }
       },
       "id": "upsert-metrics",
-      "name": "Guardar Métricas en BD",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.1,
+      "name": "Guardar Métricas en Supabase",
+      "type": "n8n-nodes-base.httpRequestV3",
+      "typeVersion": 4.1,
       "position": [910, 300]
     }
   ],
   "connections": {
-    "Ejecutar cada 4 horas": {
-      "main": [
-        [
-          {
-            "node": "Consultar Métricas de Reclamos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Consultar Métricas de Reclamos": {
-      "main": [
-        [
-          {
-            "node": "Procesar Métricas",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Procesar Métricas": {
-      "main": [
-        [
-          {
-            "node": "Guardar Métricas en BD",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Ejecutar cada 4 horas": { "main": [[{ "node": "Consultar Métricas de Reclamos", "type": "main", "index": 0 }]] },
+    "Consultar Métricas de Reclamos": { "main": [[{ "node": "Procesar Métricas", "type": "main", "index": 0 }]] },
+    "Procesar Métricas": { "main": [[{ "node": "Guardar Métricas en Supabase", "type": "main", "index": 0 }]] }
   },
   "settings": {
     "saveExecutionProgress": true,
