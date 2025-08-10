@@ -1,89 +1,130 @@
 {
-  "meta": {
-    "instanceId": "whatsapp-prospection-sender-001"
-  },
+  "name": "Enviador WhatsApp de Prospección",
+  "description": "Envía mensajes masivos de WhatsApp para prospección de leads desde Excel",
+  "tags": ["leads", "prospección", "whatsapp", "masivo", "srp"],
   "nodes": [
     {
       "parameters": {
-        "operation": "executeQuery",
-        "query": "-- Obtener leads pendientes de prospección con configuración del concesionario\nWITH leads_prospección AS (\n  SELECT \n    l.id as lead_id,\n    l.telefono_cliente,\n    l.nombre_cliente,\n    l.concesionario_id,\n    l.modelo_interes,\n    l.fecha_creacion,\n    con.nombre as concesionario_nombre,\n    con.whatsapp_business_token,\n    con.whatsapp_phone_id,\n    tc.whatsapp_config,\n    tc.workflow_variables,\n    ROW_NUMBER() OVER (PARTITION BY l.concesionario_id ORDER BY l.fecha_creacion DESC) as rn\n  FROM leads l\n  JOIN concesionarios con ON l.concesionario_id = con.id\n  LEFT JOIN tenant_configurations tc ON l.concesionario_id::text = tc.tenant_id\n  WHERE l.fuente_lead = 'excel_masivo'\n    AND l.estado = 'pendiente_prospección'\n    AND l.fecha_creacion > NOW() - INTERVAL '7 days'\n    AND NOT EXISTS (\n      SELECT 1 FROM mensajes_whatsapp mw \n      WHERE mw.lead_id = l.id \n        AND mw.tipo = 'prospección'\n        AND mw.fecha_envio > NOW() - INTERVAL '24 hours'\n    )\n),\nconfiguraciones AS (\n  SELECT DISTINCT\n    concesionario_id,\n    concesionario_nombre,\n    whatsapp_business_token,\n    whatsapp_phone_id,\n    COALESCE(\n      (whatsapp_config->>'business_token'),\n      whatsapp_business_token\n    ) as token_activo,\n    COALESCE(\n      (whatsapp_config->>'phone_number_id'),\n      whatsapp_phone_id\n    ) as phone_id_activo,\n    (\n      workflow_variables->>'custom_messages'->>'prospection_template'\n    ) as template_personalizado\n  FROM leads_prospección\n)\nSELECT \n  lp.*,\n  c.token_activo,\n  c.phone_id_activo,\n  c.template_personalizado\nFROM leads_prospección lp\nJOIN configuraciones c ON lp.concesionario_id = c.concesionario_id\nWHERE lp.rn <= 50 -- Limitar a 50 leads por ejecución\nORDER BY lp.fecha_creacion ASC;",
-        "options": {}
+        "workflowId": "enviador-whatsapp-prospeccion"
       },
-      "id": "get-leads-pendientes",
-      "name": "Obtener Leads para Prospección",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [240, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
+      "id": "workflow-trigger",
+      "name": "Trigger del Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 2.1,
+      "position": [240, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Procesar y personalizar mensajes de prospección por concesionario\nconst items = $input.all();\nconst mensajesPorConcesionario = {};\n\n// Templates de mensajes por defecto\nconst templateDefault = {\n  saludo: \"¡Hola {nombre}! 👋\",\n  presentacion: \"Soy {asesor} de {concesionario}, especialista en vehículos.\",\n  proposito: \"Vimos que podrías estar interesado en un {modelo}. ¿Te gustaría recibir información actualizada sobre nuestras mejores ofertas?\",\n  llamada_accion: \"Responde SÍ si te interesa o NO si prefieres que no te contactemos más.\",\n  cierre: \"¡Esperamos poder ayudarte a encontrar tu vehículo ideal! 🚗✨\"\n};\n\n// Plantillas específicas por tipo de lead\nconst templatesPorTipo = {\n  premium: {\n    saludo: \"Estimado/a {nombre}, 🌟\",\n    presentacion: \"Me comunico desde {concesionario}, donde nos especializamos en vehículos premium.\",\n    proposito: \"He notado su interés en el {modelo}. Tenemos excelentes oportunidades y financiamiento exclusivo.\",\n    llamada_accion: \"¿Le gustaría agendar una cita personalizada para conocer nuestras ofertas VIP?\",\n    cierre: \"Quedamos atentos a su respuesta. Saludos cordiales.\"\n  },\n  economico: {\n    saludo: \"¡Hola {nombre}! 😊\",\n    presentacion: \"Te escribo desde {concesionario}, tu concesionario de confianza.\",\n    proposito: \"Sabemos que estás buscando un {modelo} y tenemos ofertas increíbles que te van a encantar.\",\n    llamada_accion: \"¿Te interesa conocer nuestras promociones especiales? ¡Solo responde SÍ!\",\n    cierre: \"¡Te esperamos para hacer realidad tu sueño del auto propio! 🎉\"\n  },\n  familiar: {\n    saludo: \"¡Hola {nombre}! 👨‍👩‍👧‍👦\",\n    presentacion: \"Somos {concesionario}, expertos en vehículos para familias.\",\n    proposito: \"Vimos tu interés en el {modelo}, perfecto para la familia. Tenemos opciones seguras y espaciosas.\",\n    llamada_accion: \"¿Te gustaría ver nuestros vehículos familiares en una visita sin compromiso?\",\n    cierre: \"¡Esperamos ayudarte a encontrar el auto ideal para tu familia! 🚗👶\"\n  }\n};\n\nfor (const item of items) {\n  const data = item.json;\n  const concesionarioId = data.concesionario_id;\n  \n  if (!mensajesPorConcesionario[concesionarioId]) {\n    mensajesPorConcesionario[concesionarioId] = {\n      concesionario_id: concesionarioId,\n      concesionario_nombre: data.concesionario_nombre,\n      token_activo: data.token_activo,\n      phone_id_activo: data.phone_id_activo,\n      leads: []\n    };\n  }\n  \n  // Determinar tipo de vehículo para personalización\n  let tipoVehiculo = 'economico'; // default\n  const modelo = (data.modelo_interes || '').toLowerCase();\n  \n  if (modelo.includes('bmw') || modelo.includes('mercedes') || modelo.includes('audi') || modelo.includes('lexus')) {\n    tipoVehiculo = 'premium';\n  } else if (modelo.includes('suv') || modelo.includes('familiar') || modelo.includes('monovolumen')) {\n    tipoVehiculo = 'familiar';\n  }\n  \n  // Seleccionar template\n  let template = templatesPorTipo[tipoVehiculo];\n  \n  // Si hay template personalizado del concesionario, usarlo\n  if (data.template_personalizado) {\n    try {\n      const customTemplate = JSON.parse(data.template_personalizado);\n      template = { ...template, ...customTemplate };\n    } catch (e) {\n      // Si hay error en el template personalizado, usar el por defecto\n      template = templatesPorTipo[tipoVehiculo];\n    }\n  }\n  \n  // Construir mensaje personalizado\n  const nombreCliente = data.nombre_cliente || 'Estimado cliente';\n  const modeloInteres = data.modelo_interes || 'vehículo de tu interés';\n  \n  const mensajePersonalizado = [\n    template.saludo.replace('{nombre}', nombreCliente),\n    template.presentacion.replace('{concesionario}', data.concesionario_nombre).replace('{asesor}', 'nuestro equipo'),\n    template.proposito.replace('{modelo}', modeloInteres),\n    template.llamada_accion,\n    template.cierre\n  ].join('\\n\\n');\n  \n  mensajesPorConcesionario[concesionarioId].leads.push({\n    lead_id: data.lead_id,\n    telefono: data.telefono_cliente,\n    nombre: nombreCliente,\n    modelo: modeloInteres,\n    mensaje: mensajePersonalizado,\n    tipo_vehiculo: tipoVehiculo,\n    timestamp: new Date().toISOString()\n  });\n}\n\n// Convertir a array para procesamiento en N8N\nconst resultado = Object.values(mensajesPorConcesionario).map(grupo => ({ json: grupo }));\n\nreturn resultado;"
+        "jsCode": "// Validar payload para envío masivo de WhatsApp\nconst inData = $input.first().json || {};\nconst required = ['unique_clients_to_contact', 'tenant_id'];\nconst missing = required.filter(field => !inData[field]);\nconst valid = missing.length === 0 && Array.isArray(inData.unique_clients_to_contact) && inData.unique_clients_to_contact.length > 0;\nreturn [{ json: { ...inData, valid, missing_fields: missing } }];"
+      },
+      "id": "validate-payload",
+      "name": "Validar Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "operator": { "type": "boolean", "operation": "isTrue" },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-valid-payload",
+      "name": "¿Payload Válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT concesionario_id, nombre, whatsapp_business_token, whatsapp_phone_id FROM concesionarios WHERE id = $1 AND whatsapp_business_token IS NOT NULL",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.tenant_id] }}"
+        }
+      },
+      "id": "get-whatsapp-config",
+      "name": "Obtener Config WhatsApp",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $input.all().length }}",
+              "operation": "greaterThan",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "has-whatsapp-config",
+      "name": "¿Configuración Válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar y personalizar mensajes de prospección\ntry {\n  const clientData = $('Validar Payload').first().json;\n  const whatsappConfig = $input.first().json;\n  const clients = clientData.unique_clients_to_contact || [];\n  \n  const mensajeTemplate = `¡Hola {nombre}! 👋\n\nSoy del equipo de ${whatsappConfig.nombre}, especialistas en vehículos.\n\nVimos que podrías estar interesado en nuestros vehículos. ¿Te gustaría recibir información sobre nuestras mejores ofertas?\n\nResponde SÍ si te interesa o NO si prefieres que no te contactemos más.\n\n¡Esperamos poder ayudarte a encontrar tu vehículo ideal! 🚗✨`;\n  \n  const mensajes = [];\n  \n  for (let i = 0; i < clients.length; i++) {\n    const client = clients[i];\n    \n    if (!client.telefono || !client.nombre) {\n      continue;\n    }\n    \n    const nombreCliente = client.nombre || 'Estimado cliente';\n    const mensajePersonalizado = mensajeTemplate.replace('{nombre}', nombreCliente);\n    \n    mensajes.push({\n      cliente_nombre: nombreCliente,\n      cliente_telefono: client.telefono,\n      mensaje_personalizado: mensajePersonalizado,\n      concesionario_id: whatsappConfig.concesionario_id,\n      concesionario_nombre: whatsappConfig.nombre,\n      whatsapp_token: whatsappConfig.whatsapp_business_token,\n      whatsapp_phone_id: whatsappConfig.whatsapp_phone_id,\n      index: i,\n      total: clients.length,\n      delay_seconds: Math.floor(i / 5) * 12,\n      timestamp: new Date().toISOString()\n    });\n  }\n  \n  return mensajes.map(msg => ({ json: msg }));\n  \n} catch (error) {\n  return [{\n    json: {\n      status: 'error',\n      message: 'Error al procesar mensajes de prospección',\n      error: error.message,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
       },
       "id": "process-messages",
-      "name": "Personalizar Mensajes",
+      "name": "Procesar Mensajes",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [460, 300]
+      "typeVersion": 2.1,
+      "position": [1200, 300]
     },
     {
       "parameters": {
-        "batchSize": 1,
-        "options": {}
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.status }}",
+              "operation": "notEqual",
+              "value2": "error"
+            }
+          ]
+        }
       },
-      "id": "split-by-concesionario",
-      "name": "Procesar por Concesionario",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [680, 300]
+      "id": "processing-success",
+      "name": "¿Procesamiento Exitoso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1400, 300]
     },
     {
       "parameters": {
-        "batchSize": 5,
-        "options": {}
-      },
-      "id": "split-leads-batch",
-      "name": "Lotes de 5 Leads",
-      "type": "n8n-nodes-base.splitInBatches",
-      "typeVersion": 3,
-      "position": [900, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Preparar datos para envío por lotes respetando rate limits\nconst concesionarioData = $input.first().json;\nconst leads = concesionarioData.leads;\nconst batchSize = 5; // WhatsApp permite ~20 mensajes/minuto\n\n// Crear lotes de leads para envío\nconst lotes = [];\nfor (let i = 0; i < leads.length; i += batchSize) {\n  const lote = leads.slice(i, i + batchSize);\n  lotes.push({\n    concesionario_id: concesionarioData.concesionario_id,\n    concesionario_nombre: concesionarioData.concesionario_nombre,\n    token_activo: concesionarioData.token_activo,\n    phone_id_activo: concesionarioData.phone_id_activo,\n    lote_numero: Math.floor(i / batchSize) + 1,\n    total_lotes: Math.ceil(leads.length / batchSize),\n    leads_lote: lote,\n    delay_segundos: Math.floor(i / batchSize) * 15 // 15 segundos entre lotes\n  });\n}\n\nreturn lotes.map(lote => ({ json: lote }));"
-      },
-      "id": "prepare-batches",
-      "name": "Preparar Lotes",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1120, 300]
-    },
-    {
-      "parameters": {
-        "amount": "={{ $json.delay_segundos }}",
+        "amount": "={{ $json.delay_seconds }}",
         "unit": "seconds"
       },
       "id": "wait-rate-limit",
       "name": "Esperar Rate Limit",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [1340, 300]
+      "position": [1600, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://graph.facebook.com/v18.0/{{ $json.phone_id_activo }}/messages",
+        "url": "https://graph.facebook.com/v18.0/{{ $json.whatsapp_phone_id }}/messages",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer {{ $json.token_activo }}"
+              "value": "Bearer {{ $json.whatsapp_token }}"
             },
             {
               "name": "Content-Type",
@@ -92,320 +133,155 @@
           ]
         },
         "sendBody": true,
-        "bodyParameters": {
-          "parameters": [
-            {
-              "name": "messaging_product",
-              "value": "whatsapp"
-            }
-          ]
-        },
-        "body": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.lead.telefono }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.lead.mensaje }}\"\n  }\n}",
+        "bodyContent": "={{ JSON.stringify({\n  messaging_product: 'whatsapp',\n  to: $json.cliente_telefono,\n  type: 'text',\n  text: {\n    body: $json.mensaje_personalizado\n  }\n}) }}",
         "options": {
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
+          "timeout": 10000
         }
       },
-      "id": "send-whatsapp-message",
+      "id": "send-whatsapp",
       "name": "Enviar WhatsApp",
       "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [1560, 300]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Preparar leads individuales para envío desde el lote\nconst loteData = $input.first().json;\nconst mensajesIndividuales = [];\n\nfor (const lead of loteData.leads_lote) {\n  mensajesIndividuales.push({\n    // Datos del concesionario\n    concesionario_id: loteData.concesionario_id,\n    concesionario_nombre: loteData.concesionario_nombre,\n    token_activo: loteData.token_activo,\n    phone_id_activo: loteData.phone_id_activo,\n    \n    // Datos del lead\n    lead: lead,\n    \n    // Metadatos del lote\n    lote_numero: loteData.lote_numero,\n    total_lotes: loteData.total_lotes\n  });\n}\n\nreturn mensajesIndividuales.map(msg => ({ json: msg }));"
-      },
-      "id": "split-individual-leads",
-      "name": "Separar Leads Individuales",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1340, 200]
-    },
-    {
-      "parameters": {
-        "operation": "insert",
-        "table": "mensajes_whatsapp",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "lead_id": "={{ $json.lead.lead_id }}",
-            "concesionario_id": "={{ $json.concesionario_id }}",
-            "telefono_destinatario": "={{ $json.lead.telefono }}",
-            "mensaje": "={{ $json.lead.mensaje }}",
-            "tipo": "prospección",
-            "canal": "whatsapp_business",
-            "estado": "enviado",
-            "fecha_envio": "={{ $json.lead.timestamp }}",
-            "whatsapp_message_id": "={{ $responseJson.messages?.[0]?.id || 'pending' }}",
-            "metadata": "={{ JSON.stringify({\n              lote_numero: $json.lote_numero,\n              total_lotes: $json.total_lotes,\n              tipo_vehiculo: $json.lead.tipo_vehiculo,\n              concesionario_nombre: $json.concesionario_nombre\n            }) }}"
-          }
-        },
-        "options": {}
-      },
-      "id": "log-message",
-      "name": "Registrar Envío",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [1780, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "operation": "update",
-        "table": "leads",
-        "updateKey": "id",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "estado": "prospección_enviada",
-            "fecha_ultimo_seguimiento": "={{ $json.lead.timestamp }}",
-            "observaciones": "={{ `Mensaje de prospección enviado automáticamente. Lote ${$json.lote_numero}/${$json.total_lotes}. Tipo: ${$json.lead.tipo_vehiculo}` }}"
-          }
-        },
-        "where": {
-          "values": [
-            {
-              "column": "id",
-              "value": "={{ $json.lead.lead_id }}"
-            },
-            {
-              "column": "concesionario_id",
-              "value": "={{ $json.concesionario_id }}"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "update-lead-status",
-      "name": "Actualizar Estado Lead",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [2000, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
+      "typeVersion": 4.1,
+      "position": [1800, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
+          "number": [
             {
-              "id": "es-ultimo-lote",
-              "leftValue": "={{ $json.lote_numero }}",
-              "rightValue": "={{ $json.total_lotes }}",
-              "operator": {
-                "type": "number",
-                "operation": "equals"
-              }
+              "value1": "={{ $json.status_code || $json.statusCode }}",
+              "operation": "equal",
+              "value2": 200
             }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+          ]
+        }
       },
-      "id": "check-last-batch",
-      "name": "¿Es Último Lote?",
+      "id": "whatsapp-success",
+      "name": "¿Envío Exitoso?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [2220, 300]
+      "typeVersion": 2.1,
+      "position": [2000, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Generar resumen final de campaña de prospección\nconst items = $input.all();\nconst resumenPorConcesionario = {};\n\nfor (const item of items) {\n  const data = item.json;\n  const concesionarioId = data.concesionario_id;\n  \n  if (!resumenPorConcesionario[concesionarioId]) {\n    resumenPorConcesionario[concesionarioId] = {\n      concesionario_id: concesionarioId,\n      concesionario_nombre: data.concesionario_nombre,\n      total_mensajes: 0,\n      por_tipo: { premium: 0, economico: 0, familiar: 0 },\n      timestamp: new Date().toISOString()\n    };\n  }\n  \n  resumenPorConcesionario[concesionarioId].total_mensajes++;\n  resumenPorConcesionario[concesionarioId].por_tipo[data.lead.tipo_vehiculo]++;\n}\n\nreturn Object.values(resumenPorConcesionario).map(resumen => ({ json: resumen }));"
+        "operation": "executeQuery",
+        "query": "INSERT INTO mensajes_whatsapp (cliente_telefono, cliente_nombre, mensaje, tipo, estado, concesionario_id, fecha_envio) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.cliente_telefono, $json.cliente_nombre, $json.mensaje_personalizado, 'prospección', 'enviado', $json.concesionario_id, $json.timestamp] }}"
+        }
+      },
+      "id": "log-success",
+      "name": "Registrar Envío Exitoso",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO mensajes_whatsapp (cliente_telefono, cliente_nombre, mensaje, tipo, estado, concesionario_id, fecha_envio, error_detalle) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.cliente_telefono, $json.cliente_nombre, $json.mensaje_personalizado, 'prospección', 'error', $json.concesionario_id, $json.timestamp, JSON.stringify($json)] }}"
+        }
+      },
+      "id": "log-error",
+      "name": "Registrar Error Envío",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [2200, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.index + 1 }}",
+              "operation": "equal",
+              "value2": "={{ $json.total }}"
+            }
+          ]
+        }
+      },
+      "id": "is-last-message",
+      "name": "¿Último Mensaje?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [2400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generar resumen de campaña de prospección\nconst processedData = $('Procesar Mensajes').all();\nconst successData = $('Registrar Envío Exitoso').all();\nconst errorData = $('Registrar Error Envío').all();\n\nconst stats = {\n  total_procesados: processedData.length,\n  exitosos: successData.length,\n  errores: errorData.length,\n  tasa_exito: processedData.length > 0 ? Math.round((successData.length / processedData.length) * 100) : 0\n};\n\nreturn [{\n  json: {\n    status: 'completed',\n    message: 'Campaña de prospección WhatsApp completada',\n    stats,\n    timestamp: new Date().toISOString()\n  }\n}];"
       },
       "id": "generate-summary",
       "name": "Generar Resumen",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2440, 200]
+      "typeVersion": 2.1,
+      "position": [2600, 300]
     },
     {
       "parameters": {
-        "operation": "insert",
-        "table": "campañas_prospeccion_log",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "concesionario_id": "={{ $json.concesionario_id }}",
-            "tipo_campaña": "whatsapp_masivo",
-            "total_enviados": "={{ $json.total_mensajes }}",
-            "segmentacion": "={{ JSON.stringify($json.por_tipo) }}",
-            "fecha_ejecucion": "={{ $json.timestamp }}",
-            "estado": "completado",
-            "metadata": "={{ JSON.stringify({\n              concesionario_nombre: $json.concesionario_nombre,\n              workflow_ejecutor: 'enviador-whatsapp-prospeccion',\n              version: '2.1'\n            }) }}"
-          }
-        },
-        "options": {}
+        "jsCode": "// Respuesta de error por payload inválido\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Payload inválido para envío de prospección',\n    missing_fields: $json.missing_fields,\n    timestamp: new Date().toISOString()\n  }\n}];"
       },
-      "id": "log-campaign",
-      "name": "Registrar Campaña",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [2660, 200],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
+      "id": "error-response",
+      "name": "Respuesta Error Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [800, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta cuando no hay configuración de WhatsApp\nreturn [{\n  json: {\n    status: 'error',\n    message: 'No se encontró configuración válida de WhatsApp para el concesionario',\n    tenant_id: $('Validar Payload').first().json.tenant_id,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "no-config-response",
+      "name": "Sin Configuración WhatsApp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1200, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de error en procesamiento\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Error en el procesamiento de mensajes',\n    error_details: $json,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "processing-error-response",
+      "name": "Error Procesamiento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1600, 500]
     }
   ],
   "connections": {
-    "Obtener Leads para Prospección": {
-      "main": [
-        [
-          {
-            "node": "Personalizar Mensajes",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Personalizar Mensajes": {
-      "main": [
-        [
-          {
-            "node": "Procesar por Concesionario",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Procesar por Concesionario": {
-      "main": [
-        [
-          {
-            "node": "Preparar Lotes",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Preparar Lotes": {
-      "main": [
-        [
-          {
-            "node": "Esperar Rate Limit",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Separar Leads Individuales",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Esperar Rate Limit": {
-      "main": [
-        [
-          {
-            "node": "Separar Leads Individuales",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Separar Leads Individuales": {
-      "main": [
-        [
-          {
-            "node": "Enviar WhatsApp",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Enviar WhatsApp": {
-      "main": [
-        [
-          {
-            "node": "Registrar Envío",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Registrar Envío": {
-      "main": [
-        [
-          {
-            "node": "Actualizar Estado Lead",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Actualizar Estado Lead": {
-      "main": [
-        [
-          {
-            "node": "¿Es Último Lote?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Es Último Lote?": {
-      "main": [
-        [
-          {
-            "node": "Generar Resumen",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Generar Resumen": {
-      "main": [
-        [
-          {
-            "node": "Registrar Campaña",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Trigger del Workflow": { "main": [[{ "node": "Validar Payload", "type": "main", "index": 0 }]] },
+    "Validar Payload": { "main": [[{ "node": "¿Payload Válido?", "type": "main", "index": 0 }]] },
+    "¿Payload Válido?": { "main": [
+      [{ "node": "Obtener Config WhatsApp", "type": "main", "index": 0 }],
+      [{ "node": "Respuesta Error Payload", "type": "main", "index": 0 }]
+    ] },
+    "Obtener Config WhatsApp": { "main": [[{ "node": "¿Configuración Válida?", "type": "main", "index": 0 }]] },
+    "¿Configuración Válida?": { "main": [
+      [{ "node": "Procesar Mensajes", "type": "main", "index": 0 }],
+      [{ "node": "Sin Configuración WhatsApp", "type": "main", "index": 0 }]
+    ] },
+    "Procesar Mensajes": { "main": [[{ "node": "¿Procesamiento Exitoso?", "type": "main", "index": 0 }]] },
+    "¿Procesamiento Exitoso?": { "main": [
+      [{ "node": "Esperar Rate Limit", "type": "main", "index": 0 }],
+      [{ "node": "Error Procesamiento", "type": "main", "index": 0 }]
+    ] },
+    "Esperar Rate Limit": { "main": [[{ "node": "Enviar WhatsApp", "type": "main", "index": 0 }]] },
+    "Enviar WhatsApp": { "main": [[{ "node": "¿Envío Exitoso?", "type": "main", "index": 0 }]] },
+    "¿Envío Exitoso?": { "main": [
+      [{ "node": "Registrar Envío Exitoso", "type": "main", "index": 0 }],
+      [{ "node": "Registrar Error Envío", "type": "main", "index": 0 }]
+    ] },
+    "Registrar Envío Exitoso": { "main": [[{ "node": "¿Último Mensaje?", "type": "main", "index": 0 }]] },
+    "Registrar Error Envío": { "main": [[{ "node": "¿Último Mensaje?", "type": "main", "index": 0 }]] },
+    "¿Último Mensaje?": { "main": [
+      [{ "node": "Generar Resumen", "type": "main", "index": 0 }]
+    ] }
   },
-  "pinData": {},
   "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": ["leads", "prospección", "whatsapp", "masivo"],
-  "triggerCount": 0,
-  "updatedAt": "2024-08-09T05:47:00.000Z",
-  "versionId": "whatsapp-prospection-v2.1",
-  "name": "Enviador WhatsApp de Prospección",
-  "active": true,
-  "id": "enviador-whatsapp-prospeccion",
-  "hash": "whatsapp-prospection-sender"
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 1800
+  }
 }
