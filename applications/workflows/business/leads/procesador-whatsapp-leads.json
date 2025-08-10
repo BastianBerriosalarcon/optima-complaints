@@ -7,6 +7,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "proceso-whatsapp-leads",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "webhook-trigger",
@@ -167,6 +168,28 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Lead procesado y guardado\",\n  \"lead_id\": \"{{ $('Guardar Lead').first().json.id }}\",\n  \"phone\": \"{{ $json.telefono }}\",\n  \"priority\": \"{{ $json.prioridad }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "success-response",
+      "name": "Respuesta Éxito",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 2.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"rejected\",\n  \"message\": \"Mensaje no válido para lead\",\n  \"phone\": \"{{ $json.telefono }}\",\n  \"validation_failed\": {{ JSON.stringify($json.metadata.validacion) }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "reject-response",
+      "name": "Respuesta Rechazo",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 2.1,
+      "position": [900, 500]
     }
   ],
   "connections": {
@@ -205,6 +228,13 @@
             "type": "main",
             "index": 0
           }
+        ],
+        [
+          {
+            "node": "Respuesta Rechazo",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
@@ -213,6 +243,17 @@
         [
           {
             "node": "Activar Asignación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Activar Asignación": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Éxito",
             "type": "main",
             "index": 0
           }

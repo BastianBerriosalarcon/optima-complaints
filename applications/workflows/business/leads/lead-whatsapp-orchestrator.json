@@ -26,6 +26,43 @@
     },
     {
       "parameters": {
+        "jsCode": "// Validar payload básico de WhatsApp\nconst inData = $input.first().json || {};\nconst required = ['from', 'body'];\nconst missing = required.filter(field => !inData[field]);\nconst valid = missing.length === 0;\nreturn [{ json: { ...inData, valid, missing_fields: missing } }];"
+      },
+      "id": "validate-whatsapp-payload",
+      "name": "Validar Payload WhatsApp",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "operator": { "type": "boolean", "operation": "isTrue" },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-valid-payload",
+      "name": "¿Payload Válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "operation": "create",
         "resource": "execution",
         "workflowId": "validador-mensajes-whatsapp",
@@ -36,7 +73,7 @@
       "type": "n8n-nodes-base.n8n",
       "typeVersion": 2.1,
       "position": [
-        400,
+        800,
         300
       ]
     },
@@ -52,7 +89,7 @@
       "type": "n8n-nodes-base.n8n",
       "typeVersion": 2.1,
       "position": [
-        600,
+        1000,
         300
       ]
     },
@@ -68,7 +105,7 @@
       "type": "n8n-nodes-base.n8n",
       "typeVersion": 2.1,
       "position": [
-        800,
+        1200,
         300
       ]
     },
@@ -84,22 +121,36 @@
       "type": "n8n-nodes-base.n8n",
       "typeVersion": 2.1,
       "position": [
-        1000,
+        1400,
         300
       ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Lead procesado y asignado exitosamente.\",\n  \"lead_id\": \"={{ $('Gestionar Lead').first().json.lead_id }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+        "responseBody": "={\n  \"status\": \"success\",\n  \"message\": \"Lead procesado y asignado exitosamente\",\n  \"lead_id\": \"{{ $('Gestionar Lead').first().json.lead_id }}\",\n  \"advisor_assigned\": \"{{ $('Gestionar Lead').first().json.advisor_email || 'pendiente' }}\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
       },
       "id": "success-response",
       "name": "Respuesta Exitosa",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 2.1,
       "position": [
-        1200,
+        1600,
         300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"error\",\n  \"message\": \"Payload inválido para WhatsApp\",\n  \"missing_fields\": {{ JSON.stringify($json.missing_fields) }},\n  \"timestamp\": \"{{ new Date().toISOString() }}\"\n}"
+      },
+      "id": "error-response",
+      "name": "Respuesta Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 2.1,
+      "position": [
+        800,
+        500
       ]
     }
   ],
@@ -108,7 +159,36 @@
       "main": [
         [
           {
+            "node": "Validar Payload WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar Payload WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "¿Payload Válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Payload Válido?": {
+      "main": [
+        [
+          {
             "node": "Validar Mensaje WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta Error",
             "type": "main",
             "index": 0
           }
