@@ -3,89 +3,100 @@
   "description": "Variables de entorno necesarias para los workflows de OptimaCX",
   "variables": {
     "SUPABASE_URL": {
-      "value": "https:
+      "value": "https://your-project.supabase.co",
       "description": "URL base de Supabase",
       "type": "string",
       "required": true
     },
     "SUPABASE_ANON_KEY": {
-      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkbmxvZHd3bXZiZ2F5enp1ZGl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1MDYyMjIsImV4cCI6MjA2ODA4MjIyMn0.j4WztRRhuj-h0z7fxPhWd1pDyPmb-ouSjmbadfTxK3M",
+      "value": "your-anon-key",
       "description": "Clave anónima de Supabase",
       "type": "string",
-      "required": true
+      "required": true,
+      "secret": true
     },
     "SUPABASE_SERVICE_KEY": {
-      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdkbmxvZHd3bXZiZ2F5enp1ZGl1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MjUwNjIyMiwiZXhwIjoyMDY4MDgyMjIyfQ.G1TkMLmYVrk6R8ZmoakK6mvwqWsV8Crctc74iW5sh7c",
-      "description": "Clave de servicio de Supabase (privilegios completos)",
+      "value": "your-service-key",
+      "description": "Clave de servicio de Supabase",
       "type": "string",
       "required": true,
-      "sensitive": true
+      "secret": true
     },
-    "GEMINI_API_KEY": {
-      "value": "REPLACE_WITH_ACTUAL_GEMINI_API_KEY",
-      "description": "Clave de API de Google Gemini 2.5 Pro",
-      "type": "string", 
-      "required": true,
-      "sensitive": true
-    },
-    "N8N_WEBHOOK_URL": {
-      "value": "https:
+    "N8N_WEBHOOK_BASE_URL": {
+      "value": "https://your-n8n-instance.com",
       "description": "URL base para webhooks internos de N8N",
       "type": "string",
       "required": true
     },
-    "N8N_WEBHOOK_AUTH_TOKEN": {
-      "value": "optima-cx-internal-webhook-token-2025",
-      "description": "Token de autenticación para webhooks internos",
+    "WHATSAPP_TOKEN": {
+      "value": "your-whatsapp-token",
+      "description": "Token de autenticación de WhatsApp Business API",
       "type": "string",
       "required": true,
-      "sensitive": true
+      "secret": true
     },
-    "WHATSAPP_ACCESS_TOKEN": {
-      "value": "REPLACE_WITH_ACTUAL_WHATSAPP_TOKEN",
-      "description": "Token de acceso de WhatsApp Business API",
+    "WHATSAPP_PHONE_ID": {
+      "value": "your-phone-number-id",
+      "description": "ID del número de teléfono de WhatsApp Business",
+      "type": "string",
+      "required": true
+    },
+    "OPENAI_API_KEY": {
+      "value": "your-openai-key",
+      "description": "Clave API de OpenAI para análisis de IA",
       "type": "string",
       "required": false,
-      "sensitive": true,
-      "note": "Se configurará por tenant en la tabla tenant_config"
+      "secret": true
     },
-    "COHERE_API_KEY": {
-      "value": "REPLACE_WITH_ACTUAL_COHERE_API_KEY", 
-      "description": "Clave de API de Cohere para Rerank",
+    "GEMINI_API_KEY": {
+      "value": "your-gemini-key",
+      "description": "Clave API de Google Gemini",
       "type": "string",
       "required": false,
-      "sensitive": true
+      "secret": true
     },
     "REDIS_URL": {
-      "value": "redis:
+      "value": "redis://localhost:6379",
       "description": "URL de conexión a Redis para cache",
       "type": "string",
       "required": false
     },
-    "ENVIRONMENT": {
-      "value": "development",
-      "description": "Entorno actual (development, staging, production)",
+    "SMTP_HOST": {
+      "value": "smtp.gmail.com",
+      "description": "Servidor SMTP para envío de emails",
       "type": "string",
       "required": true
     },
-    "LOG_LEVEL": {
-      "value": "info",
-      "description": "Nivel de logging (debug, info, warn, error)",
+    "SMTP_PORT": {
+      "value": "587",
+      "description": "Puerto del servidor SMTP",
+      "type": "number",
+      "required": true
+    },
+    "SMTP_USER": {
+      "value": "your-email@domain.com",
+      "description": "Usuario SMTP",
       "type": "string",
-      "required": false
+      "required": true
+    },
+    "SMTP_PASSWORD": {
+      "value": "your-smtp-password",
+      "description": "Contraseña SMTP",
+      "type": "string",
+      "required": true,
+      "secret": true
     }
   },
   "setup_instructions": [
-    "1. Acceder a N8N: https:
+    "1. Acceder a N8N admin panel",
     "2. Ir a Settings > Variables",
     "3. Crear cada variable listada arriba",
-    "4. Para variables sensibles, marcar como 'Secret'",
-    "5. Verificar que todos los workflows puedan acceder a las variables"
+    "4. Configurar las credenciales necesarias",
+    "5. Probar la conectividad de cada servicio"
   ],
-  "security_notes": [
-    "- Nunca commitear claves reales en Git",
-    "- Usar Google Secret Manager en producción", 
-    "- Rotar claves periódicamente",
-    "- Auditar acceso a variables sensibles"
+  "notes": [
+    "Las variables marcadas como 'secret' deben configurarse como credenciales en N8N",
+    "Verificar que todas las URLs sean accesibles desde N8N",
+    "Para producción, usar variables de entorno del sistema operativo"
   ]
 }
