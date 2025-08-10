@@ -1,7 +1,7 @@
 {
-  "meta": {
-    "instanceId": "calc-conversion-001"
-  },
+  "name": "Calculador Métricas Conversión",
+  "description": "Calcula métricas de conversión de leads cada 6 horas y envía alertas cuando es necesario",
+  "tags": ["leads", "conversion", "metricas", "srp"],
   "nodes": [
     {
       "parameters": {
@@ -22,229 +22,158 @@
     },
     {
       "parameters": {
+        "jsCode": "// Preparar contexto de cálculo de métricas\nreturn [{\n  json: {\n    calculation_start: new Date().toISOString(),\n    period_days: 7,\n    batch_id: `calc_${Date.now()}`,\n    alerts_enabled: true\n  }\n}];"
+      },
+      "id": "prepare-calculation",
+      "name": "Preparar Cálculo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
-        "query": "WITH conversion_metrics AS (\n  SELECT \n    DATE(l.fecha_contacto) as fecha,\n    l.concesionario_id,\n    c.nombre as concesionario_nombre,\n    l.canal_origen,\n    \n    -- Métricas básicas\n    COUNT(*) as total_leads,\n    COUNT(CASE WHEN l.estado = 'contactado' THEN 1 END) as leads_contactados,\n    COUNT(CASE WHEN l.estado IN ('interesado', 'seguimiento') THEN 1 END) as leads_calificados,\n    COUNT(CASE WHEN l.estado = 'convertido' THEN 1 END) as leads_convertidos,\n    \n    -- Tiempo promedio de respuesta\n    AVG(EXTRACT(EPOCH FROM (l.fecha_primer_contacto - l.fecha_contacto))/3600) as tiempo_respuesta_horas,\n    \n    -- Métricas por asesor\n    COUNT(DISTINCT l.asesor_id) as asesores_involucrados,\n    \n    -- Valor estimado\n    SUM(CASE WHEN l.estado = 'convertido' THEN COALESCE(l.valor_estimado, 25000) ELSE 0 END) as valor_total_convertido\n    \n  FROM leads l\n  LEFT JOIN concesionarios c ON l.concesionario_id = c.id\n  WHERE l.fecha_contacto >= NOW() - INTERVAL '7 days'\n  GROUP BY DATE(l.fecha_contacto), l.concesionario_id, c.nombre, l.canal_origen\n)\nSELECT \n  *,\n  -- Cálculo de tasas de conversión\n  ROUND((leads_contactados::decimal / NULLIF(total_leads, 0)) * 100, 2) as tasa_contacto,\n  ROUND((leads_calificados::decimal / NULLIF(leads_contactados, 0)) * 100, 2) as tasa_calificacion,\n  ROUND((leads_convertidos::decimal / NULLIF(leads_calificados, 0)) * 100, 2) as tasa_conversion,\n  ROUND((leads_convertidos::decimal / NULLIF(total_leads, 0)) * 100, 2) as tasa_conversion_total,\n  \n  -- ROI estimado\n  ROUND(valor_total_convertido / NULLIF(total_leads * 50, 0), 2) as roi_estimado\n  \nFROM conversion_metrics\nORDER BY fecha DESC, tasa_conversion_total DESC;",
+        "query": "WITH conversion_metrics AS (\n  SELECT \n    DATE(l.fecha_contacto) as fecha,\n    l.concesionario_id,\n    c.nombre as concesionario_nombre,\n    l.canal_origen,\n    \n    -- Métricas básicas\n    COUNT(*) as total_leads,\n    COUNT(CASE WHEN l.estado = 'contactado' THEN 1 END) as leads_contactados,\n    COUNT(CASE WHEN l.estado IN ('interesado', 'seguimiento') THEN 1 END) as leads_calificados,\n    COUNT(CASE WHEN l.estado = 'convertido' THEN 1 END) as leads_convertidos,\n    \n    -- Tiempo promedio de respuesta\n    AVG(EXTRACT(EPOCH FROM (l.fecha_primer_contacto - l.fecha_contacto))/3600) as tiempo_respuesta_horas,\n    \n    -- Métricas por asesor\n    COUNT(DISTINCT l.asesor_id) as asesores_involucrados,\n    \n    -- Valor estimado\n    SUM(CASE WHEN l.estado = 'convertido' THEN COALESCE(l.valor_estimado, 25000) ELSE 0 END) as valor_total_convertido\n    \n  FROM leads l\n  LEFT JOIN concesionarios c ON l.concesionario_id = c.id\n  WHERE l.fecha_contacto >= NOW() - INTERVAL '{{ $json.period_days }} days'\n  GROUP BY DATE(l.fecha_contacto), l.concesionario_id, c.nombre, l.canal_origen\n)\nSELECT \n  *,\n  -- Cálculo de tasas de conversión\n  ROUND((leads_contactados::decimal / NULLIF(total_leads, 0)) * 100, 2) as tasa_contacto,\n  ROUND((leads_calificados::decimal / NULLIF(leads_contactados, 0)) * 100, 2) as tasa_calificacion,\n  ROUND((leads_convertidos::decimal / NULLIF(leads_calificados, 0)) * 100, 2) as tasa_conversion,\n  ROUND((leads_convertidos::decimal / NULLIF(total_leads, 0)) * 100, 2) as tasa_conversion_total,\n  \n  -- ROI estimado\n  ROUND(valor_total_convertido / NULLIF(total_leads * 50, 0), 2) as roi_estimado\n  \nFROM conversion_metrics\nORDER BY fecha DESC, tasa_conversion_total DESC;",
         "options": {}
       },
       "id": "query-metrics",
       "name": "Consultar Métricas",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [460, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
+      "position": [600, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Procesar y agregar métricas de conversión\nconst items = $input.all();\nconst resultados = [];\nconst alertas = [];\n\n// Agrupar por concesionario para análisis consolidado\nconst porConcesionario = {};\n\nfor (const item of items) {\n  const data = item.json;\n  const key = `${data.concesionario_id}_${data.fecha}`;\n  \n  if (!porConcesionario[key]) {\n    porConcesionario[key] = {\n      concesionario_id: data.concesionario_id,\n      concesionario_nombre: data.concesionario_nombre,\n      fecha: data.fecha,\n      canales: [],\n      totales: {\n        leads: 0,\n        contactados: 0,\n        calificados: 0,\n        convertidos: 0,\n        valor_total: 0\n      }\n    };\n  }\n  \n  // Agregar datos del canal\n  porConcesionario[key].canales.push({\n    canal: data.canal_origen,\n    total_leads: data.total_leads,\n    tasa_contacto: data.tasa_contacto,\n    tasa_calificacion: data.tasa_calificacion,\n    tasa_conversion: data.tasa_conversion,\n    tasa_conversion_total: data.tasa_conversion_total,\n    tiempo_respuesta_horas: data.tiempo_respuesta_horas,\n    roi_estimado: data.roi_estimado\n  });\n  \n  // Acumular totales\n  porConcesionario[key].totales.leads += data.total_leads;\n  porConcesionario[key].totales.contactados += data.leads_contactados;\n  porConcesionario[key].totales.calificados += data.leads_calificados;\n  porConcesionario[key].totales.convertidos += data.leads_convertidos;\n  porConcesionario[key].totales.valor_total += data.valor_total_convertido;\n}\n\n// Procesar cada concesionario\nfor (const [key, concesionario] of Object.entries(porConcesionario)) {\n  const totales = concesionario.totales;\n  \n  // Calcular métricas consolidadas\n  const metricas = {\n    concesionario_id: concesionario.concesionario_id,\n    concesionario_nombre: concesionario.concesionario_nombre,\n    fecha_calculo: concesionario.fecha,\n    periodo: '24h',\n    \n    // Totales\n    total_leads: totales.leads,\n    total_contactados: totales.contactados,\n    total_calificados: totales.calificados,\n    total_convertidos: totales.convertidos,\n    valor_total_ventas: totales.valor_total,\n    \n    // Tasas consolidadas\n    tasa_contacto_general: Math.round((totales.contactados / totales.leads) * 100 * 100) / 100,\n    tasa_calificacion_general: Math.round((totales.calificados / totales.contactados) * 100 * 100) / 100,\n    tasa_conversion_general: Math.round((totales.convertidos / totales.calificados) * 100 * 100) / 100,\n    tasa_conversion_total: Math.round((totales.convertidos / totales.leads) * 100 * 100) / 100,\n    \n    // ROI y valor promedio\n    roi_general: Math.round((totales.valor_total / (totales.leads * 50)) * 100) / 100,\n    valor_promedio_venta: totales.convertidos > 0 ? Math.round(totales.valor_total / totales.convertidos) : 0,\n    \n    // Mejor canal\n    mejor_canal: concesionario.canales.reduce((mejor, actual) => \n      actual.tasa_conversion_total > (mejor?.tasa_conversion_total || 0) ? actual : mejor\n    , null)?.canal || 'N/A',\n    \n    // Detalle por canal\n    detalle_canales: concesionario.canales,\n    \n    timestamp: new Date().toISOString()\n  };\n  \n  resultados.push({ json: metricas });\n  \n  // Generar alertas para métricas críticas\n  if (metricas.tasa_conversion_total < 5 && metricas.total_leads >= 10) {\n    alertas.push({\n      tipo: 'conversion_baja',\n      concesionario: metricas.concesionario_nombre,\n      tasa: metricas.tasa_conversion_total,\n      leads: metricas.total_leads,\n      fecha: metricas.fecha_calculo\n    });\n  }\n  \n  if (metricas.tasa_contacto_general < 70 && metricas.total_leads >= 5) {\n    alertas.push({\n      tipo: 'contacto_bajo',\n      concesionario: metricas.concesionario_nombre,\n      tasa: metricas.tasa_contacto_general,\n      leads: metricas.total_leads,\n      fecha: metricas.fecha_calculo\n    });\n  }\n}\n\n// Guardar alertas en contexto\nif (alertas.length > 0) {\n  $execution.set('alertas_conversion', alertas);\n}\n\nreturn resultados;"
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $input.all().length }}",
+              "operation": "greaterThan",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "has-metrics-data",
+      "name": "¿Hay Datos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar y agregar métricas de conversión con manejo de errores\ntry {\n  const items = $input.all();\n  const resultados = [];\n  const alertas = [];\n  const batchId = $('Preparar Cálculo').first().json.batch_id;\n\n  // Agrupar por concesionario para análisis consolidado\n  const porConcesionario = {};\n\n  for (const item of items) {\n    const data = item.json;\n    const key = `${data.concesionario_id}_${data.fecha}`;\n    \n    if (!porConcesionario[key]) {\n      porConcesionario[key] = {\n        concesionario_id: data.concesionario_id,\n        concesionario_nombre: data.concesionario_nombre || 'Sin nombre',\n        fecha: data.fecha,\n        canales: [],\n        totales: {\n          leads: 0,\n          contactados: 0,\n          calificados: 0,\n          convertidos: 0,\n          valor_total: 0\n        }\n      };\n    }\n    \n    // Agregar datos del canal (con validación)\n    porConcesionario[key].canales.push({\n      canal: data.canal_origen || 'desconocido',\n      total_leads: data.total_leads || 0,\n      tasa_contacto: data.tasa_contacto || 0,\n      tasa_calificacion: data.tasa_calificacion || 0,\n      tasa_conversion: data.tasa_conversion || 0,\n      tasa_conversion_total: data.tasa_conversion_total || 0,\n      tiempo_respuesta_horas: data.tiempo_respuesta_horas || 0,\n      roi_estimado: data.roi_estimado || 0\n    });\n    \n    // Acumular totales (con validación)\n    porConcesionario[key].totales.leads += data.total_leads || 0;\n    porConcesionario[key].totales.contactados += data.leads_contactados || 0;\n    porConcesionario[key].totales.calificados += data.leads_calificados || 0;\n    porConcesionario[key].totales.convertidos += data.leads_convertidos || 0;\n    porConcesionario[key].totales.valor_total += data.valor_total_convertido || 0;\n  }\n\n  // Procesar cada concesionario\n  for (const [key, concesionario] of Object.entries(porConcesionario)) {\n    const totales = concesionario.totales;\n    \n    // Calcular métricas consolidadas con prevención de división por cero\n    const metricas = {\n      batch_id: batchId,\n      concesionario_id: concesionario.concesionario_id,\n      concesionario_nombre: concesionario.concesionario_nombre,\n      fecha_calculo: concesionario.fecha,\n      periodo: '24h',\n      \n      // Totales\n      total_leads: totales.leads,\n      total_contactados: totales.contactados,\n      total_calificados: totales.calificados,\n      total_convertidos: totales.convertidos,\n      valor_total_ventas: totales.valor_total,\n      \n      // Tasas consolidadas con manejo de división por cero\n      tasa_contacto_general: totales.leads > 0 ? Math.round((totales.contactados / totales.leads) * 100 * 100) / 100 : 0,\n      tasa_calificacion_general: totales.contactados > 0 ? Math.round((totales.calificados / totales.contactados) * 100 * 100) / 100 : 0,\n      tasa_conversion_general: totales.calificados > 0 ? Math.round((totales.convertidos / totales.calificados) * 100 * 100) / 100 : 0,\n      tasa_conversion_total: totales.leads > 0 ? Math.round((totales.convertidos / totales.leads) * 100 * 100) / 100 : 0,\n      \n      // ROI y valor promedio\n      roi_general: totales.leads > 0 ? Math.round((totales.valor_total / (totales.leads * 50)) * 100) / 100 : 0,\n      valor_promedio_venta: totales.convertidos > 0 ? Math.round(totales.valor_total / totales.convertidos) : 0,\n      \n      // Mejor canal\n      mejor_canal: concesionario.canales.reduce((mejor, actual) => \n        actual.tasa_conversion_total > (mejor?.tasa_conversion_total || 0) ? actual : mejor\n      , null)?.canal || 'N/A',\n      \n      // Detalle por canal\n      detalle_canales: concesionario.canales,\n      \n      timestamp: new Date().toISOString(),\n      status: 'success'\n    };\n    \n    resultados.push({ json: metricas });\n    \n    // Generar alertas para métricas críticas\n    if (metricas.tasa_conversion_total < 5 && metricas.total_leads >= 10) {\n      alertas.push({\n        tipo: 'conversion_baja',\n        concesionario: metricas.concesionario_nombre,\n        tasa: metricas.tasa_conversion_total,\n        leads: metricas.total_leads,\n        fecha: metricas.fecha_calculo\n      });\n    }\n    \n    if (metricas.tasa_contacto_general < 70 && metricas.total_leads >= 5) {\n      alertas.push({\n        tipo: 'contacto_bajo',\n        concesionario: metricas.concesionario_nombre,\n        tasa: metricas.tasa_contacto_general,\n        leads: metricas.total_leads,\n        fecha: metricas.fecha_calculo\n      });\n    }\n  }\n\n  // Guardar alertas en contexto\n  if (alertas.length > 0) {\n    $execution.set('alertas_conversion', alertas);\n  }\n  \n  // Guardar estadísticas del cálculo\n  $execution.set('calculation_stats', {\n    total_concesionarios: resultados.length,\n    total_alertas: alertas.length,\n    calculation_time: new Date().toISOString()\n  });\n\n  return resultados;\n  \n} catch (error) {\n  return [{\n    json: {\n      status: 'error',\n      message: 'Error al calcular métricas de conversión',\n      error: error.message,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
       },
       "id": "calculate-conversion",
       "name": "Calcular Conversión",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [680, 300]
+      "typeVersion": 2.1,
+      "position": [1000, 300]
     },
     {
       "parameters": {
-        "operation": "upsert",
-        "table": "metricas_conversion_leads",
-        "updateKey": "concesionario_id,fecha_calculo,periodo",
-        "columnsUi": {
-          "columnToMatchOn": [
+        "conditions": {
+          "string": [
             {
-              "column": "concesionario_id",
-              "operator": "="
-            },
-            {
-              "column": "fecha_calculo",
-              "operator": "="
-            },
-            {
-              "column": "periodo",
-              "operator": "="
-            }
-          ],
-          "columnsToUpdate": [
-            {
-              "column": "total_leads"
-            },
-            {
-              "column": "total_contactados"
-            },
-            {
-              "column": "total_calificados"
-            },
-            {
-              "column": "total_convertidos"
-            },
-            {
-              "column": "valor_total_ventas"
-            },
-            {
-              "column": "tasa_contacto_general"
-            },
-            {
-              "column": "tasa_calificacion_general"
-            },
-            {
-              "column": "tasa_conversion_general"
-            },
-            {
-              "column": "tasa_conversion_total"
-            },
-            {
-              "column": "roi_general"
-            },
-            {
-              "column": "valor_promedio_venta"
-            },
-            {
-              "column": "mejor_canal"
-            },
-            {
-              "column": "detalle_canales"
-            },
-            {
-              "column": "timestamp"
+              "value1": "={{ $json.status }}",
+              "operation": "equal",
+              "value2": "success"
             }
           ]
+        }
+      },
+      "id": "calculation-success",
+      "name": "¿Cálculo Exitoso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO metricas_conversion_leads (concesionario_id, fecha_calculo, periodo, total_leads, total_contactados, total_calificados, total_convertidos, valor_total_ventas, tasa_contacto_general, tasa_calificacion_general, tasa_conversion_general, tasa_conversion_total, roi_general, valor_promedio_venta, mejor_canal, detalle_canales, batch_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW()) ON CONFLICT (concesionario_id, fecha_calculo, periodo) DO UPDATE SET total_leads = EXCLUDED.total_leads, total_contactados = EXCLUDED.total_contactados, total_calificados = EXCLUDED.total_calificados, total_convertidos = EXCLUDED.total_convertidos, valor_total_ventas = EXCLUDED.valor_total_ventas, tasa_contacto_general = EXCLUDED.tasa_contacto_general, tasa_calificacion_general = EXCLUDED.tasa_calificacion_general, tasa_conversion_general = EXCLUDED.tasa_conversion_general, tasa_conversion_total = EXCLUDED.tasa_conversion_total, roi_general = EXCLUDED.roi_general, valor_promedio_venta = EXCLUDED.valor_promedio_venta, mejor_canal = EXCLUDED.mejor_canal, detalle_canales = EXCLUDED.detalle_canales, batch_id = EXCLUDED.batch_id, updated_at = NOW()",
+        "additionalFields": {
+          "queryParameters": "={{ [$json.concesionario_id, $json.fecha_calculo, $json.periodo, $json.total_leads, $json.total_contactados, $json.total_calificados, $json.total_convertidos, $json.valor_total_ventas, $json.tasa_contacto_general, $json.tasa_calificacion_general, $json.tasa_conversion_general, $json.tasa_conversion_total, $json.roi_general, $json.valor_promedio_venta, $json.mejor_canal, JSON.stringify($json.detalle_canales), $json.batch_id] }}"
         }
       },
       "id": "save-metrics",
       "name": "Guardar Métricas",
       "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.4,
-      "position": [900, 300],
-      "credentials": {
-        "postgres": {
-          "id": "supabase-main",
-          "name": "Supabase Main DB"
-        }
-      }
+      "typeVersion": 2.1,
+      "position": [1400, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
+          "boolean": [
             {
-              "id": "alertas-exist",
-              "leftValue": "={{ $execution.get('alertas_conversion') }}",
-              "rightValue": "",
-              "operator": {
-                "type": "object",
-                "operation": "notEmpty"
-              }
+              "value1": "={{ $execution.get('alertas_conversion') && $execution.get('alertas_conversion').length > 0 }}",
+              "operation": "equal",
+              "value2": true
             }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+          ]
+        }
       },
       "id": "check-alerts",
       "name": "¿Hay Alertas?",
       "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [1120, 300]
+      "typeVersion": 2.1,
+      "position": [1600, 300]
     },
     {
       "parameters": {
-        "sendTo": "ventas@optimacx.com,gerencia@optimacx.com",
-        "subject": "📊 Alerta Métricas de Conversión - {{ new Date().toLocaleDateString() }}",
-        "message": "=**ALERTAS DE CONVERSIÓN DETECTADAS:**\n\n{{ $execution.get('alertas_conversion').map(alerta => \n  `🔸 **${alerta.concesionario}**\n   - Tipo: ${alerta.tipo === 'conversion_baja' ? 'Conversión Baja' : 'Contacto Bajo'}\n   - Tasa: ${alerta.tasa}%\n   - Leads: ${alerta.leads}\n   - Fecha: ${alerta.fecha}` \n).join('\\n\\n') }}\n\n**Acción requerida:** Revisar procesos de seguimiento y contacto.\n\nDashboard: https://dashboard.optimacx.com/conversion\n\nSaludos,\nSistema OptimaCX",
-        "options": {
-          "allowUnauthorizedCerts": false
-        }
+        "jsCode": "// Respuesta cuando no hay datos para calcular\nreturn [{\n  json: {\n    status: 'no_data',\n    message: 'No hay datos de leads para calcular métricas',\n    period_checked: $('Preparar Cálculo').first().json.period_days,\n    timestamp: new Date().toISOString()\n  }\n}];"
       },
-      "id": "send-alert",
-      "name": "Enviar Alerta",
-      "type": "n8n-nodes-base.emailSend",
+      "id": "no-data-response",
+      "name": "Sin Datos",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2.1,
-      "position": [1340, 200],
-      "credentials": {
-        "smtp": {
-          "id": "smtp-optimacx",
-          "name": "SMTP OptimaCX"
-        }
-      }
+      "position": [1000, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de éxito con estadísticas\nconst stats = $execution.get('calculation_stats') || {};\nreturn [{\n  json: {\n    status: 'success',\n    message: 'Métricas de conversión calculadas exitosamente',\n    stats: {\n      concesionarios_procesados: stats.total_concesionarios || 0,\n      alertas_generadas: stats.total_alertas || 0,\n      calculation_time: stats.calculation_time\n    },\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "success-response",
+      "name": "Respuesta Éxito",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar y enviar alertas por email\nconst alertas = $execution.get('alertas_conversion') || [];\nconst alertsText = alertas.map(alerta => \n  `🔸 **${alerta.concesionario}**\\n   - Tipo: ${alerta.tipo === 'conversion_baja' ? 'Conversión Baja' : 'Contacto Bajo'}\\n   - Tasa: ${alerta.tasa}%\\n   - Leads: ${alerta.leads}\\n   - Fecha: ${alerta.fecha}`\n).join('\\n\\n');\n\nreturn [{\n  json: {\n    subject: `📊 Alerta Métricas de Conversión - ${new Date().toLocaleDateString()}`,\n    message: `**ALERTAS DE CONVERSIÓN DETECTADAS:**\\n\\n${alertsText}\\n\\n**Acción requerida:** Revisar procesos de seguimiento y contacto.\\n\\nDashboard: https://dashboard.optimacx.com/conversion\\n\\nSaludos,\\nSistema OptimaCX`,\n    to: 'ventas@optimacx.com,gerencia@optimacx.com',\n    alertas_count: alertas.length\n  }\n}];"
+      },
+      "id": "prepare-alert-email",
+      "name": "Preparar Email Alerta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1800, 500]
     }
   ],
   "connections": {
-    "Schedule Trigger": {
-      "main": [
-        [
-          {
-            "node": "Consultar Métricas",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Consultar Métricas": {
-      "main": [
-        [
-          {
-            "node": "Calcular Conversión",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Calcular Conversión": {
-      "main": [
-        [
-          {
-            "node": "Guardar Métricas",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Guardar Métricas": {
-      "main": [
-        [
-          {
-            "node": "¿Hay Alertas?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Hay Alertas?": {
-      "main": [
-        [
-          {
-            "node": "Enviar Alerta",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Schedule Trigger": { "main": [[{ "node": "Preparar Cálculo", "type": "main", "index": 0 }]] },
+    "Preparar Cálculo": { "main": [[{ "node": "Consultar Métricas", "type": "main", "index": 0 }]] },
+    "Consultar Métricas": { "main": [[{ "node": "¿Hay Datos?", "type": "main", "index": 0 }]] },
+    "¿Hay Datos?": { "main": [
+      [{ "node": "Calcular Conversión", "type": "main", "index": 0 }],
+      [{ "node": "Sin Datos", "type": "main", "index": 0 }]
+    ] },
+    "Calcular Conversión": { "main": [[{ "node": "¿Cálculo Exitoso?", "type": "main", "index": 0 }]] },
+    "¿Cálculo Exitoso?": { "main": [
+      [{ "node": "Guardar Métricas", "type": "main", "index": 0 }]
+    ] },
+    "Guardar Métricas": { "main": [[{ "node": "¿Hay Alertas?", "type": "main", "index": 0 }]] },
+    "¿Hay Alertas?": { "main": [
+      [{ "node": "Preparar Email Alerta", "type": "main", "index": 0 }],
+      [{ "node": "Respuesta Éxito", "type": "main", "index": 0 }]
+    ] },
+    "Preparar Email Alerta": { "main": [[{ "node": "Respuesta Éxito", "type": "main", "index": 0 }]] }
   },
-  "pinData": {},
   "settings": {
-    "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": ["leads", "conversion", "metricas"],
-  "triggerCount": 0,
-  "updatedAt": "2024-08-09T05:47:00.000Z",
-  "versionId": "calc-conversion-v2.1",
-  "name": "Calculador Métricas Conversión",
-  "active": true,
-  "id": "calc-conversion-metrics",
-  "hash": "conversion-metrics-calculator"
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 600
+  }
 }

@@ -17,10 +17,38 @@
       "name": "Trigger del Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 2.1,
-      "position": [
-        240,
-        300
-      ]
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validar payload para filtro de leads\nconst inData = $input.first().json || {};\nconst required = ['clients_from_excel', 'tenant_id'];\nconst missing = required.filter(field => !inData[field]);\nconst valid = missing.length === 0 && Array.isArray(inData.clients_from_excel) && inData.clients_from_excel.length > 0;\nreturn [{ json: { ...inData, valid, missing_fields: missing } }];"
+      },
+      "id": "validate-filter-payload",
+      "name": "Validar Payload Filtro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.valid }}",
+              "operator": { "type": "boolean", "operation": "isTrue" },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-valid-filter-payload",
+      "name": "¿Payload Válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [600, 300]
     },
     {
       "parameters": {
@@ -31,26 +59,38 @@
         }
       },
       "id": "query-existing-leads",
-      "name": "1. Consultar Leads Activos",
+      "name": "Consultar Leads Activos",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.1,
-      "position": [
-        460,
-        300
-      ]
+      "position": [800, 300]
     },
     {
       "parameters": {
-        "jsCode": "const allClients = $('Trigger del Workflow').first().json.clients_from_excel;\nconst existingLeads = $input.first().json;\n\nconst existingPhones = new Set(existingLeads.map(lead => lead.telefono_cliente));\n\nconst newClients = allClients.filter(client => !existingPhones.has(client.telefono));\n\nreturn {\n  tenant_id: $('Trigger del Workflow').first().json.tenant_id,\n  campaign_name: $('Trigger del Workflow').first().json.campaign_name,\n  uploaded_by: $('Trigger del Workflow').first().json.uploaded_by,\n  unique_clients_to_contact: newClients,\n  stats: {\n    received: allClients.length,\n    duplicates_found: existingPhones.size,\n    to_contact: newClients.length\n  }\n};"
+        "jsCode": "// Filtrar clientes eliminando duplicados\nconst allClients = $('Validar Payload Filtro').first().json.clients_from_excel;\nconst existingLeads = $input.first().json || [];\nconst sourceData = $('Validar Payload Filtro').first().json;\n\nconst existingPhones = new Set(existingLeads.map(lead => lead.telefono_cliente));\n\nconst newClients = allClients.filter(client => !existingPhones.has(client.telefono));\n\nreturn [{\n  json: {\n    tenant_id: sourceData.tenant_id,\n    campaign_name: sourceData.campaign_name || 'Campaña sin nombre',\n    uploaded_by: sourceData.uploaded_by || 'Sistema',\n    unique_clients_to_contact: newClients,\n    stats: {\n      received: allClients.length,\n      duplicates_found: existingPhones.size,\n      to_contact: newClients.length,\n      filter_timestamp: new Date().toISOString()\n    }\n  }\n}];"
       },
       "id": "filter-clients",
-      "name": "2. Filtrar Clientes",
+      "name": "Filtrar Clientes",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2.1,
-      "position": [
-        680,
-        300
-      ]
+      "position": [1000, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.unique_clients_to_contact.length }}",
+              "operation": "greaterThan",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "has-clients-to-contact",
+      "name": "¿Hay Clientes para Contactar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [1200, 300]
     },
     {
       "parameters": {
@@ -60,49 +100,56 @@
         "data": "={{ JSON.stringify($json) }}"
       },
       "id": "trigger-sender-workflow",
-      "name": "3. Disparar Envío WhatsApp",
+      "name": "Disparar Envío WhatsApp",
       "type": "n8n-nodes-base.n8n",
       "typeVersion": 2.1,
-      "position": [
-        900,
-        300
-      ]
+      "position": [1400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta exitosa con filtrado completado\nreturn [{\n  json: {\n    status: 'success',\n    message: 'Filtrado completado y envío WhatsApp iniciado',\n    stats: $json.stats,\n    whatsapp_sent: true,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "success-response",
+      "name": "Respuesta Exitosa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1600, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta cuando no hay clientes nuevos\nreturn [{\n  json: {\n    status: 'success',\n    message: 'Filtrado completado - No hay clientes nuevos para contactar',\n    stats: $json.stats,\n    whatsapp_sent: false,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "no-clients-response",
+      "name": "Sin Clientes Nuevos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1400, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Respuesta de error por payload inválido\nreturn [{\n  json: {\n    status: 'error',\n    message: 'Payload inválido para filtro de leads',\n    missing_fields: $json.missing_fields,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "error-response",
+      "name": "Respuesta Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [800, 500]
     }
   ],
   "connections": {
-    "Trigger del Workflow": {
-      "main": [
-        [
-          {
-            "node": "1. Consultar Leads Activos",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "1. Consultar Leads Activos": {
-      "main": [
-        [
-          {
-            "node": "2. Filtrar Clientes",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "2. Filtrar Clientes": {
-      "main": [
-        [
-          {
-            "node": "3. Disparar Envío WhatsApp",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
+    "Trigger del Workflow": { "main": [[{ "node": "Validar Payload Filtro", "type": "main", "index": 0 }]] },
+    "Validar Payload Filtro": { "main": [[{ "node": "¿Payload Válido?", "type": "main", "index": 0 }]] },
+    "¿Payload Válido?": { "main": [
+      [{ "node": "Consultar Leads Activos", "type": "main", "index": 0 }],
+      [{ "node": "Respuesta Error", "type": "main", "index": 0 }]
+    ] },
+    "Consultar Leads Activos": { "main": [[{ "node": "Filtrar Clientes", "type": "main", "index": 0 }]] },
+    "Filtrar Clientes": { "main": [[{ "node": "¿Hay Clientes para Contactar?", "type": "main", "index": 0 }]] },
+    "¿Hay Clientes para Contactar?": { "main": [
+      [{ "node": "Disparar Envío WhatsApp", "type": "main", "index": 0 }],
+      [{ "node": "Sin Clientes Nuevos", "type": "main", "index": 0 }]
+    ] },
+    "Disparar Envío WhatsApp": { "main": [[{ "node": "Respuesta Exitosa", "type": "main", "index": 0 }]] }
   },
   "settings": {
     "saveExecutionProgress": true
