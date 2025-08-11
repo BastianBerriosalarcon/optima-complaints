@@ -109,12 +109,17 @@ optimacx-GCP/
 │       ├── business/            # Workflows por área de negocio
 │       │   ├── administracion/  # Workflows administrativos
 │       │   ├── campañas/        # Gestión de campañas
-│       │   ├── encuestas/       # Sistema de encuestas
+│       │   ├── encuestas/       # ✨ Sistema de encuestas reorganizado
+│       │   │   ├── shared/      # Utilidades compartidas (métricas, NPS)
+│       │   │   ├── ventas/      # Encuestas de ventas (QR, WhatsApp)
+│       │   │   └── postventa/   # Encuestas post-venta y seguimiento
 │       │   ├── leads/           # Gestión de leads
 │       │   └── reclamos/        # Sistema de reclamos con RAG
+│       ├── config/              # Configuraciones de workflows
+│       ├── schemas/             # Esquemas de validación JSON
 │       ├── templates/           # Plantillas reutilizables
 │       ├── tests/               # Tests de workflows
-│       └── utils/               # Utilidades compartidas
+│       └── utils/               # Utilidades compartidas del sistema
 ├── ⚙️ config/                     # Configuraciones del sistema
 │   └── docker/                  # Configuraciones Docker
 ├── 🗄️ database/                   # Gestión de base de datos
@@ -167,25 +172,55 @@ optimacx-GCP/
 └── �️ temp/                       # Archivos temporales (gitignored)
 ```
 
-## 🔄 Flujo de Encuestas OptimaCx
+## 🔄 Sistema de Encuestas OptimaCx (Reorganizado v2.0)
 
-### Canal 1: Código QR (Inmediato)
+### 📁 Estructura Modular del Sistema
+
+#### `/encuestas/shared/` - Utilidades Compartidas
+- `agregador-metricas-encuestas.json` - Consolidación de métricas multicanal
+- `calculador-nps.json` - Cálculo automático NPS (Net Promoter Score)
+
+#### `/encuestas/ventas/` - Encuestas de Ventas
+- `encuestas-ventas-qr.json` - Canal QR inmediato
+- `encuestas-ventas-whatsapp-automatico.json` - Canal WhatsApp automatizado
+- `notificador-encuestas-ventas-score-bajo.json` - Alertas automáticas score bajo
+- `asignacion-contact-center-ventas.json` - Asignación Contact Center
+- `enviador-masivo-whatsapp-ventas.json` - Envío masivo optimizado
+- `enviador-whatsapp-ventas.json` - Envío individual WhatsApp
+- `exportador-excel-ventas.json` - Reportes Excel automatizados
+- `filtro-duplicados-ventas.json` - Limpieza automática duplicados
+- `procesador-score-ventas.json` - Procesamiento inteligente scores
+- `reporteador-ventas.json` - Dashboard de métricas en tiempo real
+
+#### `/encuestas/postventa/` - Encuestas Post-Venta
+- `encuestas-postventa-qr.json` - QR para servicios post-venta
+- `encuestas-postventa-whatsapp.json` - WhatsApp seguimiento post-venta
+- `notificador-encuestas-postventa-score-bajo.json` - Alertas post-venta
+- `procesador-score-postventa.json` - Análisis scores post-venta
+- `reporteador-postventa.json` - Métricas específicas post-venta
+
+### 🔄 Flujos Multi-Canal Integrados
+
+#### Canal 1: Código QR (Inmediato)
 1. Cliente escanea QR único por concesionario
 2. Respuesta instantánea con 4 preguntas + datos del cliente
-3. Registro automático en BD
+3. Registro automático en BD con métricas compartidas
 4. Si calificación 1-8: Email automático a jefatura
+5. Consolidación automática en agregador de métricas
 
-### Canal 2: WhatsApp (Automatizado)
+#### Canal 2: WhatsApp (Automatizado)
 1. Carga masiva de clientes (día siguiente)
 2. Filtrado automático (excluye QR ya respondidos)
 3. Envío vía WhatsApp Business API
 4. Período de espera: 6 horas
+5. Integración con sistema de métricas unificado
 
-### Canal 3: Contact Center (Manual)
+#### Canal 3: Contact Center (Manual)
 1. Asignación automática de pendientes
 2. Distribución equitativa entre agentes
 3. Seguimiento telefónico
 4. Registro manual en sistema
+5. Consolidación con métricas multicanal
 
 ## 🤖 Sistema RAG para Reclamos
 
@@ -300,12 +335,18 @@ docker-compose up -d
 
 ## 📝 Historial de Cambios
 
-### v2.0.0 (8 de agosto, 2025) ✨ NUEVA VERSIÓN - REORGANIZADA + OPTIMIZADA
+### v2.0.0 (11 de agosto, 2025) ✨ NUEVA VERSIÓN - REORGANIZADA + WORKFLOWS COMPLETADOS
 - 🗂️ **Reorganización completa del proyecto**
   - ✅ Applications: Separados extensions/ y workflows/ por dominio
+  - ✅ Encuestas: Modularización en shared/, ventas/ y postventa/
   - ✅ Scripts: Categorizados por función (deployment, testing, database, utilities)
   - ✅ Documentación: README específicos por módulo
   - ✅ Estructura modular y escalable implementada
+- 🔄 **Workflows críticos completados**
+  - ✅ **Escalación**: notificador-escalacion.json para alertas críticas
+  - ✅ **Sincronización**: sincronizador-chatwoot.json para conversaciones
+  - ✅ **Telemetría**: monitor-telemetria-avanzada.json para métricas sistema
+  - ✅ Validación JSON y sintaxis corregida
 - 🧹 **Optimización y limpieza completada**
   - ✅ **Fase 1**: Eliminados archivos de respaldo Terraform (~256KB)
   - ✅ **Fase 2**: Optimización conservadora node_modules (~20MB)
@@ -314,10 +355,12 @@ docker-compose up -d
 - 📋 **Documentación mejorada**
   - ✅ ARCHITECTURE.md con nueva estructura detallada
   - ✅ Guías de scripts organizadas por categoría
+  - ✅ Sistema de encuestas modularizado documentado
   - ✅ Reportes de limpieza y optimización
   - ✅ README.md actualizado con estado real
 - 🚀 **Estado actualizado**
   - ✅ N8N y Chatwoot funcionando normalmente
+  - ✅ 100% workflows alineados con especificaciones CLAUDE.md
   - ✅ Proyecto preparado para escalabilidad horizontal
   - ✅ Estructura mantenible y clara para desarrollo
 

@@ -1,0 +1,378 @@
+{
+  "name": "Monitor - Telemetría Avanzada",
+  "description": "Monitorea métricas de performance, latencia y salud de workflows por tenant con alertas automáticas",
+  "tags": [
+    "telemetria",
+    "monitoring",
+    "performance", 
+    "alertas"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-metrics-collection",
+      "name": "Recolección cada 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "{{ $workflow.settings.n8n_base_url }}/api/v1/executions",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "100"
+            },
+            {
+              "name": "filter",
+              "value": "{\"workflowId\": \"active\"}"
+            }
+          ]
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "n8nApi",
+        "options": {}
+      },
+      "id": "get-workflow-executions",
+      "name": "Obtener Ejecuciones de Workflows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 240],
+      "credentials": {
+        "n8nApi": {
+          "id": "n8n-api-admin",
+          "name": "N8N API Admin"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "select",
+        "table": "telemetria_workflows",
+        "where": "fecha_reporte >= NOW() - INTERVAL '1 hour'",
+        "sort": "fecha_reporte DESC"
+      },
+      "id": "get-recent-metrics",
+      "name": "Obtener Métricas Recientes",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [420, 360],
+      "credentials": {
+        "supabaseApi": {
+          "id": "tenant-supabase-{{$workflow.settings.tenant_id}}",
+          "name": "Supabase {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Analizar métricas de performance y detectar anomalías\nconst executions = $input.all()[0].json.data || [];\nconst recentMetrics = $input.all()[1].json || [];\n\nconst now = new Date();\nconst oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);\n\n// Filtrar ejecuciones de la última hora\nconst recentExecutions = executions.filter(exec => {\n  const execTime = new Date(exec.startedAt);\n  return execTime >= oneHourAgo;\n});\n\n// Analizar métricas por workflow\nconst workflowMetrics = {};\nconst alerts = [];\n\nrecentExecutions.forEach(exec => {\n  const workflowId = exec.workflowId;\n  const duration = exec.stoppedAt ? \n    new Date(exec.stoppedAt).getTime() - new Date(exec.startedAt).getTime() : null;\n  const status = exec.finished ? 'success' : 'failed';\n  \n  if (!workflowMetrics[workflowId]) {\n    workflowMetrics[workflowId] = {\n      workflow_id: workflowId,\n      workflow_name: exec.workflowData?.name || 'Unknown',\n      total_executions: 0,\n      successful_executions: 0,\n      failed_executions: 0,\n      avg_duration: 0,\n      max_duration: 0,\n      min_duration: Infinity,\n      durations: [],\n      tenant_id: $workflow.settings.tenant_id\n    };\n  }\n  \n  const metrics = workflowMetrics[workflowId];\n  metrics.total_executions++;\n  \n  if (status === 'success') {\n    metrics.successful_executions++;\n  } else {\n    metrics.failed_executions++;\n  }\n  \n  if (duration !== null) {\n    metrics.durations.push(duration);\n    metrics.max_duration = Math.max(metrics.max_duration, duration);\n    metrics.min_duration = Math.min(metrics.min_duration, duration);\n  }\n});\n\n// Calcular promedios y detectar anomalías\nObject.values(workflowMetrics).forEach(metrics => {\n  if (metrics.durations.length > 0) {\n    metrics.avg_duration = metrics.durations.reduce((a, b) => a + b, 0) / metrics.durations.length;\n  }\n  \n  // Detectar anomalías\n  const failureRate = metrics.failed_executions / metrics.total_executions;\n  const avgDurationSeconds = metrics.avg_duration / 1000;\n  \n  // Alert: Tasa de fallos > 20%\n  if (failureRate > 0.2) {\n    alerts.push({\n      type: 'high_failure_rate',\n      severity: 'critical',\n      workflow_id: metrics.workflow_id,\n      workflow_name: metrics.workflow_name,\n      message: `Tasa de fallos alta: ${(failureRate * 100).toFixed(1)}%`,\n      metric_value: failureRate,\n      threshold: 0.2\n    });\n  }\n  \n  // Alert: Duración promedio > 120 segundos\n  if (avgDurationSeconds > 120) {\n    alerts.push({\n      type: 'high_latency',\n      severity: 'warning',\n      workflow_id: metrics.workflow_id,\n      workflow_name: metrics.workflow_name,\n      message: `Latencia alta: ${avgDurationSeconds.toFixed(1)}s promedio`,\n      metric_value: avgDurationSeconds,\n      threshold: 120\n    });\n  }\n  \n  // Alert: Sin ejecuciones en workflows críticos\n  const criticalWorkflows = ['lead-whatsapp-orchestrator', 'complaint-orchestrator', 'notificador-escalacion'];\n  if (criticalWorkflows.some(name => metrics.workflow_name.includes(name)) && metrics.total_executions === 0) {\n    alerts.push({\n      type: 'no_executions',\n      severity: 'critical',\n      workflow_id: metrics.workflow_id,\n      workflow_name: metrics.workflow_name,\n      message: `Workflow crítico sin ejecuciones en la última hora`,\n      metric_value: 0,\n      threshold: 1\n    });\n  }\n});\n\n// Preparar datos para almacenamiento\nconst metricsToStore = Object.values(workflowMetrics).map(metrics => ({\n  ...metrics,\n  fecha_reporte: now.toISOString(),\n  success_rate: metrics.total_executions > 0 ? metrics.successful_executions / metrics.total_executions : 0,\n  failure_rate: metrics.total_executions > 0 ? metrics.failed_executions / metrics.total_executions : 0\n}));\n\nconst result = {\n  metrics: metricsToStore,\n  alerts: alerts,\n  summary: {\n    total_workflows: Object.keys(workflowMetrics).length,\n    total_executions: Object.values(workflowMetrics).reduce((sum, m) => sum + m.total_executions, 0),\n    total_failures: Object.values(workflowMetrics).reduce((sum, m) => sum + m.failed_executions, 0),\n    critical_alerts: alerts.filter(a => a.severity === 'critical').length,\n    warning_alerts: alerts.filter(a => a.severity === 'warning').length\n  }\n};\n\nconsole.log('Análisis de telemetría:', result.summary);\n\nreturn [{ json: result }];"
+      },
+      "id": "analyze-performance-metrics",
+      "name": "Analizar Métricas de Performance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.metrics.length }}",
+              "operator": { "type": "number", "operation": "gt" },
+              "rightValue": 0
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "check-has-metrics",
+      "name": "¿Hay Métricas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.alerts.length }}",
+              "operator": { "type": "number", "operation": "gt" },
+              "rightValue": 0
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "check-has-alerts",
+      "name": "¿Hay Alertas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 360]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "table": "telemetria_workflows",
+        "fieldsUi": {
+          "addField": [
+            {
+              "fieldName": "workflow_id",
+              "fieldValue": "={{ $json.workflow_id }}"
+            },
+            {
+              "fieldName": "workflow_name",
+              "fieldValue": "={{ $json.workflow_name }}"
+            },
+            {
+              "fieldName": "tenant_id",
+              "fieldValue": "={{ $json.tenant_id }}"
+            },
+            {
+              "fieldName": "total_executions",
+              "fieldValue": "={{ $json.total_executions }}"
+            },
+            {
+              "fieldName": "successful_executions",
+              "fieldValue": "={{ $json.successful_executions }}"
+            },
+            {
+              "fieldName": "failed_executions",
+              "fieldValue": "={{ $json.failed_executions }}"
+            },
+            {
+              "fieldName": "avg_duration",
+              "fieldValue": "={{ $json.avg_duration }}"
+            },
+            {
+              "fieldName": "max_duration",
+              "fieldValue": "={{ $json.max_duration }}"
+            },
+            {
+              "fieldName": "success_rate",
+              "fieldValue": "={{ $json.success_rate }}"
+            },
+            {
+              "fieldName": "failure_rate",
+              "fieldValue": "={{ $json.failure_rate }}"
+            },
+            {
+              "fieldName": "fecha_reporte",
+              "fieldValue": "={{ $json.fecha_reporte }}"
+            }
+          ]
+        }
+      },
+      "id": "store-metrics",
+      "name": "Almacenar Métricas",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1100, 240],
+      "credentials": {
+        "supabaseApi": {
+          "id": "tenant-supabase-{{$workflow.settings.tenant_id}}",
+          "name": "Supabase {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "subject": "🚨 ALERTA: Anomalías Detectadas en Workflows - {{ $workflow.settings.tenant_name }}",
+        "emailFormat": "html",
+        "message": "<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"UTF-8\">\n    <title>Alertas de Telemetría</title>\n</head>\n<body style=\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\">\n    <div style=\"max-width: 600px; margin: 0 auto; padding: 20px;\">\n        <div style=\"background: #dc2626; color: white; padding: 15px; border-radius: 8px 8px 0 0;\">\n            <h2 style=\"margin: 0;\">🚨 Alertas de Telemetría Detectadas</h2>\n        </div>\n        \n        <div style=\"background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb;\">\n            <h3 style=\"color: #dc2626; margin-top: 0;\">Resumen de Alertas</h3>\n            <table style=\"width: 100%; border-collapse: collapse;\">\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Alertas Críticas:</td><td style=\"padding: 8px; color: #dc2626;\">{{ $json.summary.critical_alerts }}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Alertas de Advertencia:</td><td style=\"padding: 8px; color: #f59e0b;\">{{ $json.summary.warning_alerts }}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Total Workflows:</td><td style=\"padding: 8px;\">{{ $json.summary.total_workflows }}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Total Ejecuciones:</td><td style=\"padding: 8px;\">{{ $json.summary.total_executions }}</td></tr>\n            </table>\n        </div>\n        \n        <div style=\"background: #fef3c7; padding: 15px; border: 1px solid #f59e0b; border-radius: 0 0 8px 8px;\">\n            <p style=\"margin: 0; font-weight: bold; color: #92400e;\">⚠️ Revise el dashboard de telemetría para más detalles y tome las acciones correctivas necesarias.</p>\n        </div>\n    </div>\n</body>\n</html>",
+        "toEmail": "={{ $workflow.settings.admin_email }}, {{ $workflow.settings.devops_email }}",
+        "fromEmail": "{{ $workflow.settings.noreply_email }}",
+        "senderName": "OptimaCX - Telemetría"
+      },
+      "id": "send-alert-notification",
+      "name": "Enviar Notificación de Alerta",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1100, 360],
+      "credentials": {
+        "smtp": {
+          "id": "tenant-smtp-{{$workflow.settings.tenant_id}}",
+          "name": "SMTP {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "table": "alertas_telemetria",
+        "fieldsUi": {
+          "addField": [
+            {
+              "fieldName": "tipo_alerta",
+              "fieldValue": "={{ $json.type }}"
+            },
+            {
+              "fieldName": "severidad",
+              "fieldValue": "={{ $json.severity }}"
+            },
+            {
+              "fieldName": "workflow_id",
+              "fieldValue": "={{ $json.workflow_id }}"
+            },
+            {
+              "fieldName": "workflow_name",
+              "fieldValue": "={{ $json.workflow_name }}"
+            },
+            {
+              "fieldName": "mensaje",
+              "fieldValue": "={{ $json.message }}"
+            },
+            {
+              "fieldName": "valor_metrica",
+              "fieldValue": "={{ $json.metric_value }}"
+            },
+            {
+              "fieldName": "umbral",
+              "fieldValue": "={{ $json.threshold }}"
+            },
+            {
+              "fieldName": "tenant_id",
+              "fieldValue": "={{ $workflow.settings.tenant_id }}"
+            },
+            {
+              "fieldName": "fecha_alerta",
+              "fieldValue": "={{ $now }}"
+            }
+          ]
+        }
+      },
+      "id": "store-alerts",
+      "name": "Almacenar Alertas",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1320, 360],
+      "credentials": {
+        "supabaseApi": {
+          "id": "tenant-supabase-{{$workflow.settings.tenant_id}}",
+          "name": "Supabase {{$workflow.settings.tenant_name}}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "schedule-metrics-collection": {
+      "main": [
+        [
+          {
+            "node": "get-workflow-executions",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "get-recent-metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-workflow-executions": {
+      "main": [
+        [
+          {
+            "node": "analyze-performance-metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-recent-metrics": {
+      "main": [
+        [
+          {
+            "node": "analyze-performance-metrics",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "analyze-performance-metrics": {
+      "main": [
+        [
+          {
+            "node": "check-has-metrics",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "check-has-alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-has-metrics": {
+      "main": [
+        [
+          {
+            "node": "store-metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-has-alerts": {
+      "main": [
+        [
+          {
+            "node": "send-alert-notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "store-alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "send-alert-notification": {
+      "main": [
+        [
+          {
+            "node": "store-alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {}
+}

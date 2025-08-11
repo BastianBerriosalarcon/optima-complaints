@@ -1,0 +1,238 @@
+{
+  "name": "encuestas-ventas-qr",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "encuesta-ventas-qr",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-qr-ventas",
+      "name": "QR Ventas Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "encuesta-ventas-qr"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Procesar datos de encuesta QR de ventas\nconst data = $input.all()[0].json;\n\n// Validar campos requeridos\nif (!data.cliente_nombre || !data.cliente_telefono || !data.vehiculo_modelo) {\n  return [{\n    json: {\n      error: 'Campos requeridos faltantes',\n      required: ['cliente_nombre', 'cliente_telefono', 'vehiculo_modelo']\n    }\n  }];\n}\n\n// Preparar datos para Supabase\nconst surveyData = {\n  concesionario_id: data.concesionario_id,\n  sucursal_id: data.sucursal_id || null,\n  cliente_nombre: data.cliente_nombre,\n  cliente_rut: data.cliente_rut || null,\n  cliente_telefono: data.cliente_telefono,\n  cliente_email: data.cliente_email || null,\n  vehiculo_modelo: data.vehiculo_modelo,\n  vehiculo_vin: data.vehiculo_vin || null,\n  fecha_venta: data.fecha_venta || new Date().toISOString().split('T')[0],\n  \n  // Respuestas de la encuesta\n  experiencia_venta: parseInt(data.experiencia_venta) || null,\n  satisfaccion_asesor_ventas: parseInt(data.satisfaccion_asesor_ventas) || null,\n  claridad_informacion: parseInt(data.claridad_informacion) || null,\n  recomendacion_venta: parseInt(data.recomendacion_venta) || null,\n  comentario_venta: data.comentario_venta || null,\n  \n  origen: 'QR_VENTAS',\n  asesor_ventas_id: data.asesor_ventas_id || null,\n  lead_id: data.lead_id || null\n};\n\nconsole.log('Procesando encuesta QR ventas:', surveyData);\n\nreturn [{ json: surveyData }];"
+      },
+      "id": "process-qr-data",
+      "name": "Procesar Datos QR",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "table": "encuestas_ventas",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "concesionario_id": "={{ $json.concesionario_id }}",
+            "sucursal_id": "={{ $json.sucursal_id }}",
+            "cliente_nombre": "={{ $json.cliente_nombre }}",
+            "cliente_rut": "={{ $json.cliente_rut }}",
+            "cliente_telefono": "={{ $json.cliente_telefono }}",
+            "cliente_email": "={{ $json.cliente_email }}",
+            "vehiculo_modelo": "={{ $json.vehiculo_modelo }}",
+            "vehiculo_vin": "={{ $json.vehiculo_vin }}",
+            "fecha_venta": "={{ $json.fecha_venta }}",
+            "experiencia_venta": "={{ $json.experiencia_venta }}",
+            "satisfaccion_asesor_ventas": "={{ $json.satisfaccion_asesor_ventas }}",
+            "claridad_informacion": "={{ $json.claridad_informacion }}",
+            "recomendacion_venta": "={{ $json.recomendacion_venta }}",
+            "comentario_venta": "={{ $json.comentario_venta }}",
+            "origen": "={{ $json.origen }}",
+            "asesor_ventas_id": "={{ $json.asesor_ventas_id }}",
+            "lead_id": "={{ $json.lead_id }}"
+          }
+        }
+      },
+      "id": "insert-supabase",
+      "name": "Insertar en Supabase",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "tenant-supabase-{{$workflow.settings.tenant_id}}",
+          "name": "Supabase {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-low-score",
+              "leftValue": "={{ $json.average_score }}",
+              "rightValue": "8",
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-score",
+      "name": "¿Score Bajo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Preparar datos para notificación de score bajo\nconst surveyData = $input.all()[0].json;\n\n// Obtener configuración del tenant\nconst tenantConfig = $workflow.settings.tenant_config || {};\n\nconst notificationData = {\n  tipo: 'encuesta_ventas_score_bajo',\n  tenant_id: surveyData.concesionario_id,\n  survey_id: surveyData.id,\n  cliente_nombre: surveyData.cliente_nombre,\n  cliente_telefono: surveyData.cliente_telefono,\n  vehiculo_modelo: surveyData.vehiculo_modelo,\n  average_score: surveyData.average_score,\n  fecha_venta: surveyData.fecha_venta,\n  \n  // Destinatarios según CLAUDE.md\n  destinatarios: [\n    'jefe_ventas',\n    'asesor_ventas',\n    'gerencia'\n  ],\n  \n  // Configuraciones de email del tenant\n  email_config: tenantConfig.email || {},\n  \n  template: 'encuesta-ventas-score-bajo',\n  urgencia: 'alta'\n};\n\nreturn [{ json: notificationData }];"
+      },
+      "id": "prepare-notification",
+      "name": "Preparar Notificación",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{ $workflow.settings.base_url }}/webhook/send-notification",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Tenant-ID",
+              "value": "={{ $json.tenant_id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "data",
+              "value": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        }
+      },
+      "id": "send-notification",
+      "name": "Enviar Notificación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({success: true, message: 'Encuesta de ventas registrada exitosamente'}) }}"
+      },
+      "id": "webhook-response",
+      "name": "Respuesta Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "QR Ventas Webhook": {
+      "main": [
+        [
+          {
+            "node": "Procesar Datos QR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Datos QR": {
+      "main": [
+        [
+          {
+            "node": "Insertar en Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insertar en Supabase": {
+      "main": [
+        [
+          {
+            "node": "¿Score Bajo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Score Bajo?": {
+      "main": [
+        [
+          {
+            "node": "Preparar Notificación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Notificación": {
+      "main": [
+        [
+          {
+            "node": "Enviar Notificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Notificación": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler-workflow"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCreatedBy": "optimacx-platform",
+    "description": "Procesa encuestas de satisfacción de ventas desde códigos QR. Registra en Supabase y envía notificaciones para scores bajos según CLAUDE.md",
+    "tags": ["ventas", "encuestas", "qr", "satisfaccion", "multitenant"]
+  }
+}

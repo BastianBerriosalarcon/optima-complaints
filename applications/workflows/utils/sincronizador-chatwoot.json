@@ -1,0 +1,329 @@
+{
+  "name": "Sincronizador - Chatwoot Bidireccional",
+  "description": "Sincroniza usuarios del sistema con agentes de Chatwoot para mantener coherencia entre plataformas",
+  "tags": [
+    "chatwoot",
+    "sincronizacion",
+    "agentes",
+    "usuarios"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-sync",
+      "name": "Sincronización cada 6h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/chatwoot/sync-agents",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-manual-sync",
+      "name": "Webhook Sincronización Manual",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [200, 420]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "select",
+        "table": "usuarios",
+        "where": "activo = true AND rol IN ('asesor_ventas', 'asesor_servicio', 'contact_center', 'jefe_ventas', 'jefe_servicio')",
+        "sort": "created_at DESC"
+      },
+      "id": "get-active-users",
+      "name": "Obtener Usuarios Activos",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [440, 360],
+      "credentials": {
+        "supabaseApi": {
+          "id": "tenant-supabase-{{$workflow.settings.tenant_id}}",
+          "name": "Supabase {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $workflow.settings.chatwoot_base_url }}/api/v1/accounts/{{ $workflow.settings.chatwoot_account_id }}/agents",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "chatwootApi",
+        "options": {}
+      },
+      "id": "get-chatwoot-agents",
+      "name": "Obtener Agentes Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 480],
+      "credentials": {
+        "chatwootApi": {
+          "id": "tenant-chatwoot-{{$workflow.settings.tenant_id}}",
+          "name": "Chatwoot {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Comparar usuarios del sistema con agentes de Chatwoot\nconst users = $input.all()[0].json;\nconst agents = $input.all()[1].json;\n\nconst result = {\n  users_to_create: [],\n  users_to_update: [],\n  agents_to_deactivate: [],\n  sync_stats: {\n    total_users: users.length,\n    total_agents: agents.length,\n    actions_needed: 0\n  }\n};\n\n// Mapear agentes existentes por email\nconst agentsByEmail = {};\nagents.forEach(agent => {\n  agentsByEmail[agent.email] = agent;\n});\n\n// Procesar cada usuario activo\nusers.forEach(user => {\n  const existingAgent = agentsByEmail[user.email];\n  \n  if (!existingAgent) {\n    // Usuario no existe en Chatwoot - crear\n    result.users_to_create.push({\n      name: user.nombre,\n      email: user.email,\n      role: mapRoleToCharwoot(user.rol),\n      user_id: user.id,\n      concesionario_id: user.concesionario_id\n    });\n    result.sync_stats.actions_needed++;\n  } else {\n    // Usuario existe - verificar si necesita actualización\n    const needsUpdate = (\n      existingAgent.name !== user.nombre ||\n      existingAgent.role !== mapRoleToCharwoot(user.rol)\n    );\n    \n    if (needsUpdate) {\n      result.users_to_update.push({\n        chatwoot_id: existingAgent.id,\n        name: user.nombre,\n        email: user.email,\n        role: mapRoleToCharwoot(user.rol),\n        user_id: user.id\n      });\n      result.sync_stats.actions_needed++;\n    }\n  }\n  \n  // Marcar agente como procesado\n  delete agentsByEmail[user.email];\n});\n\n// Agentes restantes necesitan desactivación\nObject.values(agentsByEmail).forEach(agent => {\n  result.agents_to_deactivate.push({\n    chatwoot_id: agent.id,\n    email: agent.email,\n    name: agent.name\n  });\n  result.sync_stats.actions_needed++;\n});\n\nfunction mapRoleToCharwoot(systemRole) {\n  const roleMapping = {\n    'asesor_ventas': 'agent',\n    'asesor_servicio': 'agent', \n    'contact_center': 'agent',\n    'jefe_ventas': 'administrator',\n    'jefe_servicio': 'administrator'\n  };\n  return roleMapping[systemRole] || 'agent';\n}\n\nconsole.log('Análisis de sincronización:', result.sync_stats);\n\nreturn [{ json: result }];"
+      },
+      "id": "analyze-sync-needs",
+      "name": "Analizar Necesidades de Sincronización",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [680, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.sync_stats.actions_needed }}",
+              "operator": { "type": "number", "operation": "gt" },
+              "rightValue": 0
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "check-needs-sync",
+      "name": "¿Necesita Sincronización?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Crear nuevos agentes en Chatwoot\nconst syncData = $input.first().json;\nconst usersToCreate = syncData.users_to_create;\n\nif (usersToCreate.length === 0) {\n  console.log('No hay usuarios para crear');\n  return [];\n}\n\nconst results = [];\n\nfor (const user of usersToCreate) {\n  results.push({\n    json: {\n      action: 'create',\n      user: user,\n      chatwoot_payload: {\n        name: user.name,\n        email: user.email,\n        role: user.role\n      }\n    }\n  });\n}\n\nconsole.log(`Preparando creación de ${results.length} agentes`);\nreturn results;"
+      },
+      "id": "prepare-agent-creation",
+      "name": "Preparar Creación de Agentes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1120, 340]
+    },
+    {
+      "parameters": {
+        "url": "={{ $workflow.settings.chatwoot_base_url }}/api/v1/accounts/{{ $workflow.settings.chatwoot_account_id }}/agents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.chatwoot_payload }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "chatwootApi",
+        "options": {}
+      },
+      "id": "create-chatwoot-agent",
+      "name": "Crear Agente en Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 340],
+      "credentials": {
+        "chatwootApi": {
+          "id": "tenant-chatwoot-{{$workflow.settings.tenant_id}}",
+          "name": "Chatwoot {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar agentes a desactivar\nconst syncData = $input.first().json;\nconst agentsToDeactivate = syncData.agents_to_deactivate;\n\nif (agentsToDeactivate.length === 0) {\n  console.log('No hay agentes para desactivar');\n  return [];\n}\n\nconst results = [];\n\nfor (const agent of agentsToDeactivate) {\n  results.push({\n    json: {\n      action: 'deactivate',\n      agent: agent,\n      chatwoot_agent_id: agent.chatwoot_id\n    }\n  });\n}\n\nconsole.log(`Preparando desactivación de ${results.length} agentes`);\nreturn results;"
+      },
+      "id": "prepare-agent-deactivation",
+      "name": "Preparar Desactivación de Agentes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [1120, 500]
+    },
+    {
+      "parameters": {
+        "url": "={{ $workflow.settings.chatwoot_base_url }}/api/v1/accounts/{{ $workflow.settings.chatwoot_account_id }}/agents/{{ $json.chatwoot_agent_id }}",
+        "requestMethod": "DELETE",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "chatwootApi",
+        "options": {}
+      },
+      "id": "deactivate-chatwoot-agent",
+      "name": "Desactivar Agente en Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 500],
+      "credentials": {
+        "chatwootApi": {
+          "id": "tenant-chatwoot-{{$workflow.settings.tenant_id}}",
+          "name": "Chatwoot {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "subject": "✅ Sincronización Chatwoot Completada - {{ $workflow.settings.tenant_name }}",
+        "emailFormat": "html",
+        "message": "<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"UTF-8\">\n    <title>Reporte de Sincronización Chatwoot</title>\n</head>\n<body style=\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\">\n    <div style=\"max-width: 600px; margin: 0 auto; padding: 20px;\">\n        <div style=\"background: #059669; color: white; padding: 15px; border-radius: 8px 8px 0 0;\">\n            <h2 style=\"margin: 0;\">✅ Sincronización Chatwoot Completada</h2>\n        </div>\n        \n        <div style=\"background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb;\">\n            <h3 style=\"color: #059669; margin-top: 0;\">Resumen de Acciones</h3>\n            <table style=\"width: 100%; border-collapse: collapse;\">\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Usuarios Totales:</td><td style=\"padding: 8px;\">{{ $json.sync_stats.total_users }}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Agentes Totales:</td><td style=\"padding: 8px;\">{{ $json.sync_stats.total_agents }}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Usuarios Creados:</td><td style=\"padding: 8px;\">{{ $json.users_to_create.length }}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Usuarios Actualizados:</td><td style=\"padding: 8px;\">{{ $json.users_to_update.length }}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Agentes Desactivados:</td><td style=\"padding: 8px;\">{{ $json.agents_to_deactivate.length }}</td></tr>\n            </table>\n        </div>\n        \n        <div style=\"background: #dbeafe; padding: 15px; border: 1px solid #3b82f6; border-radius: 0 0 8px 8px;\">\n            <p style=\"margin: 0; font-weight: bold; color: #1e40af;\">🔄 La sincronización se ejecuta automáticamente cada 6 horas y puede ejecutarse manualmente via webhook.</p>\n        </div>\n    </div>\n</body>\n</html>",
+        "toEmail": "={{ $workflow.settings.admin_email }}",
+        "fromEmail": "{{ $workflow.settings.noreply_email }}",
+        "senderName": "OptimaCX - Sincronización"
+      },
+      "id": "send-sync-report",
+      "name": "Enviar Reporte de Sincronización",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1560, 420],
+      "credentials": {
+        "smtp": {
+          "id": "tenant-smtp-{{$workflow.settings.tenant_id}}",
+          "name": "SMTP {{$workflow.settings.tenant_name}}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "schedule-sync": {
+      "main": [
+        [
+          {
+            "node": "get-active-users",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "get-chatwoot-agents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-manual-sync": {
+      "main": [
+        [
+          {
+            "node": "get-active-users", 
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "get-chatwoot-agents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-active-users": {
+      "main": [
+        [
+          {
+            "node": "analyze-sync-needs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-chatwoot-agents": {
+      "main": [
+        [
+          {
+            "node": "analyze-sync-needs",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "analyze-sync-needs": {
+      "main": [
+        [
+          {
+            "node": "check-needs-sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-needs-sync": {
+      "main": [
+        [
+          {
+            "node": "prepare-agent-creation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "prepare-agent-deactivation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-agent-creation": {
+      "main": [
+        [
+          {
+            "node": "create-chatwoot-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-agent-deactivation": {
+      "main": [
+        [
+          {
+            "node": "deactivate-chatwoot-agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create-chatwoot-agent": {
+      "main": [
+        [
+          {
+            "node": "send-sync-report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "deactivate-chatwoot-agent": {
+      "main": [
+        [
+          {
+            "node": "send-sync-report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {}
+}

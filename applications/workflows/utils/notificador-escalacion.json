@@ -1,0 +1,221 @@
+{
+  "name": "Notificador - Escalación Automática",
+  "description": "Gestiona escalaciones automáticas de leads no atendidos y reclamos estancados según SLAs definidos",
+  "tags": [
+    "escalacion",
+    "sla",
+    "notificaciones",
+    "critico"
+  ],
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression", 
+              "expression": "*/30 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-escalation-check",
+      "name": "Verificación cada 30 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "select", 
+        "table": "leads",
+        "where": "nivel_interes = 'alto' AND estado = 'nuevo' AND fecha_creacion <= NOW() - INTERVAL '2 hours'",
+        "sort": "fecha_creacion ASC"
+      },
+      "id": "get-stalled-leads",
+      "name": "Leads Críticos Sin Atención",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [400, 240],
+      "credentials": {
+        "supabaseApi": {
+          "id": "tenant-supabase-{{$workflow.settings.tenant_id}}",
+          "name": "Supabase {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "select",
+        "table": "reclamos", 
+        "where": "urgencia = 'alta' AND estado = 'Pendiente' AND fecha_creacion <= NOW() - INTERVAL '24 hours'",
+        "sort": "fecha_creacion ASC"
+      },
+      "id": "get-stalled-complaints",
+      "name": "Reclamos Urgentes Estancados",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [400, 360],
+      "credentials": {
+        "supabaseApi": {
+          "id": "tenant-supabase-{{$workflow.settings.tenant_id}}",
+          "name": "Supabase {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.length }}",
+              "operator": { "type": "number", "operation": "gt" },
+              "rightValue": 0
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "check-has-stalled-leads",
+      "name": "¿Hay Leads Estancados?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [620, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.length }}",
+              "operator": { "type": "number", "operation": "gt" },
+              "rightValue": 0
+            }
+          ],
+          "combineOperation": "any"
+        }
+      },
+      "id": "check-has-stalled-complaints",
+      "name": "¿Hay Reclamos Estancados?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [620, 360]
+    },
+    {
+      "parameters": {
+        "subject": "🚨 ESCALACIÓN: Lead Crítico Sin Atención - {{$json.nombre_cliente}}",
+        "emailFormat": "html",
+        "message": "<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"UTF-8\">\n    <title>Escalación Lead Crítico</title>\n</head>\n<body style=\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\">\n    <div style=\"max-width: 600px; margin: 0 auto; padding: 20px;\">\n        <div style=\"background: #dc2626; color: white; padding: 15px; border-radius: 8px 8px 0 0;\">\n            <h2 style=\"margin: 0;\">🚨 ESCALACIÓN: Lead Crítico Sin Atención</h2>\n        </div>\n        \n        <div style=\"background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb;\">\n            <h3 style=\"color: #dc2626; margin-top: 0;\">Información del Lead</h3>\n            <table style=\"width: 100%; border-collapse: collapse;\">\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Cliente:</td><td style=\"padding: 8px;\">{{$json.nombre_cliente}}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Teléfono:</td><td style=\"padding: 8px;\">{{$json.telefono_cliente}}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Nivel de Interés:</td><td style=\"padding: 8px;\"><span style=\"background: #dc2626; color: white; padding: 4px 8px; border-radius: 4px;\">{{$json.nivel_interes}}</span></td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Score:</td><td style=\"padding: 8px;\">{{$json.score_calidad}}/100</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Asesor Asignado:</td><td style=\"padding: 8px;\">{{$json.asesor_asignado_nombre}}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Tiempo Transcurrido:</td><td style=\"padding: 8px;\">{{$json.tiempo_sin_atencion}}</td></tr>\n            </table>\n        </div>\n        \n        <div style=\"background: #fef3c7; padding: 15px; border: 1px solid #f59e0b; border-radius: 0 0 8px 8px;\">\n            <p style=\"margin: 0; font-weight: bold; color: #92400e;\">⚠️ Este lead de ALTO VALOR requiere atención inmediata para evitar pérdida de oportunidad de venta.</p>\n        </div>\n    </div>\n</body>\n</html>",
+        "toEmail": "={{ $workflow.settings.jefe_ventas_email }}",
+        "fromEmail": "{{ $workflow.settings.noreply_email }}",
+        "senderName": "OptimaCX - Escalaciones"
+      },
+      "id": "send-lead-escalation-email",
+      "name": "Email Escalación Lead",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [840, 240],
+      "credentials": {
+        "smtp": {
+          "id": "tenant-smtp-{{$workflow.settings.tenant_id}}",
+          "name": "SMTP {{$workflow.settings.tenant_name}}"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "subject": "🚨 ESCALACIÓN: Reclamo Urgente Estancado - {{$json.cliente_nombre}}",
+        "emailFormat": "html",
+        "message": "<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"UTF-8\">\n    <title>Escalación Reclamo Urgente</title>\n</head>\n<body style=\"font-family: Arial, sans-serif; line-height: 1.6; color: #333;\">\n    <div style=\"max-width: 600px; margin: 0 auto; padding: 20px;\">\n        <div style=\"background: #dc2626; color: white; padding: 15px; border-radius: 8px 8px 0 0;\">\n            <h2 style=\"margin: 0;\">🚨 ESCALACIÓN: Reclamo Urgente Estancado</h2>\n        </div>\n        \n        <div style=\"background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb;\">\n            <h3 style=\"color: #dc2626; margin-top: 0;\">Información del Reclamo</h3>\n            <table style=\"width: 100%; border-collapse: collapse;\">\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Cliente:</td><td style=\"padding: 8px;\">{{$json.cliente_nombre}}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">ID Reclamo:</td><td style=\"padding: 8px;\">{{$json.id_externo}}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Urgencia:</td><td style=\"padding: 8px;\"><span style=\"background: #dc2626; color: white; padding: 4px 8px; border-radius: 4px;\">{{$json.urgencia}}</span></td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Sucursal:</td><td style=\"padding: 8px;\">{{$json.sucursal_nombre}}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Tiempo Estancado:</td><td style=\"padding: 8px;\">{{$json.tiempo_estancado}}</td></tr>\n                <tr><td style=\"padding: 8px; font-weight: bold;\">Black Alert:</td><td style=\"padding: 8px;\">{{$json.black_alert ? 'SÍ' : 'NO'}}</td></tr>\n            </table>\n        </div>\n        \n        <div style=\"background: #fef3c7; padding: 15px; border: 1px solid #f59e0b; border-radius: 0 0 8px 8px;\">\n            <p style=\"margin: 0; font-weight: bold; color: #92400e;\">⚠️ Este reclamo urgente ha excedido las 24 horas sin gestión. Requiere atención inmediata.</p>\n        </div>\n    </div>\n</body>\n</html>",
+        "toEmail": "={{ $workflow.settings.jefe_servicio_email }}, {{ $workflow.settings.encargado_calidad_email }}",
+        "fromEmail": "{{ $workflow.settings.noreply_email }}",
+        "senderName": "OptimaCX - Escalaciones"
+      },
+      "id": "send-complaint-escalation-email",
+      "name": "Email Escalación Reclamo",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [840, 360],
+      "credentials": {
+        "smtp": {
+          "id": "tenant-smtp-{{$workflow.settings.tenant_id}}",
+          "name": "SMTP {{$workflow.settings.tenant_name}}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "schedule-escalation-check": {
+      "main": [
+        [
+          {
+            "node": "get-stalled-leads",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "get-stalled-complaints",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-stalled-leads": {
+      "main": [
+        [
+          {
+            "node": "check-has-stalled-leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-stalled-complaints": {
+      "main": [
+        [
+          {
+            "node": "check-has-stalled-complaints",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-has-stalled-leads": {
+      "main": [
+        [
+          {
+            "node": "send-lead-escalation-email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-has-stalled-complaints": {
+      "main": [
+        [
+          {
+            "node": "send-complaint-escalation-email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {}
+}
