@@ -1,0 +1,130 @@
+{
+  "name": "Test Conectividad Supabase API",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ac8d421b-2736-4d39-90e0-0d2f5b8f9c0c",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "getAll",
+        "tableId": "concesionarios",
+        "returnAll": false,
+        "limit": 5,
+        "additionalFields": {}
+      },
+      "id": "1f9a1c88-4d17-4f55-9e23-8b9f7e3d2c1a",
+      "name": "Test Tabla Concesionarios",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "optimacx-supabase",
+          "name": "OptimaCX Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "getAll", 
+        "tableId": "configuraciones_concesionario",
+        "returnAll": false,
+        "limit": 3,
+        "additionalFields": {}
+      },
+      "id": "2e8b3d9f-5c6a-4e7b-8d9c-1f2a3b4c5d6e",
+      "name": "Test Configuraciones",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "optimacx-supabase",
+          "name": "OptimaCX Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "create",
+        "tableId": "configuraciones_concesionario",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "concesionario_id",
+              "fieldValue": "00000000-0000-0000-0000-000000000001"
+            },
+            {
+              "fieldId": "webhook_n8n_base", 
+              "fieldValue": "https://n8n-optimacx-supabase-dev-1039900134024.southamerica-west1.run.app/webhook/"
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "3f9c4e1d-6b7a-5c8d-9e0f-2a3b4c5d6e7f",
+      "name": "Crear Config Demo",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "optimacx-supabase",
+          "name": "OptimaCX Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Test Tabla Concesionarios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Tabla Concesionarios": {
+      "main": [
+        [
+          {
+            "node": "Test Configuraciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Configuraciones": {
+      "main": [
+        [
+          {
+            "node": "Crear Config Demo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["test", "supabase", "conectividad"],
+  "triggerCount": 0,
+  "updatedAt": "2025-08-11T12:00:00.000Z",
+  "versionId": "1"
+}
