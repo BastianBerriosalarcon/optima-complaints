@@ -15,7 +15,7 @@ export const validationOptions = {
         {
             displayName: 'Auto Format Phone',
             name: 'autoFormatPhone',
-            type: 'boolean
+            type: 'boolean',
             default: true,
             description: 'Automatically format phone numbers',
         },

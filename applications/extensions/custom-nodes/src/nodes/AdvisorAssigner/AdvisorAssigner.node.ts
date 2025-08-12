@@ -21,8 +21,8 @@ export class AdvisorAssigner extends OptimaCxNodeBase {
         defaults: {
             name: 'Advisor Assigner',
         },
-        inputs: ['main'],
-        outputs: ['main'],
+        inputs: [{ type: 'main' }],
+        outputs: [{ type: 'main' }],
         credentials: [
             {
                 name: 'optimaCxApi',

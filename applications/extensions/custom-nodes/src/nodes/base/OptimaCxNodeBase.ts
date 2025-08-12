@@ -20,24 +20,22 @@ export abstract class OptimaCxNodeBase implements INodeType {
   abstract description: INodeTypeDescription;
 
   // Principio de Responsabilidad Única - manejo de errores centralizado
-  protected handleError(error: any, context: string): NodeOperationError {
+  protected handleError(error: any, context: string, node: any): NodeOperationError {
     const errorMessage = error.message || 'Unknown error occurred';
     console.error(`[${this.description.name}] Error in ${context}:`, error);
     
     return new NodeOperationError(
-      this.description,
+      node,
       `${context}: ${errorMessage}`,
       {
-        description: 'Check the node configuration and input data',
-        timestamp: new Date().toISOString(),
-        context
+        description: 'Check the node configuration and input data'
       }
     );
   }
 
   // Principio de Responsabilidad Única - construcción de contexto de workflow
-  protected buildWorkflowContext(executeFunctions: IExecuteFunctions): WorkflowContext {
-    const workflowData = executeFunctions.getWorkflowDataProxy();
+  protected buildWorkflowContext(executeFunctions: IExecuteFunctions, itemIndex = 0): WorkflowContext {
+    const workflowData = executeFunctions.getWorkflowDataProxy(itemIndex);
     const nodeData = executeFunctions.getNode();
     
     return {
@@ -50,16 +48,16 @@ export abstract class OptimaCxNodeBase implements INodeType {
     };
   }
 
-  // Principio de Responsabilidad Única - obtención segura de credenciales
-  protected async getCredentials(executeFunctions: IExecuteFunctions, credentialType: string): Promise<any> {
+  // Principio de Abstracción - obtener credenciales
+  protected getCredentials(context: IExecuteFunctions, credentialType: string) {
     try {
-      const credentials = await executeFunctions.getCredentials(credentialType);
+      const credentials = context.getCredentials(credentialType);
       if (!credentials) {
         throw new Error(`${credentialType} credentials not configured`);
       }
       return credentials;
     } catch (error) {
-      throw this.handleError(error, 'credential_retrieval');
+      throw this.handleError(error, 'credential_retrieval', context.getNode());
     }
   }
 
@@ -154,8 +152,15 @@ export abstract class OptimaCxNodeBase implements INodeType {
       return [(this as any).formatOutput(result.data, { operation })];
 
     } catch (error) {
-      (this as any).log('error', `${operation} failed`, { error: error.message });
-      throw (this as any).handleError(error, operation);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      (this as any).log('error', `${operation} failed`, { error: errorMessage });
+      throw new NodeOperationError(
+        this.getNode(),
+        `${operation}: ${errorMessage}`,
+        {
+          description: 'Check the node configuration and input data'
+        }
+      );
     }
   }
 }

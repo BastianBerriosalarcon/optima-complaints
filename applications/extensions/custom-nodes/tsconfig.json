@@ -1,18 +1,18 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
     "baseUrl": ".",
     "composite": true,
     "paths": {
-      "@shared/*": ["../../shared/*"]
+      "@shared/*": ["../../../shared/*"]
     }
   },
   "include": [
     "src/**/*"
   ],
   "references": [
-    { "path": "../../shared" }
+    { "path": "../../../shared" }
   ],
   "exclude": [
     "node_modules",
