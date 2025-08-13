@@ -9,7 +9,7 @@
         "@makafeli/n8n-workflow-builder"
       ],
       "env": {
-        "N8N_HOST": "https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app",
+        "N8N_HOST": "https://n8n-optimacx-supabase-dev-1039900134024.southamerica-west1.run.app",
         "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwNTIyYzQ1Ny0zMTkxLTQ1OTAtOGNiMi0yM2FmOTNmYjZhOWUiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzUzODQ3NTM4fQ.-k3vQzfiMSYvfHRQ33eZ78p7pU7zB8G13X3777SSVL0"
       },
       "timeout": 30000,
