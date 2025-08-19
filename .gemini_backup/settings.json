@@ -3,8 +3,9 @@
   "theme": "Default",
   "mcpServers": {
     "n8n-workflow-builder": {
-      "command": "npx",
+      "command": "/home/bastianberrios/.nvm/versions/node/v20.19.2/bin/node",
       "args": [
+        "/home/bastianberrios/.nvm/versions/node/v20.19.2/lib/node_modules/npm/bin/npx-cli.js",
         "-y",
         "@makafeli/n8n-workflow-builder"
       ],
@@ -23,8 +24,9 @@
       ]
     },
     "supabase": {
-      "command": "npx",
+      "command": "/home/bastianberrios/.nvm/versions/node/v20.19.2/bin/node",
       "args": [
+        "/home/bastianberrios/.nvm/versions/node/v20.19.2/lib/node_modules/npm/bin/npx-cli.js",
         "-y",
         "@supabase/mcp-server-supabase@latest",
         "--read-only",
@@ -48,8 +50,9 @@
       ]
     },
     "cloud-run": {
-      "command": "npx",
+      "command": "/home/bastianberrios/.nvm/versions/node/v20.19.2/bin/node",
       "args": [
+        "/home/bastianberrios/.nvm/versions/node/v20.19.2/lib/node_modules/npm/bin/npx-cli.js",
         "-y",
         "https://github.com/GoogleCloudPlatform/cloud-run-mcp"
       ],
@@ -70,12 +73,13 @@
       ]
     },
     "terraform-mcp": {
-      "command": "npx",
+      "command": "/home/bastianberrios/.nvm/versions/node/v20.19.2/bin/node",
       "args": [
+        "/home/bastianberrios/.nvm/versions/node/v20.19.2/lib/node_modules/npm/bin/npx-cli.js",
         "-y",
         "@terrapilot/terraform-mcp-server"
       ],
-      "cwd": "/workspaces/optimacx-GCP/infrastructure/terraform",
+      "cwd": "/home/bastianberrios/optimacx-GCP/infrastructure/terraform",
       "env": {
         "TF_VAR_project_id": "optima-cx-467616",
         "TF_VAR_region": "southamerica-west1",
@@ -91,9 +95,10 @@
         "terraform_validate"
       ]
     },
-    "database-schema": {
-      "command": "npx",
+    "database-schema_disabled": {
+      "command": "/home/bastianberrios/.nvm/versions/node/v20.19.2/bin/node",
       "args": [
+        "/home/bastianberrios/.nvm/versions/node/v20.19.2/lib/node_modules/npm/bin/npx-cli.js",
         "-y",
         "@modelcontextprotocol/server-postgres"
       ],
@@ -110,12 +115,13 @@
       ]
     },
     "git-operations": {
-      "command": "npx",
+      "command": "/home/bastianberrios/.nvm/versions/node/v20.19.2/bin/node",
       "args": [
+        "/home/bastianberrios/.nvm/versions/node/v20.19.2/lib/node_modules/npm/bin/npx-cli.js",
         "-y",
         "@modelcontextprotocol/server-git"
       ],
-      "cwd": "/workspaces/optimacx-GCP",
+      "cwd": "/home/bastianberrios/optimacx-GCP",
       "timeout": 30000,
       "trust": false,
       "includeTools": [

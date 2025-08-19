@@ -36,12 +36,18 @@ applications/
 
 ## 🔧 Extensions
 
-### Custom Nodes
-Nodos personalizados para N8N que extienden la funcionalidad base:
-- **AdvisorAssigner**: Asignación automática de asesores
-- **AIAnalyzer**: Análisis con IA
-- **WhatsApp Business**: Integración WhatsApp
-- **OptimaCX API**: Conectores API propietarios
+### Nodos Personalizados (Custom Nodes)
+Nodos de N8N desarrollados a medida para encapsular la lógica de negocio de OptimaCX:
+- **LeadProcessor**: Procesa y gestiona el ciclo de vida de los leads.
+- **TenantConfigLoader**: Carga y valida la configuración específica de cada tenant.
+- **AIAnalyzer**: Realiza análisis de mensajes y leads usando IA.
+- **AdvisorAssigner**: Asigna leads a asesores basado en lógica de negocio.
+- **WhatsAppSender**: Envía mensajes a través de la API de WhatsApp Business.
+
+### Credenciales Personalizadas (Custom Credentials)
+Tipos de credenciales a medida para conectar N8N con servicios externos de forma segura:
+- **OptimaCX API**: Para la API propietaria de OptimaCX.
+- **WhatsApp Business**: Para la integración con la API de WhatsApp.
 
 ### RAG System
 Sistema de Retrieval Augmented Generation para:
@@ -97,17 +103,28 @@ Utilidades compartidas:
 - Sincronizadores
 - Optimizadores
 
-## 🚀 Uso
+## 🚀 Despliegue y Uso
+
+### 1. Nodos Personalizados
+Los nodos deben ser construidos antes de ser utilizados por una instancia de N8N.
 
 ```bash
-# Instalar dependencias de nodos personalizados
+# 1. Navegar al directorio de los nodos
 cd applications/extensions/custom-nodes
+
+# 2. Instalar dependencias
 npm install
 
-# Importar workflows de negocio
-cd applications/workflows/business
-# Los workflows están listos para importar en N8N
+# 3. Construir los nodos (genera el directorio `dist`)
+npm run build
 ```
+El directorio `dist` resultante debe ser montado en la instancia de N8N para que los nodos estén disponibles.
+
+### 2. Workflows
+La importación de los workflows (archivos `.json`) a la instancia de N8N se puede realizar de dos maneras:
+- **Manualmente:** A través de la interfaz de usuario de N8N.
+- **Automáticamente:** Usando la API REST de N8N para crear o actualizar workflows de forma programática. Este es el método recomendado para entornos de producción y CI/CD.
+
 
 ## 📝 Notas
 

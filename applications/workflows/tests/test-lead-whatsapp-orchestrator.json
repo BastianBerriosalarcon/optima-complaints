@@ -1,0 +1,250 @@
+
+{
+  "name": "Test - Lead WhatsApp Orchestrator",
+  "tags": [
+    "test",
+    "lead"
+  ],
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-test",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const testPhone = `+569${Math.floor(10000000 + Math.random() * 90000000)}`;
+const leadData = {
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "16505551111",
+              "phone_number_id": "123456123456123"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Test Lead"
+                },
+                "wa_id": testPhone.replace('+', '')
+              }
+            ],
+            "messages": [
+              {
+                "from": testPhone.replace('+', ''),
+                "id": "wamid.test-message-id",
+                "timestamp": String(Math.floor(Date.now() / 1000)),
+                "text": {
+                  "body": "Hola, me interesa el nuevo SUV, ¿me pueden dar más información?"
+                },
+                "type": "text"
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+};
+
+return [{ json: { body: leadData, testPhone } }];"
+      },
+      "id": "prepare-mock-data",
+      "name": "Set Mock WhatsApp Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "resource": "execution",
+        "workflowId": "lead-whatsapp-orchestrator",
+        "data": "={{ JSON.stringify($json.body) }}"
+      },
+      "id": "execute-orchestrator",
+      "name": "Execute Lead Orchestrator",
+      "type": "n8n-nodes-base.n8n",
+      "typeVersion": 2.1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "id": "wait-for-processing",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 2.1,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, nombre_cliente, telefono_cliente, estado FROM leads WHERE telefono_cliente = $1 ORDER BY fecha_creacion DESC LIMIT 1",
+        "additionalFields": {
+          "queryParameters": "={{ [$('Set Mock WhatsApp Message').first().json.testPhone] }}"
+        }
+      },
+      "id": "check-db-for-lead",
+      "name": "Check for new Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [
+        1120,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "optimacx-supabase",
+          "name": "OptimaCX Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $input.all().length }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "if-lead-created",
+      "name": "Was Lead Created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.1,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "test-passed",
+      "name": "Test Passed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "throw new Error('Test Failed: Lead was not created in the database for phone ' + $('Set Mock WhatsApp Message').first().json.testPhone);"
+      },
+      "id": "test-failed",
+      "name": "Test Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2.1,
+      "position": [
+        1560,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set Mock WhatsApp Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Mock WhatsApp Message": {
+      "main": [
+        [
+          {
+            "node": "Execute Lead Orchestrator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Lead Orchestrator": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Check for new Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check for new Lead": {
+      "main": [
+        [
+          {
+            "node": "Was Lead Created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Was Lead Created?": {
+      "main": [
+        [
+          {
+            "node": "Test Passed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null
+}
