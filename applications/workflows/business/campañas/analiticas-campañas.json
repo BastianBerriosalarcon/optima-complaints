@@ -1,5 +1,22 @@
 {
   "name": "Analíticas de Campañas",
+  "description": "Workflow para recopilar, procesar y almacenar métricas de rendimiento de campañas de marketing, calculando tasas de conversión y generación de leads.",
+  "version": "1.0.0",
+  "category": "campañas",
+  "tags": [
+    "campaigns",
+    "analytics",
+    "metrics"
+  ],
+  "metadata": {
+    "lastUpdated": "2025-08-24T18:00:00Z",
+    "apiVersion": "n8n/1.0",
+    "author": "OptimaCX Team",
+    "support": {
+      "email": "support@optimacx.com",
+      "docs": "https://docs.optimacx.com/workflows/campanas/analiticas"
+    }
+  },
   "nodes": [
     {
       "parameters": {
@@ -291,11 +308,6 @@
   "active": false,
   "settings": {
     "executionOrder": "v1"
-  },
-  "versionId": "1.0.0",
-  "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "campaign-analytics"
   },
   "id": "analiticas-campañas",
   "tags": [
