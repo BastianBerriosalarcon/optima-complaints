@@ -15,24 +15,15 @@ scripts/
 
 **🎯 Última limpieza:** Agosto 8, 2025 - 7 scripts movidos a `deprecated/`
 
-## 🚀 Deployment - Scripts ACTIVOS
+## 🚀 Deployment & Configuration - Scripts ACTIVOS
 
-### Chatwoot (5 scripts)
+*Nota: Los scripts de despliegue de infraestructura (ej. para GCP) han sido eliminados al migrar a servicios gestionados (Elest.io, Cloudflare). Los scripts activos se centran en la configuración y el despliegue de la lógica de negocio (workflows).*
 
-- ✅ `deploy-chatwoot-independent.sh` - Despliegue independiente de Chatwoot
-- ✅ `setup-chatwoot-multitenant.sh` - Configuración multitenant
-- ✅ `setup-chatwoot-post-deployment.sh` - Configuración post-despliegue
-- ✅ `setup-chatwoot-webhooks.sh` - Configuración de webhooks
-- ✅ `chatwoot-fix.yaml` - Configuración de fixes
+### Configuración (1 script)
+- ✅ `deployment/chatwoot/setup-chatwoot-webhooks.sh` - Configura los webhooks entre Chatwoot y N8N.
 
-### N8N (2 scripts activos)
-
-- ✅ `import-n8n-workflows-direct.sh` - Importar workflows
-- ✅ `setup-n8n-chatwoot-webhooks.sh` - Webhooks N8N ↔ Chatwoot
-
-### General (1 script)
-
-- ✅ `update-services.sh` - Actualización de servicios (MUY RECIENTE)timaCX-GCP
+### Despliegue de Workflows (Automatización Obligatoria)
+- 💡 *Colocar aquí los scripts para importar/actualizar workflows de N8N vía API (ej. `scripts/deployment/n8n/import-workflows.sh`).*
 
 Documentación de scripts organizados por categoría.
 

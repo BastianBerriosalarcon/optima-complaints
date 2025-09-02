@@ -10,14 +10,14 @@
     --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
+    --primary: 220 90% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 9% 46%;
     --muted: 0 0% 96.1%;
     --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
+    --accent: 142 76% 36%;
+    --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 0 0% 89.8%;
@@ -29,6 +29,33 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+    
+    /* Colores específicos para el dominio */
+    --success: 142 76% 36%;
+    --warning: 38 92% 50%;
+    --danger: 0 84% 60%;
+    --info: 217 91% 60%;
+    
+    /* Colores para scoring de leads */
+    --lead-hot: 0 84% 60%;
+    --lead-warm: 38 92% 50%;
+    --lead-cold: 217 91% 60%;
+    
+    /* Colores para estados de reclamos */
+    --complaint-urgent: 0 84% 60%;
+    --complaint-medium: 38 92% 50%;
+    --complaint-low: 142 76% 36%;
+    
+    /* Espaciado específico para dashboards */
+    --dashboard-padding: 1.5rem;
+    --card-padding: 1.25rem;
+    --stat-card-height: 8rem;
+    
+    /* Bordes y sombras */
+    --border-radius-card: 0.75rem;
+    --border-radius-button: 0.5rem;
+    --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-elevated: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   }
 
   .dark {
@@ -66,4 +93,96 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Clases utilitarias específicas del dominio */
+.lead-score-hot {
+  @apply bg-red-500 text-white;
+}
+
+.lead-score-warm {
+  @apply bg-yellow-500 text-white;
+}
+
+.lead-score-cold {
+  @apply bg-blue-500 text-white;
+}
+
+.complaint-urgent {
+  @apply border-l-4 border-red-500 bg-red-50;
+}
+
+.complaint-medium {
+  @apply border-l-4 border-yellow-500 bg-yellow-50;
+}
+
+.complaint-low {
+  @apply border-l-4 border-green-500 bg-green-50;
+}
+
+.black-alert {
+  @apply bg-red-100 border-red-500 text-red-900;
+}
+
+/* Estilos para el dashboard */
+.dashboard-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6;
+}
+
+.stat-card {
+  @apply bg-white rounded-lg p-6 shadow-sm border border-gray-200;
+  min-height: var(--stat-card-height);
+}
+
+.metric-value {
+  @apply text-2xl font-bold text-gray-900;
+}
+
+.metric-label {
+  @apply text-sm font-medium text-gray-600;
+}
+
+.metric-change-positive {
+  @apply text-green-600 text-sm font-medium;
+}
+
+.metric-change-negative {
+  @apply text-red-600 text-sm font-medium;
+}
+
+/* Estilos para estados y badges */
+.status-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-nuevo {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.status-contactado {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-cotizado {
+  @apply bg-purple-100 text-purple-800;
+}
+
+.status-vendido {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-perdido {
+  @apply bg-red-100 text-red-800;
+}
+
+.status-pendiente {
+  @apply bg-gray-100 text-gray-800;
+}
+
+.status-en-proceso {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.status-cerrado {
+  @apply bg-green-100 text-green-800;
 }

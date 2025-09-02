@@ -15,9 +15,14 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# URLs de servicios (actualizadas)
-CHATWOOT_URL="https://chatwoot-multitenant-dev-wfzra4ruxq-tl.a.run.app"
-N8N_URL="https://n8n-optimacx-supabase-dev-wfzra4ruxq-tl.a.run.app"
+# URLs de servicios (deben ser configuradas como variables de entorno)
+if [ -z "$CHATWOOT_URL" ] || [ -z "$N8N_URL" ]; then
+    echo -e "${RED}Error: Las variables de entorno CHATWOOT_URL y N8N_URL deben estar configuradas.${NC}"
+    echo "Ejemplo:"
+    echo "  export CHATWOOT_URL=\"https://your-chatwoot-instance.elest.io\""
+    echo "  export N8N_URL=\"https://your-n8n-instance.elest.io\""
+    exit 1
+fi
 
 # Webhooks endpoints corregidos (con /webhook/webhook/)
 declare -A WEBHOOK_ENDPOINTS=(
@@ -147,7 +152,7 @@ generate_manual_config() {
     echo ""
     echo -e "${BLUE}2. Crear cuentas multitenant (si no existen):${NC}"
     echo "   - Concesionario 001"
-    echo "   - Concesionario 002"  
+    echo "   - Concesionario 002"
     echo "   - Concesionario 003"
     echo ""
     echo -e "${BLUE}3. Para cada cuenta, configurar webhook:${NC}"
@@ -176,9 +181,9 @@ generate_test_commands() {
     for account_id in "${!WEBHOOK_ENDPOINTS[@]}"; do
         webhook_url="${WEBHOOK_ENDPOINTS[$account_id]}"
         echo -e "${GREEN}Test Cuenta $account_id:${NC}"
-        echo "curl -X POST \\"
-        echo "  -H 'Content-Type: application/json' \\"
-        echo "  -d '{\"account\":{\"id\":$account_id},\"event\":\"message_created\",\"content\":\"Test from setup\"}' \\"
+        echo "curl -X POST \"
+        echo "  -H 'Content-Type: application/json' \"
+        echo "  -d '{\"account\":{\"id\":$account_id},\"event\":\"message_created\",\"content\":\"Test from setup\"}' \"
         echo "  '$webhook_url'"
         echo ""
     done

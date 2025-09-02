@@ -1,56 +1,182 @@
-import DashboardNavbar from "@/components/dashboard-navbar";
-import { InfoIcon, UserCircle } from "lucide-react";
+"use client";
+
+import { useState, useEffect } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useRole } from "@/hooks/useRole";
 import { redirect } from "next/navigation";
-import { createClient } from "../../../supabase/server";
 
-// Force dynamic rendering - don't pre-render this page
-export const dynamic = 'force-dynamic';
+import Sidebar from "@/components/navigation/Sidebar";
+import DashboardStats from "@/components/dashboard/DashboardStats";
+import NotificationCenter from "@/components/notifications/NotificationCenter";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { LayoutGrid, Target, ClipboardCheck, CircleAlert, Bell, TrendingUp } from "lucide-react";
 
-export default async function Dashboard() {
-  const supabase = await createClient();
+import { mockDashboardStats, mockNotifications } from "@/lib/mockData";
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export default function Dashboard() {
+  const { user, isAuthenticated } = useAuth();
+  const { hasPermission } = useRole();
+  
+  const [stats, setStats] = useState(mockDashboardStats);
+  const [notifications, setNotifications] = useState(mockNotifications);
+  const [loading, setLoading] = useState(false);
 
-  if (!user) {
-    return redirect("/sign-in");
+  if (!isAuthenticated || !user) {
+    redirect("/sign-in");
   }
 
-  return (
-    <>
-      <DashboardNavbar />
-      <main className="w-full">
-        <div className="container mx-auto px-4 py-8 flex flex-col gap-8">
-          {/* Header Section */}
-          <header className="flex flex-col gap-4">
-            <h1 className="text-3xl font-bold">Panel de Control</h1>
-            <div className="bg-secondary/50 text-sm p-3 px-4 rounded-lg text-muted-foreground flex gap-2 items-center">
-              <InfoIcon size="14" />
-              <span>
-                Esta es una página protegida solo visible para usuarios
-                autenticados
-              </span>
-            </div>
-          </header>
+  const handleMarkNotificationAsRead = (id: string) => {
+    setNotifications(prev => 
+      prev.map(notif => 
+        notif.id === id ? { ...notif, leida: true } : notif
+      )
+    );
+  };
 
-          {/* User Profile Section */}
-          <section className="bg-card rounded-xl p-6 border shadow-sm">
-            <div className="flex items-center gap-4 mb-6">
-              <UserCircle size={48} className="text-primary" />
-              <div>
-                <h2 className="font-semibold text-xl">Perfil de Usuario</h2>
-                <p className="text-sm text-muted-foreground">{user.email}</p>
-              </div>
+  const handleMarkAllNotificationsAsRead = () => {
+    setNotifications(prev => 
+      prev.map(notif => ({ ...notif, leida: true }))
+    );
+  };
+
+  const unreadNotifications = notifications.filter(n => !n.leida);
+
+  return (
+    <div className="flex h-screen bg-gray-50">
+      <Sidebar />
+      
+      <main className="flex-1 overflow-auto">
+        <div className="container mx-auto p-6 space-y-6">
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold">Panel de Control</h1>
+              <p className="text-muted-foreground">
+                Bienvenido de vuelta, {user.email}
+              </p>
             </div>
-            <div className="bg-muted/50 rounded-lg p-4 overflow-hidden">
-              <pre className="text-xs font-mono max-h-48 overflow-auto">
-                {JSON.stringify(user, null, 2)}
-              </pre>
+            
+            <div className="flex items-center gap-4">
+              <Button variant="outline" className="relative">
+                <Bell className="h-4 w-4" />
+                {unreadNotifications.length > 0 && (
+                  <Badge 
+                    variant="destructive" 
+                    className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs"
+                  >
+                    {unreadNotifications.length}
+                  </Badge>
+                )}
+              </Button>
             </div>
-          </section>
+          </div>
+
+          {/* Dashboard Stats */}
+          <DashboardStats stats={stats} />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Main Content */}
+            <div className="lg:col-span-2 space-y-6">
+              {/* Quick Actions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Acciones Rápidas
+                  </CardTitle>
+                  <CardDescription>
+                    Accesos directos a las funciones más utilizadas
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {hasPermission('leads:create') && (
+                      <Button variant="outline" className="h-20 flex flex-col gap-2">
+                        <Target className="h-6 w-6" />
+                        <span className="text-sm">Nuevo Lead</span>
+                      </Button>
+                    )}
+                    
+                    {hasPermission('reclamos:create') && (
+                      <Button variant="outline" className="h-20 flex flex-col gap-2">
+                        <CircleAlert className="h-6 w-6" />
+                        <span className="text-sm">Nuevo Reclamo</span>
+                      </Button>
+                    )}
+                    
+                    {hasPermission('encuestas:view') && (
+                      <Button variant="outline" className="h-20 flex flex-col gap-2">
+                        <ClipboardCheck className="h-6 w-6" />
+                        <span className="text-sm">Ver Encuestas</span>
+                      </Button>
+                    )}
+                    
+                    {hasPermission('reports:view') && (
+                      <Button variant="outline" className="h-20 flex flex-col gap-2">
+                        <LayoutGrid className="h-6 w-6" />
+                        <span className="text-sm">Reportes</span>
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Recent Activity */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Actividad Reciente</CardTitle>
+                  <CardDescription>
+                    Últimas acciones y eventos en el sistema
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
+                      <Target className="h-4 w-4 text-blue-500" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Nuevo lead asignado</p>
+                        <p className="text-xs text-muted-foreground">Juan Pérez - Toyota Corolla 2024</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">Hace 2 min</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
+                      <CircleAlert className="h-4 w-4 text-red-500" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Reclamo Black Alert</p>
+                        <p className="text-xs text-muted-foreground">Roberto Martínez - Falla eléctrica</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">Hace 5 min</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
+                      <ClipboardCheck className="h-4 w-4 text-green-500" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Encuesta completada</p>
+                        <p className="text-xs text-muted-foreground">Ana Silva - Calificación: 9/10</p>
+                      </div>
+                      <span className="text-xs text-muted-foreground">Hace 10 min</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Sidebar Content */}
+            <div className="space-y-6">
+              {/* Notifications */}
+              <NotificationCenter
+                notifications={notifications}
+                onMarkAsRead={handleMarkNotificationAsRead}
+                onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+              />
+            </div>
+          </div>
         </div>
       </main>
-    </>
+    </div>
   );
 }

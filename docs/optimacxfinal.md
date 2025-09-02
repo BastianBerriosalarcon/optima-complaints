@@ -43,6 +43,20 @@ Se busca automatizar la comunicación (correos, WhatsApp) y la gestión de datos
 *   **Base de Datos Vectorial:** Supabase pgvector para el sistema RAG.
 *   **Reranking:** Cohere Rerank para optimizar los resultados de búsqueda semántica.
 
+### 1.2. Análisis de Arquitectura y Trade-offs
+
+La decisión de migrar de una arquitectura unificada en GCP a un modelo distribuido con Cloudflare, Elest.io y Supabase introduce una serie de ventajas y desventajas que deben ser gestionadas activamente.
+
+*   **Pros de la nueva arquitectura:**
+    *   **Simplicidad Operativa:** Cada servicio es gestionado por un proveedor experto, reduciendo la carga de mantenimiento de infraestructura, bases de datos y orquestación.
+    *   **Costo-Efectividad:** Permite un modelo de costos más predecible y potencialmente más bajo al aprovechar servicios optimizados para sus tareas específicas.
+    *   **Rendimiento y Escalabilidad:** Se beneficia del rendimiento global de la red de Cloudflare y de la escalabilidad gestionada e independiente de cada servicio.
+
+*   **Contras y Riesgos a Gestionar:**
+    *   **Seguridad Compleja y Fragmentada:** Se pierde el perímetro de seguridad unificado de una VPC. La seguridad ahora depende de la correcta configuración en cada plataforma y de la protección de las comunicaciones públicas entre ellas. La gestión manual de secretos se convierte en un punto crítico de riesgo.
+    *   **CI/CD Desacoplado:** El proceso de despliegue no es atómico. El frontend y los diferentes componentes del backend (N8N workflows, nodos) tienen ciclos de vida y métodos de despliegue separados, lo que requiere una coordinación cuidadosa.
+    *   **Riesgo de "ClickOps":** La configuración de servicios a través de paneles web (como Elest.io) introduce el riesgo de realizar cambios manuales que no quedan registrados en el control de versiones, dificultando la reproducibilidad y la auditoría.
+
 ## 2. Principios y Prioridades Clave
 
 *   **Aislamiento Multitenant con Supabase RLS:** La máxima prioridad es garantizar la segregación total de datos y operaciones entre concesionarios. Utilizamos Row Level Security (RLS) en Supabase para asegurar que cada consulta esté automáticamente filtrada por `concesionario_id`.
@@ -505,21 +519,28 @@ Dado que los servicios están en diferentes plataformas, **toda la comunicación
 *   **Pipeline Frontend:** Git Push (main) → Cloudflare Pages detecta el cambio → Build y despliegue automático en la red Edge.
 *   **Pipeline Backend (N8N):**
     *   **Nodos Personalizados:** Se construyen localmente (`npm run build`) y el directorio `dist` se monta en la instancia de N8N en Elest.io.
-    *   **Workflows:** Se importan los archivos `.json` manualmente o a través de la API de N8N en la instancia desplegada.
+    *   **Workflows:** Para mitigar los riesgos de "ClickOps" y asegurar la consistencia, el despliegue de workflows (.json) **debe ser automatizado obligatoriamente** a través de scripts que utilicen la API de N8N. La importación manual queda desaconsejada y solo debe usarse para depuración en entornos de no producción.
 *   **Métricas y Alertas:** Se configuran en cada plataforma respectiva (Cloudflare Analytics, monitoreo de Elest.io, logs de N8N) y se centralizan en un dashboard externo si es necesario.
 
 ### 5.4. Seguridad en la Arquitectura Distribuida
 
-Al no contar con una red privada unificada, la seguridad perimetral de cada servicio es fundamental.
+Al no contar con una red privada unificada, la seguridad perimetral y la gestión de credenciales se vuelven críticas. Se establecen las siguientes políticas:
 
-*   **Aislamiento de Datos:** Se mantiene el uso estricto de **Supabase RLS** como principal mecanismo de segregación de datos.
-*   **Comunicaciones Seguras:** Es **mandatorio** que toda la comunicación entre Cloudflare, Elest.io y Supabase se realice sobre **HTTPS/TLS**.
-*   **Gestión de Credenciales:**
-    *   Las claves de API (Supabase, Gemini, WhatsApp) deben ser almacenadas de forma segura como **secretos** en los paneles de configuración de N8N (en Elest.io) y Cloudflare.
-    *   Se pierde la ventaja de Workload Identity, por lo que la rotación y protección de estas claves es una responsabilidad manual crítica.
-*   **Seguridad de Red:**
-    *   Configurar **reglas de firewall** en Elest.io para restringir el acceso a las IPs de Cloudflare y otros servicios conocidos, si la plataforma lo permite.
-    *   Utilizar las herramientas de seguridad de Cloudflare (WAF) para proteger el frontend de ataques comunes.
+*   **Aislamiento de Datos:** Se mantiene el uso estricto de **Supabase RLS** como principal mecanismo de segregación de datos a nivel de base de datos.
+
+*   **Comunicaciones Seguras (Defensa en Profundidad):**
+    *   **Cifrado Mandatorio:** Es **mandatorio** que toda la comunicación entre Cloudflare, Elest.io y Supabase se realice sobre **HTTPS/TLS**.
+    *   **Aseguramiento de Endpoints:** Además de TLS, se implementará una doble capa de seguridad para las APIs y webhooks expuestos a internet:
+        1.  **Autenticación por Token (Bearer Token):** Todas las llamadas entre servicios (ej. Frontend a N8N, N8N a APIs externas) deben incluir un token de autorización secreto y único en la cabecera (`Authorization: Bearer <token>`).
+        2.  **Listas de IP Permitidas (IP Whitelisting):** Siempre que la plataforma lo permita (ej. en el firewall de Elest.io), los endpoints de N8N y Chatwoot deberán configurarse para aceptar tráfico exclusivamente desde los rangos de IP conocidos de Cloudflare y otros servicios autorizados.
+
+*   **Protocolo de Gestión de Secretos:**
+    *   Dado que se pierde la ventaja de Workload Identity, la gestión de credenciales es una responsabilidad manual crítica. Se establece el siguiente protocolo:
+        1.  **Almacenamiento Centralizado:** Todas las claves de API (Supabase, Gemini, WhatsApp, etc.) deben ser almacenadas como **variables de entorno seguras** en los paneles de configuración de N8N (en Elest.io) y Cloudflare. **Está estrictamente prohibido hardcodear secretos en el código fuente.**
+        2.  **Acceso Restringido:** El acceso a los paneles de configuración con secretos estará limitado únicamente al personal de DevOps o roles de administración designados.
+        3.  **Política de Rotación:** Se establece una política de **rotación de claves obligatoria cada 6 meses** para todos los servicios externos.
+        4.  **Auditoría:** Cualquier cambio en las claves (creación, rotación, revocación) debe ser documentado en un registro de cambios seguro.
+
 *   **Análisis de Malware en Ingesta RAG:** El escaneo de documentos debe ser un paso en el workflow de N8N. Antes de procesar un archivo, se puede llamar a una API de escaneo de malware de terceros o ejecutar un contenedor ClamAV si Elest.io lo permite.
 
 ### 5.5. Migraciones y Compatibilidad
@@ -683,7 +704,7 @@ FORMATO DE RESPUESTA JSON:
 * **Cache Hit Rate:** Eficiencia de cache de embeddings
 
 #### **Optimización:**
-- **Cache Redis:** Embeddings (24h TTL), respuestas RAG (6h TTL), ~40% reducción llamadas IA
+- **Cache Redis:** Para reducir la latencia y el costo de las llamadas a la IA, se utilizará una caché en Redis. Se debe provisionar una instancia de Redis dedicada para este propósito en Elest.io, separada de la instancia utilizada por Chatwoot para no crear cuellos de botella. La caché almacenará embeddings (TTL de 24h) y respuestas finales de RAG (TTL de 6h), con el objetivo de reducir en ~40% las llamadas a la API de IA.
 - **Cohere Rerank:** Mejora precisión re-clasificando top chunks para mayor relevancia contextual
 
 #### **N8N Workflow para RAG:**

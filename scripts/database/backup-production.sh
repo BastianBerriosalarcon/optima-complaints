@@ -26,7 +26,6 @@ log_error() {
 # Configuración
 BACKUP_DIR="database/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-PROJECT_ID="optima-cx-467616"
 
 # Crear directorio de backups si no existe
 mkdir -p "$BACKUP_DIR"
@@ -72,52 +71,27 @@ backup_supabase() {
     fi
 }
 
-# Función para backup de configuraciones Terraform
-backup_terraform() {
-    log_info "Creando backup de configuraciones Terraform..."
-    
-    local terraform_backup_dir="$BACKUP_DIR/terraform_$TIMESTAMP"
-    mkdir -p "$terraform_backup_dir"
-    
-    # Copiar archivos importantes de Terraform
-    cp -r infrastructure/terraform/environments "$terraform_backup_dir/"
-    cp -r infrastructure/terraform/services "$terraform_backup_dir/"
-    cp -r infrastructure/terraform/modules "$terraform_backup_dir/"
-    
-    # Crear archivo tar comprimido
-    tar -czf "$BACKUP_DIR/terraform_config_$TIMESTAMP.tar.gz" -C "$BACKUP_DIR" "terraform_$TIMESTAMP"
-    rm -rf "$terraform_backup_dir"
-    
-    local size=$(du -h "$BACKUP_DIR/terraform_config_$TIMESTAMP.tar.gz" | cut -f1)
-    log_success "Backup Terraform completado: terraform_config_$TIMESTAMP.tar.gz ($size)"
-}
-
 # Función para limpiar backups antiguos
 cleanup_old_backups() {
     local days=${1:-7}  # Por defecto mantener 7 días
     
-    log_info "Limpiando backups más antiguos de $days días..."
+    log_info "Limpiando backups de base de datos más antiguos de $days días..."
     
     # Limpiar backups SQL
     find "$BACKUP_DIR" -name "supabase_backup_*.sql.gz" -mtime +$days -delete 2>/dev/null || true
-    
-    # Limpiar backups Terraform
-    find "$BACKUP_DIR" -name "terraform_config_*.tar.gz" -mtime +$days -delete 2>/dev/null || true
     
     log_success "Limpieza de backups completada"
 }
 
 # Función para listar backups existentes
 list_backups() {
-    log_info "Backups disponibles:"
+    log_info "Backups de base de datos disponibles:"
     echo ""
     
     echo "📊 Backups de Base de Datos:"
     ls -lh "$BACKUP_DIR"/supabase_backup_*.sql.gz 2>/dev/null | awk '{print "  " $9 " - " $5 " - " $6 " " $7 " " $8}' || echo "  No hay backups de BD"
     
     echo ""
-    echo "⚙️  Backups de Terraform:"
-    ls -lh "$BACKUP_DIR"/terraform_config_*.tar.gz 2>/dev/null | awk '{print "  " $9 " - " $5 " - " $6 " " $7 " " $8}' || echo "  No hay backups de Terraform"
 }
 
 # Función para restaurar backup
@@ -167,18 +141,11 @@ restore_backup() {
 # Función principal
 main() {
     case $1 in
-        "full")
-            log_info "🗃️ Iniciando backup completo..."
+        "create")
+            log_info "🗃️ Iniciando backup de base de datos..."
             backup_supabase
-            backup_terraform
             cleanup_old_backups 7
-            log_success "🎉 Backup completo finalizado"
-            ;;
-        "database")
-            backup_supabase
-            ;;
-        "terraform")
-            backup_terraform
+            log_success "🎉 Backup de base de datos finalizado"
             ;;
         "list")
             list_backups
@@ -191,19 +158,16 @@ main() {
             restore_backup "$2"
             ;;
         *)
-            echo "Uso: $0 {full|database|terraform|list|cleanup|restore} [options]"
+            echo "Uso: $0 {create|list|cleanup|restore} [options]"
             echo ""
             echo "Comandos:"
-            echo "  full                    - Backup completo (BD + Terraform)"
-            echo "  database               - Solo backup de base de datos"
-            echo "  terraform              - Solo backup de configuraciones Terraform"
-            echo "  list                   - Listar backups disponibles"
-            echo "  cleanup [days]         - Limpiar backups antiguos (default: 7 días)"
-            echo "  restore [backup_file]  - Restaurar desde backup específico"
+            echo "  create                 - Crea un nuevo backup de la base de datos"
+            echo "  list                   - Lista los backups disponibles"
+            echo "  cleanup [days]         - Limpia backups antiguos (default: 7 días)"
+            echo "  restore [backup_file]  - Restaura desde un backup específico"
             echo ""
             echo "Ejemplos:"
-            echo "  $0 full"
-            echo "  $0 database"
+            echo "  $0 create"
             echo "  $0 cleanup 14"
             echo "  $0 restore database/backups/supabase_backup_20250808_143000.sql.gz"
             echo ""
