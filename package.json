@@ -1,12 +1,12 @@
 {
-  "name": "optimacx-platform-monorepo",
+  "name": "optima-complaints",
   "version": "1.0.0",
   "private": true,
   "workspaces": [
     "frontend",
     "shared"
   ],
-  "description": "Plataforma multitenant de experiencia al cliente que combina N8N, Chatwoot y un frontend personalizado, desplegada en Google Cloud Platform usando infraestructura como código (Terraform).",
+  "description": "Sistema inteligente de gestión de reclamos con IA. Automatiza clasificación, asignación y resolución mediante Gemini 2.5 Pro y RAG (Retrieval Augmented Generation).",
   "main": "create_search_function.js",
   "directories": {
     "doc": "docs"
@@ -20,14 +20,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BastianBerriosalarcon/optimacx-GCP.git"
+    "url": "git+https://github.com/BastianBerriosalarcon/optima-complaints.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["complaints", "ai", "rag", "gemini", "n8n", "supabase", "customer-service"],
+  "author": "Bastian Berrios",
+  "license": "Proprietary",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/BastianBerriosalarcon/optimacx-GCP/issues"
+    "url": "https://github.com/BastianBerriosalarcon/optima-complaints/issues"
   },
-  "homepage": "https://github.com/BastianBerriosalarcon/optimacx-GCP#readme"
+  "homepage": "https://github.com/BastianBerriosalarcon/optima-complaints#readme"
 }
