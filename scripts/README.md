@@ -1,101 +1,59 @@
-# 🔧## 📁 Estructura Optimizada
-
-```txt
-scripts/
-├── 🚀 deployment/         # Scripts de despliegue ACTIVOS
-│   ├── chatwoot/         # Despliegue Chatwoot
-│   └── n8n/             # Despliegue N8N
-├── 🧪 testing/          # Scripts de testing y monitoreo
-├── 🗄️ database/         # Scripts de base de datos
-└── 📁 deprecated/       # Scripts obsoletos (histórico)
-    ├── n8n-migration/   # Migración N8N completada
-    ├── fixes/           # Fixes específicos aplicados
-    └── utilities/       # Utilidades obsoletas
-```
-
-**🎯 Última limpieza:** Agosto 8, 2025 - 7 scripts movidos a `deprecated/`
-
-## 🚀 Deployment & Configuration - Scripts ACTIVOS
-
-*Nota: Los scripts de despliegue de infraestructura (ej. para GCP) han sido eliminados al migrar a servicios gestionados (Elest.io, Cloudflare). Los scripts activos se centran en la configuración y el despliegue de la lógica de negocio (workflows).*
-
-### Configuración (1 script)
-- ✅ `deployment/chatwoot/setup-chatwoot-webhooks.sh` - Configura los webhooks entre Chatwoot y N8N.
-
-### Despliegue de Workflows (Automatización Obligatoria)
-- 💡 *Colocar aquí los scripts para importar/actualizar workflows de N8N vía API (ej. `scripts/deployment/n8n/import-workflows.sh`).*
+# Scripts - Optima-Complaints
 
 Documentación de scripts organizados por categoría.
 
-## 📁 Estructura Optimizada
+## Estructura
 
 ```
 scripts/
-├── 🚀 deployment/         # Scripts de despliegue ACTIVOS
-│   ├── chatwoot/         # Despliegue Chatwoot
-│   └── n8n/             # Despliegue N8N
-├── 🧪 testing/          # Scripts de testing y monitoreo
-├── 🗄️ database/         # Scripts de base de datos
-└── � deprecated/       # Scripts obsoletos (histórico)
-    ├── n8n-migration/   # Migración N8N completada
-    ├── fixes/           # Fixes específicos aplicados
-    └── utilities/       # Utilidades obsoletas
+├── deployment/         # Scripts de despliegue
+│   └── n8n/           # Despliegue N8N workflows
+├── testing/           # Scripts de testing y monitoreo
+├── database/          # Scripts de base de datos
+└── deprecated/        # Scripts obsoletos (histórico)
 ```
 
-**🎯 Última limpieza:** Agosto 8, 2025 - 7 scripts movidos a `deprecated/`
+**Última limpieza:** 28 de Octubre 2025 - Eliminación de módulos contaminados
 
-## 🚀 Deployment - Scripts ACTIVOS
+## Deployment - Scripts ACTIVOS
 
-### Chatwoot (5 scripts)
-- ✅ `deploy-chatwoot-independent.sh` - Despliegue independiente de Chatwoot
-- ✅ `setup-chatwoot-multitenant.sh` - Configuración multitenant
-- ✅ `setup-chatwoot-post-deployment.sh` - Configuración post-despliegue
-- ✅ `setup-chatwoot-webhooks.sh` - Configuración de webhooks
-- ✅ `chatwoot-fix.yaml` - Configuración de fixes
+### N8N Workflows
+- `import-n8n-workflows-direct.sh` - Importar workflows de reclamos
+- Despliegue de workflows RAG
+- Configuración de workflows de notificaciones
 
-### N8N (2 scripts activos)
-- ✅ `import-n8n-workflows-direct.sh` - Importar workflows
-- ✅ `setup-n8n-chatwoot-webhooks.sh` - Webhooks N8N ↔ Chatwoot
+### General
+- `update-services.sh` - Actualización de servicios
 
-### General (1 script)
-- ✅ `update-services.sh` - Actualización de servicios (MUY RECIENTE)
+## Testing - Scripts ACTIVOS
 
-## 🧪 Testing - Scripts ACTIVOS
+- `n8n-health-check.sh` - Verificación de salud N8N
+- `monitor-services.sh` - Monitoreo de servicios
 
-- ✅ `test-chatwoot-integration.sh` - Test de integración Chatwoot
-- ✅ `n8n-health-check.sh` - Verificación de salud N8N
-- ✅ `monitor-services.sh` - Monitoreo de servicios (MUY RECIENTE)
+## Database - Scripts ACTIVOS
 
-## 🗄️ Database - Scripts ACTIVOS
+- `execute_migration.js` - Ejecutor de migraciones
+- `init-db.sql` - Inicialización de base de datos
+- `backup-production.sh` - Backup de producción
 
-- ✅ `execute_migration.js` - Ejecutor de migraciones
-- ✅ `init-db.sql` - Inicialización de base de datos
-- ✅ `backup-production.sh` - Backup de producción (MUY RECIENTE)
-
-## 📁 Deprecated - Scripts OBSOLETOS
+## Deprecated - Scripts OBSOLETOS
 
 Ver `deprecated/README.md` para detalles de scripts movidos por ser obsoletos.
 
-**Scripts deprecados:** 7 (migración N8N completada, fixes específicos, utilities obsoletas)
-
-## 🔧 Uso
+## Uso
 
 ```bash
 # Deployment
-./scripts/deployment/chatwoot/deploy-chatwoot-independent.sh
 ./scripts/deployment/update-services.sh
 
 # Testing
 ./scripts/testing/monitor-services.sh
-./scripts/testing/test-chatwoot-integration.sh
 
 # Database
 ./scripts/database/backup-production.sh
 ```
 
-## 📊 Estadísticas
+## Estadísticas
 
-- **Scripts Totales**: 12 activos + 7 deprecados = 19
-- **Scripts Activos**: 12 (63% - OPTIMIZADO)
-- **Scripts Deprecados**: 7 (37% - ARCHIVADOS)
-- **Última Actualización**: Agosto 8, 2025
+- **Scripts Activos**: 6 scripts enfocados en reclamos
+- **Última Actualización**: 28 de Octubre 2025
