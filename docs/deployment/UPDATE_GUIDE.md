@@ -1,178 +1,128 @@
-# 🔄 Guía de Actualización Segura: N8N y Chatwoot
+# Guía de Actualización de Servicios
 
-## 📋 **Proceso de Actualización sin Downtime**
+## Proceso de Actualización Recomendado
 
-### 🚦 **Estrategia General: Blue-Green Deployment**
+### 1. Preparación (5-10 minutos)
 
-#### **1. Preparación Pre-Actualización**
+Antes de cualquier actualización, es crucial asegurar el estado actual y tener un respaldo.
 
 ```bash
-# 1.1 Crear snapshot de la base de datos
-cd /workspaces/optimacx-GCP
-./scripts/database/backup-production.sh
+# 1.1 Verificar estado actual de los servicios
+./scripts/testing/monitor-services.sh health
 
-# 1.2 Verificar estado actual de servicios
-gcloud run services list --region=southamerica-west1
-curl -s -o /dev/null -w "%{http_code}" https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/
-curl -s -o /dev/null -w "%{http_code}" https://chatwoot-multitenant-dev-1039900134024.southamerica-west1.run.app/
+# 1.2 Crear backup completo (Base de Datos + Configuración)
+./scripts/database/backup-production.sh full
 
-# 1.3 Backup de configuraciones actuales
-cp infrastructure/terraform/services/chatwoot-multitenant/main.tf infrastructure/terraform/services/chatwoot-multitenant/main.tf.backup
-cp infrastructure/terraform/environments/dev/main.tf infrastructure/terraform/environments/dev/main.tf.backup
-```
-
-### 🔷 **Actualización N8N**
-
-#### **Paso 1: Verificar Nueva Versión**
-```bash
-# Revisar versiones disponibles en Docker Hub
+# 1.3 (Opcional) Verificar versiones disponibles de N8N
 docker search n8nio/n8n --limit 5
 ```
 
-#### **Paso 2: Actualizar Terraform (N8N)**
+### 2. Actualización del Servicio (15-30 minutos)
+
+El proceso se centra en actualizar la imagen del contenedor en la configuración de Terraform y aplicar los cambios.
+
+#### Paso 1: Actualizar Versión en Terraform
+
+Modifica el archivo `main.tf` correspondiente al servicio que deseas actualizar (ej. N8N o el frontend) con la nueva versión de la imagen del contenedor.
+
 ```hcl
-# En: infrastructure/terraform/environments/dev/main.tf
-# CAMBIAR LÍNEA 79:
-container_image = "southamerica-west1-docker.pkg.dev/optima-cx-467616/n8n/n8n-multitenant:v1.XX.X"
+# Ejemplo en: infrastructure/terraform/environments/dev/main.tf
+
+module "n8n_service" {
+  source = "../../modules/cloud-run-service"
+  
+  # CAMBIAR ESTA LÍNEA
+  container_image = "n8nio/n8n:1.45.1" # Reemplazar con la nueva versión
+  # ... resto de la configuración
+}
 ```
 
-#### **Paso 3: Deploy Controlado N8N**
+#### Paso 2: Planificar y Aplicar el Despliegue
+
+Usa Terraform para desplegar la nueva versión de forma controlada.
+
 ```bash
-# 3.1 Aplicar cambios con staging
+# Navegar al directorio del entorno
 cd infrastructure/terraform/environments/dev
-terraform plan -out=n8n-update.tfplan
 
-# 3.2 Verificar plan de cambios
-terraform show n8n-update.tfplan
+# 2.1 Crear un plan de despliegue
+terraform plan -out=update.tfplan
 
-# 3.3 Aplicar actualización (con rollback automático)
-terraform apply n8n-update.tfplan
+# 2.2 (Opcional) Revisar los cambios que se aplicarán
+terraform show update.tfplan
 
-# 3.4 Verificar servicio actualizado
-gcloud run services describe n8n-optimacx-supabase --region=southamerica-west1
+# 2.3 Aplicar la actualización
+# Terraform gestionará el despliegue de la nueva versión y dará de baja la antigua.
+terraform apply "update.tfplan"
 ```
 
-### 🔶 **Actualización Chatwoot**
+### 3. Verificación y Monitoreo (30-60 minutos)
 
-#### **Paso 1: Verificar Compatibilidad**
+Una vez aplicado el cambio, verifica que todo siga funcionando correctamente.
+
 ```bash
-# Revisar changelog de Chatwoot
-curl -s https://api.github.com/repos/chatwoot/chatwoot/releases/latest | jq .tag_name
+# 3.1 Verificación rápida de salud del servicio
+./scripts/testing/monitor-services.sh quick
+
+# 3.2 Monitoreo extendido por 30 minutos para detectar problemas
+./scripts/testing/monitor-services.sh monitor 30
+
+# 3.3 Revisar logs en busca de errores
+gcloud run services logs read <SERVICE_NAME> --region=southamerica-west1 --limit=100
 ```
 
-#### **Paso 2: Actualizar Terraform (Chatwoot)**
-```hcl
-# En: infrastructure/terraform/services/chatwoot-multitenant/main.tf
-# CAMBIAR LÍNEA 89:
-container_image = "chatwoot/chatwoot:v4.5.0"  # Nueva versión
+## Procedimientos de Seguridad y Rollback
 
-# También en: infrastructure/terraform/modules/chatwoot-multitenant/main.tf
-# CAMBIAR LÍNEA 189:
-image = "chatwoot/chatwoot:v4.5.0"
-```
+### Health Checks
 
-#### **Paso 3: Deploy Controlado Chatwoot**
-```bash
-# 3.1 Aplicar cambios con staging
-cd infrastructure/terraform/services/chatwoot-multitenant
-terraform plan -out=chatwoot-update.tfplan
-
-# 3.2 Aplicar actualización
-terraform apply chatwoot-update.tfplan
-
-# 3.3 Verificar servicio actualizado
-gcloud run services describe chatwoot-multitenant-dev --region=southamerica-west1
-```
-
-## 🛡️ **Procedimientos de Seguridad**
-
-### **✅ Health Checks Post-Actualización**
+El script de health check valida que los endpoints principales de los servicios estén respondiendo correctamente.
 
 ```bash
 #!/bin/bash
-# health-check-post-update.sh
+# scripts/testing/monitor-services.sh (versión simplificada)
 
-echo "🔍 Verificando N8N..."
-N8N_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://n8n-optimacx-supabase-1008284849803.southamerica-west1.run.app/)
+echo "Verificando N8N..."
+N8N_STATUS=$(curl -s -o /dev/null -w "%{http_code}" <URL_N8N>)
 if [ "$N8N_STATUS" = "200" ]; then
-    echo "✅ N8N: OK"
+    echo "N8N: OK"
 else
-    echo "❌ N8N: FALLO ($N8N_STATUS)"
+    echo "N8N: FALLO ($N8N_STATUS)"
 fi
 
-echo "🔍 Verificando Chatwoot..."
-CHATWOOT_STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://chatwoot-multitenant-dev-1039900134024.southamerica-west1.run.app/)
-if [ "$CHATWOOT_STATUS" = "200" ]; then
-    echo "✅ Chatwoot: OK"
+echo "Verificando Frontend..."
+FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" <URL_FRONTEND>)
+if [ "$FRONTEND_STATUS" = "200" ]; then
+    echo "Frontend: OK"
 else
-    echo "❌ Chatwoot: FALLO ($CHATWOOT_STATUS)"
+    echo "Frontend: FALLO ($FRONTEND_STATUS)"
 fi
-
-echo "🔍 Verificando conectividad con Supabase..."
-# Test de conexión a base de datos
 ```
 
-### **🔄 Plan de Rollback**
+### Plan de Rollback
+
+Si la nueva versión presenta problemas, puedes revertir al estado anterior usando el backup de Terraform.
 
 ```bash
-#!/bin/bash
-# rollback-deployment.sh
-
-echo "🚨 Iniciando rollback..."
-
-# Rollback N8N
-cd infrastructure/terraform/environments/dev
+# 1. Restaurar el archivo de backup de Terraform
+# (Los scripts de deploy deberían crear backups automáticos)
 cp main.tf.backup main.tf
+
+# 2. Aplicar la configuración anterior
 terraform apply -auto-approve
 
-# Rollback Chatwoot
-cd ../../../services/chatwoot-multitenant
-cp main.tf.backup main.tf
-terraform apply -auto-approve
-
-echo "✅ Rollback completado"
+echo "Rollback completado a la versión anterior."
 ```
 
-## 📅 **Cronograma Recomendado**
+## Checklist de Actualización
 
-### **🕐 Horario de Mantenimiento**
-- **Mejor momento:** Domingo 2:00 AM - 4:00 AM (menor tráfico)
-- **Duración estimada:** 30-45 minutos por servicio
-- **Ventana de rollback:** 2 horas
+### Pre-Actualización
+- [ ] Backup de base de datos y configuración completado.
+- [ ] Plan de Terraform revisado.
+- [ ] Ventana de mantenimiento comunicada (si aplica).
 
-### **📋 Checklist Pre-Actualización**
-- [ ] Backup de base de datos completado
-- [ ] Terraform plans revisados
-- [ ] Scripts de rollback preparados
-- [ ] Health checks configurados
-- [ ] Comunicación a usuarios (si aplica)
+### Post-Actualización
+- [ ] Health checks automáticos pasaron correctamente.
+- [ ] Verificación manual de funcionalidades críticas (ej. crear un reclamo).
+- [ ] Monitoreo de logs durante 1 hora sin errores críticos.
+- [ ] Performance del servicio dentro de los rangos normales.
 
-### **📋 Checklist Post-Actualización**
-- [ ] Health checks pasados
-- [ ] Workflows N8N funcionando
-- [ ] Chatwoot multitenant operativo
-- [ ] Logs sin errores críticos
-- [ ] Performance normal
-- [ ] Backup de configuración nueva
-
-## 🎯 **Mejores Prácticas**
-
-### **🔒 Seguridad**
-1. **Siempre hacer backup** antes de actualizar
-2. **Probar en staging** si está disponible
-3. **Actualizaciones incrementales** (no saltar múltiples versiones)
-4. **Monitoreo activo** durante 24h post-actualización
-
-### **⚡ Performance**
-1. **Una actualización a la vez** (N8N primero, luego Chatwoot)
-2. **Verificar recursos** de Cloud Run post-actualización
-3. **Monitorear métricas** de respuesta y CPU
-4. **Rollback inmediato** si degradación > 10%
-
-### **📊 Monitoreo**
-1. **Logs en tiempo real**: `gcloud logging tail`
-2. **Métricas GCP**: Console de Cloud Run
-3. **Health endpoints**: Automatizar checks cada 5min
-4. **Alertas**: Configurar notificaciones para fallos
-
-¿Te gustaría que implemente alguno de estos scripts específicos o necesitas más detalles sobre algún paso particular?

@@ -21,15 +21,11 @@
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
-      "dist/credentials/OptimaCxApi.credentials.js",
-      "dist/credentials/WhatsAppBusiness.credentials.js"
+      "dist/credentials/OptimaCxApi.credentials.js"
     ],
     "nodes": [
-      "dist/nodes/LeadProcessor/LeadProcessor.node.js",
       "dist/nodes/TenantConfigLoader/TenantConfigLoader.node.js",
-      "dist/nodes/AIAnalyzer/AIAnalyzer.node.js",
-      "dist/nodes/AdvisorAssigner/AdvisorAssigner.node.js",
-      "dist/nodes/WhatsAppSender/WhatsAppSender.node.js"
+      "dist/nodes/AIAnalyzer/AIAnalyzer.node.js"
     ]
   },
   "devDependencies": {

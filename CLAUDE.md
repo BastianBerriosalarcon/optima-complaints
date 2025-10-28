@@ -1,734 +1,1708 @@
-#  Guías para Claude Code en el Proyecto Óptima-CX
+# Guía para Claude Code - Proyecto Optima-Complaints
 
 ## 1. Contexto General del Proyecto
 
-**Nombre del Proyecto:** Óptima-CX
+**Nombre del Proyecto:** Optima-Complaints
 
-**Descripción:** Óptima-CX es una plataforma multitenant SaaS de experiencia al cliente diseñada para el sector automotriz. La plataforma integra cuatro módulos principales: **Gestión de Leads y Ventas**, **Encuestas de Ventas**, **Encuestas Post-Venta** y **Gestión de Reclamos con IA**, optimizando todo el ciclo de vida del cliente automotriz desde la prospección hasta el servicio post-venta.
+**Descripción:** Optima-Complaints es una plataforma SaaS multitenant especializada en la **gestión inteligente de reclamos** para el sector automotriz. El sistema automatiza la recepción, clasificación, asignación y seguimiento de reclamos utilizando Inteligencia Artificial (Gemini 2.5 Pro) y RAG (Retrieval Augmented Generation) para proporcionar análisis contextualizados basados en la base de conocimiento de cada concesionario.
 
-La plataforma maneja distintos roles de usuario con permisos y vistas de datos específicos:
+### 1.1. Alcance del Proyecto
 
-* **Super Usuario:** Administra el sistema completo y puede ver todos los concesionarios (siempre separados por concesionario).
-* **Roles por Concesionario:** Gerencia, Jefe de Servicio, Asesor de Servicio, Contact Center, Encargado de Calidad, Jefa de Contact Center, **Jefe de Ventas**, **Asesor de Ventas**, Staff. Estos roles solo acceden a la información de su concesionario y/o sucursal asignada.
+**MÓDULO ÚNICO: Gestión de Reclamos**
 
-Se busca automatizar la comunicación (correos, WhatsApp) y la gestión de datos (leads, encuestas, reclamos) utilizando N8N como motor de automatización, desplegado en Google Cloud Run. La integración y las automatizaciones deben ser totalmente aisladas y configurables por cada concesionario para proteger la privacidad de los datos, asegurar la consistencia de la marca y evitar la mezcla de datos sensibles como números de WhatsApp Business y correos electrónicos corporativos.
+Este proyecto está enfocado **exclusivamente** en reclamos. NO incluye:
+- Gestión de Leads o Ventas
+- Encuestas de Ventas o Post-Venta
+- WhatsApp Business API
+- Chatwoot para conversaciones
+- Campañas de Marketing
 
-### 1.1. Stack Tecnológico
+**Roles de Usuario:**
+- **Super Usuario:** Administra el sistema completo y puede ver todos los concesionarios
+- **Admin Concesionario:** Administra su concesionario específico
+- **Jefe de Servicio:** Supervisa reclamos de su sucursal/concesionario
+- **Asesor de Servicio:** Gestiona reclamos asignados
+- **Encargado de Calidad:** Analiza métricas y tendencias de reclamos
+- **Contact Center:** Ingresa reclamos manualmente por teléfono/presencial
+
+### 1.2. Stack Tecnológico
 
 **Frontend:**
-- Next.js 14 con App Router + TypeScript para type safety
-- Tailwind CSS + Radix UI para estilos y componentes
-- Supabase Auth para autenticación + React Hook Form
+- Next.js 14 con App Router + TypeScript
+- Tailwind CSS + Radix UI para componentes
+- React Hook Form + Zod para validación
+- Supabase Auth para autenticación
+- TanStack Query para data fetching
+- TanStack Table para tablas avanzadas
 
 **Backend:**
 - Supabase PostgreSQL con Row Level Security (RLS)
-- Supabase Realtime para actualizaciones live
+- Supabase Realtime para actualizaciones en tiempo real
 - Supabase Edge Functions para lógica serverless
-- N8N workflows en Cloud Run para automatización
+- N8N workflows para automatización de procesos
 
 **Infraestructura:**
-- Google Cloud Platform como proveedor principal
-- Cloud Run para servicios containerizados (Frontend + N8N + Chatwoot)
-- Cloud Memorystore (Redis) para sessions de Chatwoot y cache
-- Terraform para Infrastructure as Code
-- Secret Manager para credenciales sensibles
-- Cloud Storage para archivos y documentos
+- Google Cloud Platform (GCP) o Railway para N8N
+- Vercel o Cloudflare Pages para frontend
+- Supabase Cloud para base de datos
+- Cloud Storage para documentos y adjuntos
 
-**WhatsApp + Conversacional:**
-- Chatwoot para gestión de conversaciones multitenant
-- WhatsApp Business API para mensajería
-- Redis para gestión de sessions y cache
-- PostgreSQL para historiales de conversación
+**Inteligencia Artificial:**
+- **Gemini 2.5 Pro** - Análisis y clasificación de reclamos
+- **Gemini Embedding 001** - Vectorización de documentos (768 dimensiones)
+- **Cohere Rerank** - Re-clasificación de documentos recuperados para mayor precisión
+- **Supabase pgvector** - Base de datos vectorial para RAG
 
-**IA:**
-- Integración con Gemini 2.5 Pro para análisis de leads y procesamiento de reclamos
-- Gemini Embedding 001 para vectorización de documentos
-- RAG (Retrieval Augmented Generation) con Cohere Rerank
-- Supabase pgvector para base de datos vectorial
+**Notificaciones:**
+- SMTP (Gmail, SendGrid, etc.) para emails
+- Sin WhatsApp ni SMS en esta versión
+
+---
 
 ## 2. Principios y Prioridades Clave
 
-* **Aislamiento Multitenant con Supabase RLS:** La máxima prioridad es garantizar la segregación total de datos y operaciones entre concesionarios. Utilizamos Row Level Security (RLS) en Supabase para asegurar que cada consulta esté automáticamente filtrada por `concesionario_id`.
-
-* **Automatización Inteligente con IA:** Fomentar el uso de automatizaciones para reducir la carga de trabajo manual, mejorar la eficiencia en la respuesta al cliente y asegurar la consistencia. La IA (Gemini) se utiliza para análisis de leads y clasificación de reclamos.
-
-* **Arquitectura Serverless-First:** Priorizar soluciones serverless (Supabase, Cloud Run, Edge Functions) para reducir costos operativos y mejorar escalabilidad automática.
-
-* **Desarrollo Moderno:** Utilizar tecnologías modernas (Next.js, TypeScript, Tailwind) que permiten desarrollo rápido, mantenimiento sencillo y experiencia de usuario superior.
-
-## 3. Módulos de la Plataforma
-
-### 3.1. Módulo de Gestión de Leads y Ventas (Implementado)
-
-#### **Funcionalidades Principales:**
-
-**📱 Recepción y Análisis Automático de Leads:**
-* **Canal Principal:** WhatsApp Business API → Chatwoot → N8N por concesionario
-* **Gestión Conversacional:** Chatwoot maneja interfaz de chat con agentes humanos
-* **Análisis IA:** Procesamiento automático de mensajes con Gemini para detectar:
-  - Intención del cliente (compra, información, servicio, cotización)
-  - Modelo de vehículo de interés
-  - Urgencia y nivel de interés
-  - Datos de contacto y preferencias
-  (todo esto debe ser por concesionario, recordar multitenant)
-
-**🎯 Scoring y Clasificación Automática:**
-* **Score de Calidad:** Algoritmo que evalúa la probabilidad de conversión (1-100)
-* **Clasificación por Tipo:**
-  - Lead Caliente (score >70): Intención de compra inmediata
-  - Lead Tibio (score 40-70): Interés confirmado, requiere seguimiento
-  - Lead Frío (score <40): Información general, seguimiento a largo plazo
-
-**👥 Asignación Inteligente de Asesores:**
-* **Reglas de Asignación:** Basadas en especialidad, carga de trabajo y disponibilidad
-* **Especialización:** Asesores especializados por marca/tipo de vehículo
-* **Distribución Equitativa:** Algoritmo que balancea la carga entre asesores activos
-
-**📊 Seguimiento del Ciclo de Ventas:**
-* **Estados del Lead:** Nuevo → Contactado → Cotizado → Vendido/Perdido
-* **Gestión de Cotizaciones:** Registro y seguimiento de ofertas realizadas
-* **Métricas de Conversión:** Análisis de performance por asesor y canal
-* **Historial Completo:** Trazabilidad de todas las interacciones
-
-**🚀 Carga Masiva para Prospección:**
-*   **Canal de Entrada:** Carga de archivos Excel con listas de clientes potenciales desde otras plataformas.
-*   **Proceso Automatizado:**
-    1.  **Validación y Filtrado:** El sistema procesa el Excel, valida los datos y filtra a los clientes que ya son leads activos para evitar duplicados.
-    2.  **Campaña de Prospección:** Se envía un mensaje masivo y personalizado por WhatsApp para medir el interés inicial del cliente.
-    3.  **Creación Automática de Leads:** Si un cliente responde positivamente, el sistema automáticamente crea un nuevo lead en la plataforma y lo asigna a un asesor para su seguimiento.
-
-#### **Campos del Sistema de Leads:**
-
-**Datos del Lead:**
-* `telefono_cliente` - Número de WhatsApp origen (único por concesionario)
-* `nombre_cliente` - Nombre extraído o proporcionado
-* `email_cliente` - Email de contacto (opcional)
-* `intencion_detectada` - Enum: compra, informacion, servicio, cotizacion
-* `modelo_interes` - Vehículo/modelo de interés detectado
-* `mensaje_original` - Texto original del mensaje WhatsApp
-* `score_calidad` - Puntuación automática 1-100
-* `nivel_interes` - Enum: alto, medio, bajo
-* `asesor_asignado_id` - ForeignKey al asesor responsable
-* `estado` - Enum: nuevo, contactado, cotizado, vendido, perdido
-* `fecha_creacion` - Timestamp automático
-* `concesionario_id` - Tenant ID para segregación multitenant
-
-**Seguimiento y Métricas:**
-* `fecha_primer_contacto` - Cuando el asesor contactó por primera vez
-* `fecha_cotizacion` - Cuando se generó cotización formal
-* `monto_cotizacion` - Valor de la cotización realizada
-* `fecha_cierre` - Fecha de venta o pérdida del lead
-* `motivo_perdida` - Razón si el lead no se convirtió
-* `fuente_lead` - Siempre 'whatsapp' para este módulo
-
-#### **Automatización N8N para Leads:**
-
-**Flujo Automático:**
-1. **Recepción:** Webhook recibe mensaje WhatsApp por concesionario
-2. **Análisis IA:** Extracción de intención y datos con Gemini
-3. **Scoring:** Cálculo automático de score de calidad
-4. **Asignación:** Algoritmo asigna asesor óptimo
-5. **Notificación:** Email/SMS al asesor asignado con resumen del lead
-6. **Seguimiento:** Recordatorios automáticos para contacto y seguimiento
-
-**Configuración por Concesionario:**
-* WhatsApp Business tokens únicos por tenant
-* Cuentas Chatwoot segregadas por concesionario
-* Prompts personalizados para análisis IA
-* Reglas de asignación específicas por concesionario
-* Templates de notificación customizados
-* Agentes Chatwoot con roles específicos
-
-#### **Roles Específicos para el Módulo de Ventas:**
-
-**🏢 Jefe de Ventas (jefe_ventas):**
-* **Supervisión Operativa:** Gestión completa del equipo de asesores de ventas
-* **Gestión de Leads:** Asignación inteligente y seguimiento de leads calientes
-* **Métricas y Reportes:** Acceso a dashboard específico de ventas con KPIs
-* **Configuración:** Parametrización de reglas de asignación y scoring
-* **Exportación:** Datos de ventas y performance del equipo
-* **Automatización:** Recibe notificaciones de leads de alta prioridad
-
-**👨‍💼 Asesor de Ventas (asesor_ventas):**  
-* **Gestión Individual:** Leads asignados automáticamente según especialidad
-* **Seguimiento:** Actualización de estados (contactado, cotizado, vendido/perdido)
-* **Información:** Acceso a datos de clientes, vehículos e historial
-* **Dashboard:** Vista operativa con sus leads y métricas personales
-* **Notificaciones:** Alertas inmediatas de nuevos leads asignados
-* **Integración:** Conexión directa con workflows de encuestas de ventas
-
-### 3.2. Módulo de Encuestas Post-Venta (Implementado)
-
-**Objetivo Principal:** Recopilar feedback del cliente después del servicio automotriz mediante 3 canales automatizados, con automatización de alertas para casos de baja satisfacción.
-
-#### **Estructura de Encuestas:**
-
-**4 Preguntas Principales (Escala 1-10):**
-
-  1. ¿Qué tan probable es que recomiende nuestro servicio?
-    - Campo: recomendacion
-    - Escala: 1-10
-    - Propósito: Mide NPS (Net Promoter Score)
-  2. ¿Cuál es su nivel de satisfacción general?
-    - Campo: satisfaccion
-    - Escala: 1-10
-    - Propósito: Satisfacción general del servicio
-  3. ¿Cómo califica el servicio de lavado?
-    - Campo: lavado
-    - Escala: 1-10
-    - Propósito: Evalúa servicio específico de lavado
-  4. ¿Cómo califica la atención del asesor?
-    - Campo: asesor
-    - Escala: 1-10
-    - Propósito: Califica atención al cliente
-
-  Pregunta Adicional:
-
-  5. Comentarios adicionales
-    - Campo: comentario
-    - Tipo: Texto libre (opcional)
-    - Propósito: Feedback cualitativo del cliente
-
-  📊 Validaciones:
-
-  - Campos requeridos cuando estado = 'completado': recomendación,
-  satisfacción, lavado, asesor
-  - Campo opcional: comentario
-  - Escala: 1-10 para todas las preguntas numéricas
-
-#### **Flujo de Automatización Multicanal:**
-
-**Canal 1 (Inmediato): Código QR**
-* **Registro por QR:** Se creará un código QR único por concesionario. Al ser escaneado por el cliente en el local, le permitirá responder una breve encuesta. Las respuestas deben registrarse instantáneamente en la base de datos asociadas a su `identificador de concesionario` y además de la sucursal a la cual pertenece la encuesta.
-* El QR debe contener las 4 preguntas, y además debe considerar el nombre, rut, numero de teléfono
-
-**Canal 2 (Seguimiento Automatizado): WhatsApp**
-* **Carga de Datos:** Al día siguiente, el Responsable de Contact Center o Encargado de Calidad cargará un archivo Excel con la lista completa de clientes atendidos el día anterior.
-* **Filtrado Inteligente:** El sistema **DEBE** verificar esta lista y **excluir automáticamente** a los clientes (usando su número de teléfono como clave) que ya contestaron la encuesta a través del Código QR.
-* **Envío Masivo de WhatsApp:** Inmediatamente después de la carga y el filtrado, el sistema (vía N8N configurado por concesionario) enviará mensajes de WhatsApp con la encuesta a los clientes que **NO** la han contestado aún.
-* **Período de Espera:** Se monitorea un período de 6 horas desde el envío del WhatsApp.
-
-**Canal 3 (Seguimiento Manual): Llamada de Contact Center**
-* **Asignación Automática:** Transcurrido el período de espera, el sistema identificará a los clientes que aún no han contestado la encuesta (ni por QR ni por WhatsApp).
-* Estas encuestas pendientes deben ser **automáticamente asignadas de forma equitativa** a los usuarios de Contact Center creados del concesionario para que realicen un seguimiento por llamada.
-
-### 2.1. Reglas de Automatización Común (Aplica a Todos los Módulos)
-
-**🎯 Automatización por Puntaje:**
-- **Nota 9-10 (positiva):** La encuesta se registra normalmente y va al dashboard.
-- **Nota 1-8 (baja):** Dispara automáticamente un correo electrónico (vía N8N) con el detalle de la encuesta para acción inmediata.
-
-**Destinatarios por Módulo:**
-- **Encuestas Post-Venta:** Jefe de Servicio, Asesor de Servicio y Encargado de Calidad
-- **Encuestas de Ventas:** Jefe de Ventas y Asesor de Ventas asignado al lead
-- **Reclamos Black Alert:** Encargado de Calidad, Jefe de Servicio, Asesor de Servicio, Equipos de Venta y Postventa
-
-### 3.3. Módulo de Encuestas de Ventas (Nuevo)
-
-**Objetivo Principal:** Medir la satisfacción del cliente inmediatamente después de la finalización del ciclo de venta (ya sea concretada o perdida) para obtener feedback sobre el proceso y el desempeño del asesor.
-
-#### **Estructura de Encuestas de Ventas:**
-
-**4 Preguntas Principales (Escala 1-10):**
-
-  1. ¿Cómo calificaría su experiencia general durante el proceso de compra/cotización?
-    - Campo: `experiencia_venta`
-    - Escala: 1-10
-    - Propósito: Mide la satisfacción general con el ciclo de venta.
-  2. ¿Cuál es su nivel de satisfacción con la atención del asesor de ventas?
-    - Campo: `satisfaccion_asesor_ventas`
-    - Escala: 1-10
-    - Propósito: Evalúa el desempeño del asesor de ventas.
-  3. ¿La información sobre el vehículo y la cotización fue clara y transparente?
-    - Campo: `claridad_informacion`
-    - Escala: 1-10
-    - Propósito: Evalúa la calidad de la información entregada.
-  4. ¿Qué tan probable es que nos recomiende a un amigo o familiar para comprar un vehículo?
-    - Campo: `recomendacion_venta`
-    - Escala: 1-10
-    - Propósito: Mide el NPS del proceso de ventas.
-
-  **Pregunta Adicional:**
-
-  5. ¿Tiene algún comentario adicional sobre su experiencia?
-    - Campo: `comentario_venta`
-    - Tipo: Texto libre (opcional)
-    - Propósito: Recopilar feedback cualitativo detallado.
-
-  **📊 Validaciones:**
-
-  - Campos requeridos cuando estado = 'completado': `experiencia_venta`, `satisfaccion_asesor_ventas`, `claridad_informacion`, `recomendacion_venta`.
-  - Campo opcional: `comentario_venta`.
-  - Escala: 1-10 para todas las preguntas numéricas.
-
-  **🎯 Automatización por Puntaje:** (Sigue las reglas definidas en la sección 2.1)
-
-#### **Flujo de Automatización Multicanal (N8N):**
-
-El sistema orquesta un flujo inteligente y multicanal para maximizar la tasa de respuesta, priorizando el feedback inmediato y automatizando el seguimiento.
-
-**Canal 1: Código QR (Feedback Inmediato en Entrega)**
-1.  **Disparador:** Al momento de la entrega del vehículo, el cliente escanea un código QR único del concesionario.
-2.  **Acción:** Se presenta una encuesta de satisfacción de venta optimizada para móviles.
-3.  **Registro:** Las respuestas se guardan instantáneamente en la tabla `encuestas_ventas`, asociadas al `lead_id` (que debe ser buscado por RUT o teléfono), `asesor_asignado_id` y `concesionario_id`. El origen se registra como `QR_VENTA`.
-
-**Canal 2: WhatsApp (Seguimiento Automático para Leads 'Vendido')**
-1.  **Disparador:** El flujo se activa 24 horas después de que el `estado` de un lead cambia a **`Vendido`**.
-2.  **Filtrado Inteligente:** El sistema **verifica si el cliente ya respondió** a través del QR. Si ya lo hizo, el flujo se detiene para este cliente.
-3.  **Acción:** Si no hay respuesta previa, el sistema (vía N8N) envía automáticamente un mensaje de WhatsApp al `telefono_cliente` del lead con un enlace a la encuesta. El origen se registrará como `WHATSAPP_VENTA`.
-
-**Canal 3: WhatsApp (Seguimiento para Leads 'Perdido')**
-1.  **Disparador:** El flujo se activa cuando el `estado` de un lead cambia a **`Perdido`**.
-2.  **Acción:** Se envía una encuesta adaptada para entender las razones de la pérdida, con preguntas como "¿Qué podríamos haber hecho mejor?" o "¿Cuál fue el principal motivo para no elegirnos?". El origen se registra como `WHATSAPP_PERDIDO`.
-
-**Gestión de Respuestas y Alertas (Común a todos los canales):**
-1.  **Recepción de Respuesta:** El cliente completa la encuesta. Las respuestas se guardan en la tabla `encuestas_ventas`.
-2.  **Alerta por Baja Calificación:** Sigue las reglas definidas en la sección 2.1
-3.  **Actualización de Dashboard:** Los resultados actualizan en tiempo real los dashboards de métricas de ventas.
-
-### 3.4. Gestión de Reclamos y Agente IA con N8N
-
-**Canales de Recepción:** El sistema recibe reclamos desde múltiples canales integrados:
-
-* **WhatsApp Business API + Chatwoot:** Gestión de conversaciones a través de la interfaz de Chatwoot
-* **Correo Electrónico:** Integración directa con N8N  
-* **Formularios Web:** Via webhook/API desde sitio web del concesionario
-* **Interface Chatwoot:** Para agentes humanos en casos complejos
-
-**Componente de Inteligencia Artificial con RAG (Integrado con N8N):** N8N se conectará con Gemini 2.5 Pro y Gemini Embedding 001, implementando RAG (Retrieval Augmented Generation) para:
-
-
-Procesamiento de lenguaje natural (PLN) Aumentado: El LLM recibirá tanto el reclamo original como el contexto recuperado de la base de conocimiento del concesionario para generar:
-Extracción de datos clave: sucursal, tipo de reclamo, cliente ( patente, vin, marca de vehículo, modelo), descripción resumida, urgencia
-
-**Flujo del Proceso de Reclamos (con Agente IA RAG orquestado por N8N):**
-
-1. Cliente envía reclamo por su canal preferido (WhatsApp, Email, Formulario Web)
-2. N8N recibe el reclamo y extrae el tenant_id correspondiente basado en el canal/webhook específico
-3. **Generación de Embedding y Recuperación RAG:**
-   - N8N genera un embedding vectorial del texto del reclamo
-   - Consulta la Base de Datos Vectorial filtrada por tenant_id para recuperar fragmentos de documentos relevantes
-   - Obtiene contexto específico del concesionario (políticas, procedimientos, casos similares)
-4. **Construcción de Prompt Enriquecido:**
-   - Reclamo original del cliente
-   - Contexto recuperado de la base de conocimiento específica del concesionario
-   - Custom prompts configurados por el concesionario
-   - Envía el prompt aumentado al servicio de IA externo (Gemini 2.5 Pro)
-5. **Respuesta IA Contextualizada:**
-   - Datos extraídos (sucursal, tipo, urgencia, cliente)
-   - Clasificación automática basada en las políticas específicas del concesionario
-   - Sugerencias de resolución personalizadas
-   - Referencias a documentos/procedimientos aplicables
-6. N8N valida los datos extraídos y enriquecidos, y los envía al backend de Supabase vía API para su registro
-7. Supabase registra el reclamo enriquecido con la información contextual y lo asigna automáticamente al Jefe de Servicio y Asesor de la sucursal correspondiente
-8. N8N envía notificaciones automáticas y personalizadas por rol:
-
-- **Al cliente:** Confirmación de recepción con información específica y número de seguimiento, a través del mismo canal de origen si es posible.
-- **Al Asesor de Servicio:** Notificación detallada con el reclamo completo, historial del cliente y sugerencias de resolución para que pueda iniciar la gestión.
-- **Al Jefe de Servicio:** Notificación de supervisión con un resumen del reclamo, la clasificación de la IA y el asesor asignado, permitiéndole monitorear el caso.
-- **Al Encargado de Calidad:** Notificación con foco en la clasificación, sentimiento del cliente y tipo de reclamo para análisis de tendencias y calidad.
-
-
-**Automatización de Provisión de Flujos de N8N:**
-- Capacidad futura de automatizar la creación de flujos de N8N para reclamos (y encuestas) cuando se agregue un nuevo concesionario
-- **Inicialización Automática de Base de Conocimiento:** Proceso automatizado para crear y configurar la base vectorial específica para nuevos concesionarios
-- Esto se logrará utilizando la API de N8N para desplegar flujos "plantilla" con variables que se inyectarán con las configuraciones específicas de cada concesionario, incluyendo acceso a su base de conocimiento RAG
-
-#### Campos Requeridos para Reclamos:
-
-**Campos obligatorios al ingresar un reclamo:**
-* `cliente` - Cliente que presenta el reclamo (ForeignKey a usuarios.Cliente)
-* `vehiculo` - Vehículo relacionado (ForeignKey a usuarios.Vehiculo)  
-* `vin` - Número de chasis del vehículo (CharField único por concesionario)
-* `sucursal` - Sucursal donde se presenta (ForeignKey a usuarios.Sucursal)
-* `taller` - Taller responsable (ForeignKey a usuarios.Taller)
-* `id_externo` - Identificador único del reclamo (CharField único por concesionario)
-* `detalle` - Descripción detallada del problema (TextField)
-* `black_alert` - Campo desplegable SI/NO para indicar si es Black Alert (BooleanField, default=False)
-
-**Campos opcionales/automáticos:**
-* `concesionario` - Asociado automáticamente al concesionario (multitenant)
-* `tipo_reclamo` - Externo/Interno (default: 'Externo')
-* `estado` - Pendiente/En Proceso/cerrado (default: 'Pendiente')
-* `fecha_creacion` - Automática
-* `fecha_actualizacion` - Automática
-
-**Black Alert - Funcionalidad Especial:**
-* **Definición:** Cliente que compra un vehículo y le falla dentro de los 6 meses, puede acogerse a ley del consumidor
-* **Campo:** `black_alert` - Desplegable SI/NO
-* **Automatización:** Si es SI, se envía automáticamente correo masivo a:
-  - Encargado de Calidad
-  - Jefe de Servicio  
-  - Asesor de Servicio
-  - Equipos de Venta y Postventa
-
-#### Gestión Manual y Ciclo de Vida:
-* **El reclamo puede caer por WhatsApp** con respuestas automatizadas usando RAG e IA, solicitando los datos correspondientes. 
-* **Registro y Asignación por Sucursal:** Los usuarios de Contact Center también pueden ingresar reclamos manualmente en la plataforma. Inmediatamente, el sistema debe asignar automáticamente el reclamo tanto al **Asesor de Servicio** como al **Jefe de Servicio** que correspondan a la **sucursal** del cliente via mail.
-* **Estados del Reclamo:** 
-  - **Pendiente:** Estado inicial del reclamo
-  - **En Proceso:** Reclamo siendo atendido/investigado
-  - **Cerrado:** Estado final del reclamo (archivado)
-* **Historial de Modificaciones (Auditoría):** La plataforma deberá registrar y mostrar un historial de todas las modificaciones realizadas en un reclamo. Será visible qué usuario ha cambiado el estado o la información y cuándo lo hizo.
-* **Ciclo de Vida del Reclamo (Resolución):** El reclamo permanecerá en la bandeja de trabajo activa del Asesor y Jefe de Servicio hasta que su estado sea marcado como **"Resuelto"**. Una vez resuelto, se archivará y dejará de estar en la lista de casos pendientes de gestión.
-
-
-### 3.5. Módulo de Campañas de Marketing (Implementado)
-
-**Objetivo Principal:** Automatizar la comunicación masiva y las secuencias de seguimiento para marketing, fidelización o notificaciones.
-
-#### **Funcionalidades Principales:**
-
-*   **Envíos Masivos Multicanal:** Capacidad para ejecutar campañas de comunicación a gran escala a través de WhatsApp (`envio-masivo-whatsapp.json`) y correo electrónico (`automatizacion-email.json`).
-*   **Secuencias de Seguimiento Automatizadas:** Orquestación de flujos de contacto automáticos (`secuencias-seguimiento.json`) para nutrir leads, recuperar clientes o enviar recordatorios.
-*   **Analítica de Campañas:** Medición del rendimiento de cada campaña (`analiticas-campañas.json`) para evaluar la efectividad de las comunicaciones.
-
-
-## 4. Métricas y Dashboards
-* **Segregación de Métricas:** Todos los dashboards y métricas (encuestas contestadas, reclamos por tipo/estado, etc.) deben ser filtrados por concesionario y solo mostrar datos relevantes para el rol del usuario logueado.
-* **Origen de la Encuesta:** Es **CRUCIAL** que cada encuesta finalizada registre la fuente de su respuesta: **`QR`**, **`WhatsApp`** (resultado de la carga masiva), o **`Llamada`** (ejecutivo de Contact Center). Esto es fundamental para medir la eficiencia de cada canal.
-* **Dashboard de Canales y Ejecutivos:** Debe existir un dashboard que muestre:
-    * Total de encuestas contestadas por origen (QR vs. WhatsApp vs. Llamada).
-    * Desglose de las encuestas por llamada, mostrando el rendimiento por cada ejecutivo de Contact Center.
-    * Esto permitirá comparar cuántas respuestas provienen directamente de los clientes (canales automáticos) y cuántas requieren intervención manual.
-* **Métricas de Reclamos:** Se deben crear dashboards para visualizar métricas de reclamos, tales como: número de reclamos por sucursal, por tipo, por estado, y tiempo promedio de resolución.
-* **Optimización de Consultas:** Al generar código para dashboards, prioriza la eficiencia de las consultas a la base de datos para manejar grandes volúmenes de datos por concesionario de forma rápida.
-
-## 5. Arquitectura Cloud Run y Despliegue en GCP
-
-### 5.1. Arquitectura Actual Implementada
-
-**Óptima-CX utiliza una arquitectura moderna basada en Supabase + Next.js + N8N + Chatwoot** que optimiza costos, escalabilidad y mantenimiento para un SaaS multi-tenant.
-
-#### **🏗️ Arquitectura de 3 Cloud Run Services**
-
-**☁️ CLOUD RUN #1: optima-cx-frontend**
-```
-├── Next.js 14 + TypeScript
-├── Supabase Auth + RLS 
-├── Dashboard multitenant
-├── APIs para comunicación con N8N/Chatwoot
-└── URL: pendiente
+### 2.1. Aislamiento Multitenant con RLS
+
+**Máxima prioridad:** Segregación total de datos entre concesionarios mediante Row Level Security (RLS) en Supabase. Cada consulta se filtra automáticamente por `concesionario_id`.
+
+```sql
+-- Ejemplo de policy RLS
+CREATE POLICY "Reclamos are tenant isolated"
+ON public.reclamos
+FOR ALL
+USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
 ```
 
-**☁️ CLOUD RUN #2: N8N-optimacx-supabase**
-```
-├── N8N workflows engine
-├── Multitenant workflow configuration
-├── Integración con Gemini IA
-├── Webhooks bidireccionales
-├── RAG pipeline para reclamos
-└── URL: pendiente
-```
+### 2.2. Automatización Inteligente con IA
 
-**☁️ CLOUD RUN #3: chatwoot-conversations**
+- **Clasificación automática** de reclamos usando Gemini
+- **Extracción de datos** clave (cliente, vehículo, sucursal)
+- **Análisis de sentimiento** para priorización
+- **Sugerencias de resolución** basadas en RAG
+- **Asignación automática** a asesores disponibles
+
+### 2.3. Sistema RAG (Retrieval Augmented Generation)
+
+El sistema RAG permite que la IA acceda a la base de conocimiento específica del concesionario:
+
 ```
-├── Chatwoot conversation management
-├── WhatsApp Business API integration
-├── Redis para sessions
-├── PostgreSQL para chat history
-├── Multitenant por Cuentas (Accounts)
-├── Agent interface por concesionario
-└── URL: pendiente 
+Reclamo → Embedding → Búsqueda Vectorial → Rerank Cohere → Contexto Enriquecido → Gemini → Respuesta
 ```
 
-#### **Ventajas Técnicas:**
-- **Multi-tenancy:** Configuraciones aisladas por concesionario (WhatsApp tokens, SMTP, IA prompts)
-- **Escalabilidad Independiente:** Cada servicio escala según demanda
-- **Aislamiento:** Fallos de un tenant no afectan otros concesionarios
+**Tipos de documentos soportados:**
+- Políticas de garantía
+- Manuales de procedimientos
+- FAQ específicos del concesionario
+- Casos resueltos anteriormente
+- Normativas legales
 
-#### **Estructura de Configuración Multi-tenant:**
+### 2.4. Arquitectura Serverless-First
+
+- Supabase (base de datos serverless)
+- Edge Functions para lógica backend
+- N8N en Cloud Run o Railway
+- Frontend en Vercel/Cloudflare Pages
+- Sin servidores que mantener
+
+---
+
+## 3. Gestión de Reclamos (Módulo Principal)
+
+### 3.1. Canales de Ingreso de Reclamos
+
+#### **A) Ingreso Manual por Contact Center** (Principal)
+
+**Flujo:**
 ```
-📊 TENANT_CONFIGURATIONS (tabla en Supabase DB):
-├── tenant_id: "concesionario_001" (Primary Key, ej: 'd1a7a2a7-a8e6-4e3a-a4f2-a9d7e7e7e7e7')
-├── chatwoot_account_id: 123 (ID numérico de la Cuenta en Chatwoot)
-├── whatsapp_config: 
-│   ├── business_token: "EAAK...encrypted"
-│   ├── phone_number_id: "123456789"
-│   └── verify_token: "custom_webhook_token"
-├── email_config:
-│   ├── smtp_host: "smtp.concesionario001.com"
-│   ├── smtp_credentials: "encrypted_user_pass"
-│   └── from_email: "noreply@concesionario001.com"
-├── ai_config:
-│   ├── provider: "google" 
-│   ├── api_key: "sk-...encrypted"
-│   ├── model: "gemini-2.5-pro" 
-│   ├── custom_prompts: {...}
-│   └── rag_config:
-│       ├── vector_index_id: "projects/.../vectorIndex123"
-│       ├── embedding_model: "gemini-embedding-001"
-│       ├── search_config: {"k": 5, "threshold": 0.7}
-│       └── knowledge_base_version: "v1.2.3"
-└── workflow_variables:
-    ├── brand_colors: {"primary": "#...", "secondary": "#..."}
-    ├── logo_url: "https://storage.googleapis.com/..."
-    ├── custom_messages: {"welcome": "...", "followup": "..."}
-    └── business_hours: {"start": "09:00", "end": "18:00"}
-```
-### 5.2. Comunicación Entre Services
-
-#### **Flujo de Integración Crítico: Chatwoot → N8N → Supabase**
-
-Este flujo es el corazón de la automatización y la correcta identificación del tenant. Se basa en la **Estrategia de Cuentas (Accounts) de Chatwoot**, donde cada concesionario es una "Cuenta" aislada dentro de una única instancia de Chatwoot.
-
-1.  **Configuración Previa:**
-    *   Cada concesionario (tenant) en la tabla `TENANT_CONFIGURATIONS` de Supabase debe tener su `chatwoot_account_id` mapeado correctamente.
-    *   En Chatwoot, se configura un único Webhook global para el evento `message_created` que apunta a un workflow específico en N8N.
-
-2.  **Recepción del Mensaje en Chatwoot:**
-    *   Un cliente envía un mensaje de WhatsApp al número de un concesionario.
-    *   Chatwoot recibe el mensaje, lo asocia a la "Cuenta" del concesionario correspondiente y dispara el webhook.
-
-3.  **Procesamiento en N8N (Identificación del Tenant):**
-    *   El workflow de N8N recibe el payload del webhook de Chatwoot.
-    *   **Paso Clave:** El primer nodo del workflow extrae el `account.id` del payload (`payload.account.id`). Este ID identifica de forma única a la "Cuenta" del concesionario en Chatwoot.
-    *   N8N realiza una consulta a la tabla `TENANT_CONFIGURATIONS` en Supabase: `SELECT * FROM tenant_configurations WHERE chatwoot_account_id = [ID extraído]`.
-    *   Con el resultado, N8N carga en memoria toda la configuración del tenant (tokens, prompts de IA, IDs, etc.), asegurando que el resto del proceso se ejecute en el contexto correcto.
-
-4.  **Ejecución del Workflow Específico:**
-    *   Con la configuración del tenant cargada, N8N procede con la lógica de negocio:
-        *   Llama a Gemini para analizar el texto.
-        *   Calcula el scoring del lead.
-        *   Ejecuta las reglas de asignación de asesores.
-        *   Envía notificaciones, etc.
-
-5.  **Sincronización de Agentes (Onboarding/Offboarding):**
-    *   Se debe implementar un proceso (workflow de N8N o script) que sincronice los usuarios de la plataforma (ej. `asesor_ventas`) con los "Agentes" de Chatwoot.
-    *   **Onboarding:** Al crear un usuario con rol de asesor en Supabase, se debe usar la API de Chatwoot para:
-        1.  Crear un Agente en Chatwoot.
-        2.  Asociar el Agente a la "Cuenta" del concesionario (`account_id`).
-        3.  Asignarlo a los "Equipos" correspondientes (ej. "Ventas", "Post-Venta").
-    *   **Offboarding:** Al desactivar un usuario, se debe desactivar o eliminar su perfil de Agente en Chatwoot.
-
-#### **Flujo de Comunicación Multi-tenant con RAG:**
-```
-📱 Cliente Concesionario A → Load Balancer → optima-cx-saas
-                                              ↓ (trigger automation)
-                                         POST /webhook/trigger-complaint
-                                         {tenant_id: "concesionario_a", complaint_text: "..."}
-                                              ↓
-                                         N8N-automation-hub
-                                              ↓ (load tenant config A + RAG setup)
-                                         1. Generate embedding (gemini-embedding-001)
-                                         2. Query Supabase (pgvector) (tenant filtered)
-                                         3. Retrieve relevant knowledge context
-                                              ↓
-                                         Gemini 2.5 Pro + RAG Context
-                                         {original_complaint + retrieved_docs + custom_prompts}
-                                              ↓ (enriched AI response)
-                                         External Services (WhatsApp A + enriched response)
-                                              ↓ (callback with contextual results)
-                                         POST /api/webhooks/N8N-complaint-callback
-                                         {tenant_id: "concesionario_a", enriched_data: "..."}
-                                              ↓
-                                         optima-cx-saas (update with contextual data)
+Cliente llama/visita → Contact Center ingresa en Dashboard
+  ↓
+Formulario "Nuevo Reclamo" con campos validados
+  ↓
+Frontend envía a API: POST /api/reclamos/crear
+  ↓
+Backend valida y dispara webhook N8N
+  ↓
+N8N workflow: complaint-orchestrator
 ```
 
-### 5.3. CI/CD y Monitoreo
+**Campos del formulario:**
+- Cliente: nombre, RUT, teléfono, email
+- Vehículo: patente, VIN, marca, modelo
+- Sucursal: selector de sucursal del concesionario
+- Descripción del reclamo (texto libre)
+- Categoría preliminar (opcional)
+- Adjuntos (fotos, documentos)
+- Black Alert: checkbox SI/NO
 
-#### **Pipeline:** Git Push → Testing → Deploy workflows via N8N API → Validación
-#### **Métricas:** Response time, workflow success rate, API limits, tenant performance
-#### **Alertas:** Workflow failures >5%, API rate limits, latencia >2s
+**Validaciones:**
+- Cliente existente o crear nuevo
+- Vehículo existente o crear nuevo
+- Descripción mínima 20 caracteres
+- Teléfono formato válido
+- Email formato válido (opcional)
 
-### 5.5. Seguridad y Compliance Multi-tenant
+#### **B) Formulario Web Público**
 
-#### **Aislamiento de Datos Estricto:**
-* **Tenant Filtering:** Filtros automáticos por tenant_id en todas las consultas
-* **Credential Isolation:** Encriptación AES-256 de tokens por concesionario
-* **Audit Logging:** Trazabilidad completa de operaciones con tenant context
-* **API Security:** Rate limiting y authentication por tenant
+**URL:** `https://concesionario.com/reclamos/nuevo`
 
-#### **Seguridad de Red y Perímetro (Defensa en Profundidad):**
-* **Comunicación Interna Segura:** Configurar un **VPC Connector** para los servicios de Cloud Run. Esto fuerza la comunicación entre servicios (SaaS ↔ N8N) y con Cloud SQL a través de la red privada de GCP, minimizando la exposición a la red pública.
-
-#### **Seguridad de Aplicación y Cargas de Trabajo:**
-* **Identidad Segura de Servicios:** Utilizar **Workload Identity** para asociar los servicios de Cloud Run con Cuentas de Servicio de IAM dedicadas. Esto elimina la necesidad de gestionar y rotar claves de servicio, ya que las credenciales se inyectan de forma segura y automática.
-* **Análisis de Malware en Ingesta RAG:** Antes de procesar cualquier documento subido por un concesionario, escanearlo en busca de malware. Esto se puede lograr con una solución como ClamAV integrada en un servicio de Cloud Run que se active mediante un trigger de Cloud Storage.
-
-#### **Migraciones y Compatibilidad:**
-* **Zero-downtime deployment:** Blue-green deployment strategy
-* **Database migrations:** Aplicadas automáticamente con rollback capability
-* **Tenant onboarding:** Proceso automatizado de 10 minutos
-* **Legacy support:** Compatibilidad con configuraciones existentes
-
-## 6. Infraestructura como Código con Terraform
-
-### 6.1. Terraform IaC
-
-#### **Estructura:** Módulos por ambiente (dev/staging/prod), estado remoto cifrado en GCS
-#### **Onboarding:** Scripts automatizados para nuevos tenants con configuraciones específicas
-#### **Seguridad:** KMS encryption, VPC privada, Workload Identity, permisos mínimos
-
-## 7. Flujo de Trabajo y Herramientas
-
-* **Entorno de Desarrollo:** Trabajamos en Cloud Shell con Claude Code en la terminal. Claude tiene acceso completo al sistema de archivos para inspeccionar código existente y entender el contexto antes de realizar cambios.
-
-* **Stack de Desarrollo Actual:**
-  - **Frontend:** Next.js 14 + TypeScript + Tailwind CSS
-  - **Base de Datos:** Supabase PostgreSQL con RLS
-  - **Autenticación:** Supabase Auth con roles personalizados
-  - **Automatización:** N8N workflows en Cloud Run
-  - **Infraestructura:** Terraform + Google Cloud Platform
-  - **IA:** Integración con Gemini para procesamiento inteligente
-
-* **Estándares de Código:** Seguimos los principios SOLID implementados recientemente:
-  - Archivos <150 líneas para mantener legibilidad
-  - Funciones <30 líneas para comprensión inmediata
-  - Una responsabilidad por componente/módulo
-  - Inyección de dependencias con Context providers
-  - Tipado TypeScript estricto en todo el código
-
-* **Pruebas y Calidad:** **SIEMPRE** considerar la adición de pruebas para nueva funcionalidad. El código debe ser legible, seguir estándares SOLID y ser mantenible. Buscar oportunidades de refactorización sin introducir regresiones.
-
-### 7.1. Políticas de Escalación y SLAs (Acuerdos de Nivel de Servicio)
-
-Para garantizar la operatividad y la respuesta oportuna, el sistema implementa políticas de escalación automáticas gestionadas por los workflows en `utils/`.
-
-**1. Escalación de Leads no Atendidos:**
-*   **Regla:** Si un lead con `nivel_interes` **'alto'** no es contactado por el asesor asignado después de 2 recordatorios (aproximadamente 2 horas desde la asignación), el sistema escalará automáticamente el lead.
-*   **Acción:** El workflow `utils/notificador-escalacion.json` enviará una notificación de **"Lead Crítico Sin Atención"** al `Jefe de Ventas` correspondiente, incluyendo los detalles del lead y el tiempo transcurrido.
-*   **Objetivo:** Asegurar que los leads de mayor potencial reciban atención prioritaria y no se pierdan por falta de seguimiento.
-
-**2. Escalación de Reclamos no Gestionados:**
-*   **Regla:** Si un reclamo clasificado con `urgencia` **'alta'** permanece en estado **'Pendiente'** por más de 24 horas sin ninguna actualización o cambio de estado.
-*   **Acción:** El workflow `utils/notificador-escalacion.json` enviará una notificación de **"Reclamo Urgente Estancado"** al `Jefe de Servicio` y con copia al `Encargado de Calidad`.
-*   **Objetivo:** Garantizar que los reclamos más críticos sean atendidos dentro de un plazo razonable, mejorando la satisfacción del cliente.
-
-**3. Manejo de Fallos en Workflows Críticos:**
-*   **Regla:** Si un workflow crítico (ej. `procesador-rag-reclamos`, `procesador-whatsapp-leads`) falla 3 veces consecutivas para el mismo `tenant_id`.
-*   **Acción:** El workflow `utils/manejador-errores.json` registrará el fallo crítico y enviará una alerta de **"Fallo Crítico de Sistema"** al rol `admin` (o a un canal de operaciones designado). La alerta incluirá el nombre del workflow, el tenant afectado y los logs de error para una intervención técnica inmediata.
-*   **Objetivo:** Mantener la alta disponibilidad del sistema y detectar problemas de integración o configuración de forma proactiva.
-
-
-
-## 8. Especificaciones Técnicas RAG para Agente de Reclamos
-
-### 8.1. Arquitectura RAG Multi-tenant
-
-#### **Base de Datos Vectorial:**
-* **Tecnología:** Supabase (extensión pgvector)
-* **Modelo de Embeddings:** gemini-embedding-001 (Google)
-* **Segregación:** Filtros estrictos por tenant_id en todas las consultas
-* **Dimensiones:** 3,072 dimensiones (Gemini Embedding 001)
-* **Índices:** Un índice por concesionario para máximo aislamiento
-
-#### **Pipeline de Procesamiento de Documentos:**
+**Flujo:**
 ```
-📄 Documento Original → Chunking → Embedding → Vector Storage
-├── Tipos soportados: PDF, Word, Excel, txt, markdown
-├── Chunk size: 512 tokens con overlap de 50 tokens
-├── Metadata: {tenant_id, doc_id, chunk_id, timestamp, version}
-└── Storage: Cloud Storage + metadatos en Cloud SQL
+Cliente accede a URL pública
+  ↓
+Formulario web simplificado
+  ↓
+reCAPTCHA anti-spam
+  ↓
+POST directo a N8N webhook
+  ↓
+N8N valida y procesa
 ```
 
-#### **Estructura de Metadatos por Documento:**
-```json
+**Campos públicos:**
+- Nombre completo
+- Teléfono (obligatorio)
+- Email
+- Patente del vehículo
+- Descripción del problema
+- Adjuntar foto (opcional)
+
+**Características:**
+- Sin login requerido
+- Confirmación por email con número de reclamo
+- URL de seguimiento público generada
+- Captcha para prevenir spam
+
+#### **C) Email Automático**
+
+**Casilla:** `reclamos@concesionario.com`
+
+**Flujo:**
+```
+Cliente envía email
+  ↓
+N8N Email Trigger (IMAP)
+  ↓
+Parsea: asunto, cuerpo, remitente, adjuntos
+  ↓
+Extrae datos con IA (Gemini)
+  ↓
+Crea reclamo automáticamente
+```
+
+**Configuración N8N:**
+```javascript
 {
-  "tenant_id": "concesionario_001",
-  "document_id": "manual_garantias_v2.1",
-  "title": "Manual de Garantías 2024",
-  "category": "policies",
-  "tags": ["garantia", "vehiculos", "procedimientos"],
-  "version": "2.1.0",
-  "upload_date": "2024-01-15T10:30:00Z",
-  "last_updated": "2024-06-15T14:20:00Z",
-  "source_file": "gs://optima-cx-docs/concesionario_001/garantias.pdf",
-  "total_chunks": 47,
-  "status": "active"
-}
-```
-
-### 8.2. Flujo RAG Integrado con N8N
-
-#### **Procesamiento de Reclamo con RAG (Pipeline Mejorado con Cohere):**
-```
-1. Cliente envía reclamo → N8N recibe webhook
-2. N8N extrae tenant_id y preprocessa texto
-3. Generación de embedding con gemini-embedding-001
-4. **Recuperación (Retrieval):** Query a Supabase (pgvector) para obtener un grupo amplio de chunks relevantes (ej. top 20-50).
-5. **Re-clasificación (Rerank):** Se envía la consulta original y los chunks recuperados a la API de **Cohere Rerank** para obtener los 3-5 resultados más relevantes.
-6. **Construcción de Prompt Enriquecido:**
-   - Reclamo original
-   - **Contexto de alta precisión** (los 3-5 chunks re-clasificados por Cohere)
-   - Custom prompts del concesionario
-   - Instrucciones específicas
-7. **Generación:** Envío a Gemini 2.5 Pro (o al LLM de Cohere) para la respuesta final.
-8. Respuesta estructurada con clasificación y sugerencias
-9. Callback a supabase con datos enriquecidos
-```
-
-#### **Prompt Engineering Específico:**
-```
-SISTEMA: Eres un especialista en atención al cliente del concesionario {tenant_name}.
-
-CONTEXTO RECUPERADO:
-{retrieved_knowledge}
-
-RECLAMO CLIENTE:
-{original_complaint}
-
-INSTRUCCIONES:
-- Clasifica el reclamo según las políticas específicas del concesionario
-- Extrae: sucursal, tipo_reclamo, urgencia, vehiculo (patente/vin)
-- Sugiere resolución basada en el contexto recuperado
-- Mantén el tono profesional y empático característico de {tenant_name}
-
-FORMATO DE RESPUESTA JSON:
-{
-  "clasificacion": "...",
-  "urgencia": "alta|media|baja",
-  "datos_extraidos": {...},
-  "sugerencias_resolucion": [...],
-  "referencias_politicas": [...]
-}
-```
-
-### 8.3. Gestión de Conocimiento por Concesionario
-
-#### **Portal de Administración de Conocimiento:**
-* **Carga de Documentos:** Interface drag-and-drop para subir documentos
-* **Gestión de Versiones:** Control de versiones automático con rollback
-* **Categorización:** Tags y categorías personalizables por concesionario
-* **Preview y Edición:** Vista previa de chunks generados con opción de edición
-* **Métricas de Uso:** Estadísticas de qué documentos se usan más en RAG
-
-#### **Tipos de Documentos Recomendados:**
-* **Manuales de Procedimientos:** Protocolos de atención, escalación
-* **Políticas de Garantía:** Términos, condiciones, excepciones
-* **Catálogo de Productos:** Especificaciones técnicas, modelos, precios
-* **FAQ Específicos:** Preguntas frecuentes del concesionario
-* **Casos Resueltos:** Historial de resoluciones exitosas anonimizadas
-* **Normativas:** Regulaciones específicas del país/región
-
-### 8.4. Optimización y Monitoreo RAG
-
-#### **Métricas de Calidad RAG:**
-* **Precision@K:** Relevancia de documentos recuperados
-* **Response Quality Score:** Evaluación de respuestas generadas
-* **Knowledge Coverage:** Porcentaje de consultas con contexto útil
-* **Latency P95:** Tiempo de respuesta del pipeline RAG completo
-* **Cache Hit Rate:** Eficiencia de cache de embeddings
-
-#### **Optimización:**
-- **Cache Redis:** Embeddings (24h TTL), respuestas RAG (6h TTL), ~40% reducción llamadas IA
-- **Cohere Rerank:** Mejora precisión re-clasificando top chunks para mayor relevancia contextual
-
-#### **N8N Workflow para RAG:**
-```json
-{
-  "nodes": [
-    { "name": "Webhook Trigger", "type": "webhook" },
-    { "name": "Extract Tenant Config", "type": "function" },
-    { "name": "Generate Embedding (Gemini)", "type": "http" },
-    { "name": "Vector Search (Supabase)", "type": "postgres" },
-    { "name": "Rerank Documents (Cohere)", "type": "http" },
-    { "name": "Build Enhanced Prompt", "type": "function" },
-    { "name": "Generate Response (Gemini)", "type": "http" },
-    { "name": "Callback to Supabase", "type": "http" }
-  ],
-  "connections": {
-    "Webhook Trigger": { "main": [[{"node": "Extract Tenant Config", "type": "main", "index": 0}]] },
-    "Extract Tenant Config": { "main": [[{"node": "Generate Embedding (Gemini)", "type": "main", "index": 0}]] }
+  "trigger": "Email Trigger (IMAP)",
+  "host": "imap.gmail.com",
+  "user": "reclamos@concesionario.com",
+  "folder": "INBOX",
+  "pollInterval": 60000, // 1 minuto
+  "filters": {
+    "subject": "Reclamo|Queja|Problema"
   }
 }
+```
+
+**Extracción automática con IA:**
+- Nombre del cliente (del email)
+- Teléfono (si está en firma o cuerpo)
+- Descripción (cuerpo del email)
+- Patente (regex: `[A-Z]{2,4}[0-9]{2,4}`)
+
+#### **D) API REST Externa**
+
+**Endpoint:** `POST https://n8n-url/webhook/complaint/orchestrator`
+
+**Headers:**
+```json
+{
+  "Content-Type": "application/json",
+  "Authorization": "Bearer <token_tenant>"
+}
+```
+
+**Body:**
+```json
+{
+  "concesionario_id": "uuid-del-concesionario",
+  "canal_origen": "api_externa",
+  "cliente": {
+    "nombre": "Juan Pérez",
+    "rut": "12345678-9",
+    "telefono": "+56912345678",
+    "email": "juan@email.com"
+  },
+  "vehiculo": {
+    "patente": "AB1234",
+    "vin": "1HGBH41JXMN109186",
+    "marca": "Toyota",
+    "modelo": "Corolla"
+  },
+  "descripcion": "El motor hace un ruido extraño al encender",
+  "sucursal_id": "uuid-sucursal",
+  "adjuntos": [
+    "https://storage.com/foto1.jpg"
+  ]
+}
+```
+
+**Uso:**
+- Integración con CRM externo (Salesforce, HubSpot)
+- ERP del concesionario
+- Sistema de garantías externo
+- Aplicaciones móviles de terceros
+
+---
+
+### 3.2. Flujo Completo de Procesamiento de Reclamos
+
+```
+┌──────────────────────────────────────────────────┐
+│  PASO 1: RECEPCIÓN DEL RECLAMO                   │
+│  Canales: Contact Center | Web | Email | API     │
+└──────────────┬───────────────────────────────────┘
+               ↓
+┌──────────────────────────────────────────────────┐
+│  PASO 2: WEBHOOK N8N - complaint-orchestrator    │
+│  POST /webhook/complaint/orchestrator            │
+│  • Valida formato básico                         │
+│  • Extrae concesionario_id                       │
+│  • Dispara procesador RAG (async)                │
+│  • Retorna confirmación inmediata                │
+└──────────────┬───────────────────────────────────┘
+               ↓
+┌──────────────────────────────────────────────────┐
+│  PASO 3: PROCESADOR RAG                          │
+│  Workflow: procesador-rag-reclamos               │
+│                                                  │
+│  3.1. Generación de Embedding                    │
+│       Gemini Embedding 001 → vector (768 dims)   │
+│                                                  │
+│  3.2. Búsqueda Vectorial                         │
+│       Query pgvector → TOP 20-50 docs relevantes │
+│       Filtros: concesionario_id, activo=true     │
+│                                                  │
+│  3.3. Rerank con Cohere                          │
+│       Cohere Rerank → TOP 3-5 más relevantes     │
+│                                                  │
+│  3.4. Construcción de Prompt Enriquecido         │
+│       Context: documentos relevantes             │
+│       Query: reclamo original                    │
+│       Instructions: extraer datos clave          │
+│                                                  │
+│  3.5. Inferencia con Gemini 2.5 Pro              │
+│       Analiza y extrae:                          │
+│       • Tipo de reclamo (garantía, servicio)     │
+│       • Urgencia (baja/media/alta)               │
+│       • Datos estructurados (cliente, vehículo)  │
+│       • Análisis de sentimiento                  │
+│       • Sugerencias de resolución                │
+│       • Referencias a políticas aplicables       │
+└──────────────┬───────────────────────────────────┘
+               ↓
+┌──────────────────────────────────────────────────┐
+│  PASO 4: GUARDAR EN BASE DE DATOS                │
+│  INSERT INTO reclamos (                          │
+│    numero_reclamo,    ← Auto: REC-2025-001       │
+│    concesionario_id,                             │
+│    sucursal_id,                                  │
+│    cliente_id,                                   │
+│    vehiculo_id,                                  │
+│    titulo,           ← Generado por IA           │
+│    descripcion,                                  │
+│    estado,           ← 'nuevo'                   │
+│    prioridad,        ← Por IA                    │
+│    urgencia,         ← Por IA                    │
+│    canal_ingreso,    ← 'contact_center', etc     │
+│    clasificacion_ia, ← JSON completo             │
+│    sentimiento_analisis,                         │
+│    es_black_alert                                │
+│  )                                               │
+└──────────────┬───────────────────────────────────┘
+               ↓
+┌──────────────────────────────────────────────────┐
+│  PASO 5: ASIGNACIÓN AUTOMÁTICA                   │
+│  Workflow: asignacion-automatica-reclamos        │
+│                                                  │
+│  5.1. Buscar personal disponible                 │
+│       Query usuarios:                            │
+│       - concesionario_id = X                     │
+│       - rol IN ('asesor_servicio', 'jefe')       │
+│       - activo = true                            │
+│       - sucursal_id = Y (si aplica)              │
+│                                                  │
+│  5.2. Algoritmo de Asignación                    │
+│       Score basado en:                           │
+│       • Sucursal coincidente (+50 pts)           │
+│       • Especialización (+30 pts)                │
+│       • Carga trabajo baja (+20 pts)             │
+│       • Disponibilidad horaria (+10 pts)         │
+│                                                  │
+│  5.3. Asignar asesor ganador                     │
+│       UPDATE reclamos SET                        │
+│         asignado_a_user_id = 'uuid',             │
+│         estado = 'asignado',                     │
+│         fecha_asignacion = NOW()                 │
+└──────────────┬───────────────────────────────────┘
+               ↓
+┌──────────────────────────────────────────────────┐
+│  PASO 6: NOTIFICACIONES POR EMAIL                │
+│  Workflow: notificaciones-reclamos               │
+│                                                  │
+│  Envía emails personalizados a:                  │
+│                                                  │
+│  6.1. ASESOR DE SERVICIO                         │
+│       Subject: Nuevo reclamo asignado: REC-XXX   │
+│       Body:                                      │
+│       • Datos completos del reclamo              │
+│       • Historial del cliente                    │
+│       • Sugerencias de resolución (IA)           │
+│       • Link al dashboard                        │
+│                                                  │
+│  6.2. JEFE DE SERVICIO                           │
+│       Subject: Supervisión: Nuevo reclamo        │
+│       Body:                                      │
+│       • Resumen ejecutivo                        │
+│       • Asesor asignado                          │
+│       • Clasificación y urgencia                 │
+│       • Link a métricas                          │
+│                                                  │
+│  6.3. ENCARGADO DE CALIDAD                       │
+│       Subject: Análisis: Nuevo reclamo           │
+│       Body:                                      │
+│       • Clasificación IA                         │
+│       • Análisis de sentimiento                  │
+│       • Tipo y categoría                         │
+│       • Link a reportes                          │
+│                                                  │
+│  6.4. CLIENTE (confirmación)                     │
+│       Subject: Confirmación reclamo REC-XXX      │
+│       Body:                                      │
+│       • Número de reclamo                        │
+│       • Asesor asignado                          │
+│       • Tiempo estimado de resolución            │
+│       • URL de seguimiento público               │
+└──────────────┬───────────────────────────────────┘
+               ↓
+┌──────────────────────────────────────────────────┐
+│  PASO 7: ACTUALIZACIÓN EN DASHBOARD              │
+│  • Supabase Realtime notifica al frontend        │
+│  • Dashboard muestra nuevo reclamo               │
+│  • Notificación en tiempo real para usuarios     │
+│  • Métricas actualizadas automáticamente         │
+└──────────────────────────────────────────────────┘
+```
+
+---
+
+### 3.3. Campos de la Tabla Reclamos
+
+```sql
+CREATE TABLE public.reclamos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    -- Multitenant
+    concesionario_id UUID NOT NULL REFERENCES concesionarios(id),
+    sucursal_id UUID REFERENCES sucursales(id),
+
+    -- Identificación
+    numero_reclamo VARCHAR(50) NOT NULL UNIQUE, -- REC-2025-001
+    categoria_id UUID REFERENCES categorias_reclamo(id),
+
+    -- Relaciones
+    cliente_id UUID REFERENCES clientes(id),
+    vehiculo_id UUID REFERENCES vehiculos(id),
+    venta_id UUID REFERENCES ventas(id),
+    servicio_id UUID REFERENCES servicios(id),
+
+    -- Snapshot cliente (al momento del reclamo)
+    cliente_nombre VARCHAR(255) NOT NULL,
+    cliente_email VARCHAR(255),
+    cliente_telefono VARCHAR(20) NOT NULL,
+    cliente_rut VARCHAR(20),
+
+    -- Contenido
+    titulo VARCHAR(500) NOT NULL,
+    descripcion TEXT NOT NULL,
+    estado VARCHAR(20) DEFAULT 'nuevo'
+        CHECK (estado IN ('nuevo', 'asignado', 'en_proceso', 'resuelto', 'cerrado')),
+    prioridad VARCHAR(10) DEFAULT 'media'
+        CHECK (prioridad IN ('baja', 'media', 'alta', 'critica')),
+    urgencia VARCHAR(10) DEFAULT 'normal'
+        CHECK (urgencia IN ('baja', 'normal', 'alta')),
+
+    -- Canal y origen
+    canal_ingreso VARCHAR(30) NOT NULL
+        CHECK (canal_ingreso IN ('contact_center', 'email', 'web', 'api')),
+
+    -- Asignación
+    asignado_a_user_id UUID REFERENCES usuarios(id),
+
+    -- Fechas de seguimiento
+    fecha_limite_resolucion TIMESTAMP WITH TIME ZONE,
+    fecha_primera_respuesta TIMESTAMP WITH TIME ZONE,
+    fecha_resolucion TIMESTAMP WITH TIME ZONE,
+    tiempo_resolucion_horas INTEGER,
+
+    -- Satisfacción
+    satisfaccion_cliente INTEGER CHECK (satisfaccion_cliente BETWEEN 1 AND 10),
+    comentario_satisfaccion TEXT,
+
+    -- Resolución
+    es_fundado BOOLEAN,
+    motivo_no_fundado TEXT,
+    compensacion_ofrecida TEXT,
+    valor_compensacion DECIMAL(10,2),
+
+    -- Black Alert (ley del consumidor)
+    es_black_alert BOOLEAN DEFAULT false,
+
+    -- Seguimiento público
+    es_publico BOOLEAN DEFAULT false,
+    url_seguimiento TEXT,
+
+    -- Clasificación IA
+    clasificacion_ia JSONB DEFAULT '{}',
+    sentimiento_analisis JSONB DEFAULT '{}',
+
+    -- Metadatos
+    tags TEXT[] DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
+    attachments TEXT[] DEFAULT '{}',
+
+    -- Auditoría
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    UNIQUE(concesionario_id, numero_reclamo)
+);
+```
+
+**Estructura de `clasificacion_ia` (JSONB):**
+```json
+{
+  "tipo_reclamo": "garantia|servicio|financiero|atencion",
+  "categoria": "motor|frenos|electricidad|atencion_cliente",
+  "urgencia_detectada": "baja|media|alta",
+  "confianza": 0.95,
+  "datos_extraidos": {
+    "sucursal_mencionada": "Sucursal Centro",
+    "fecha_compra": "2024-06-15",
+    "kilometraje": "15000"
+  },
+  "sugerencias_resolucion": [
+    "Revisar política de garantía sección 3.2",
+    "Inspección técnica del motor",
+    "Contactar al proveedor de repuestos"
+  ],
+  "referencias_politicas": [
+    {
+      "documento": "Manual de Garantías 2024",
+      "seccion": "3.2",
+      "relevancia": 0.92
+    }
+  ],
+  "palabras_clave": ["motor", "ruido", "garantía", "falla"]
+}
+```
+
+**Estructura de `sentimiento_analisis` (JSONB):**
+```json
+{
+  "sentimiento": "negativo|neutral|positivo",
+  "score": -0.65,
+  "emociones": ["frustración", "decepción"],
+  "tono": "formal|informal|agresivo|cordial",
+  "urgencia_emocional": "alta",
+  "analisis": "Cliente muestra alta frustración por múltiples visitas sin solución"
+}
+```
+
+---
+
+### 3.4. Black Alert (Alerta Crítica)
+
+**Definición:** Reclamo de un cliente que compró un vehículo y le falla dentro de los 6 meses, pudiendo acogerse a la ley del consumidor.
+
+**Detección:**
+- Manual: checkbox en formulario de ingreso
+- Automática: IA detecta mediante análisis de fechas
+  ```
+  IF fecha_compra_vehiculo + 6 meses > fecha_actual
+     AND tipo_falla IN ['motor', 'transmision', 'frenos', 'dirección']
+  THEN es_black_alert = TRUE
+  ```
+
+**Acciones automáticas cuando es_black_alert = TRUE:**
+
+```
+┌────────────────────────────────────────────┐
+│  Workflow: alerta-black-alert              │
+├────────────────────────────────────────────┤
+│  1. Marcar reclamo con flag BLACK_ALERT    │
+│  2. Asignar máxima prioridad               │
+│  3. Reducir SLA a 24 horas                 │
+│  4. Envío masivo de emails a:              │
+│     • Encargado de Calidad                 │
+│     • Jefe de Servicio                     │
+│     • Asesor de Servicio                   │
+│     • Gerente General                      │
+│     • Equipo Legal (si configurado)        │
+│  5. Mostrar alerta roja en dashboard       │
+│  6. Registrar en log de auditoría          │
+│  7. Notificar a cliente vía email          │
+└────────────────────────────────────────────┘
+```
+
+**Template de email Black Alert:**
+```
+Subject: ALERTA: BLACK ALERT - Reclamo REC-2025-XXX - Acción Inmediata Requerida
+
+Estimado/a [Nombre],
+
+Se ha registrado un BLACK ALERT que requiere atención inmediata según la ley del consumidor.
+
+DATOS DEL RECLAMO:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Número: REC-2025-XXX
+• Cliente: Juan Pérez - +56912345678
+• Vehículo: Toyota Corolla - AB1234
+• Fecha Compra: 15/08/2024 (Hace 4 meses)
+• Problema: Motor falla al encender
+• Sentimiento: Alto nivel de frustración
+
+ACCIONES REQUERIDAS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Contactar al cliente en menos de 4 horas
+- Revisar política de garantía aplicable
+- Coordinar inspección técnica urgente
+- Preparar solución o compensación
+
+SLA: 24 HORAS PARA RESOLUCIÓN
+
+Ver detalles: [Link al dashboard]
+
+Generado automáticamente por Optima-Complaints
+```
+
+---
+
+### 3.5. Estados del Ciclo de Vida
+
+```
+nuevo
+  ↓ (asignación automática)
+asignado
+  ↓ (asesor inicia gestión)
+en_proceso
+  ↓ (asesor marca como resuelto)
+resuelto
+  ↓ (cliente confirma o auto-cierre en 7 días)
+cerrado
+```
+
+**Triggers automáticos:**
+- `nuevo` → `asignado`: Inmediato (workflow N8N)
+- `asignado` → `en_proceso`: Manual (asesor actualiza)
+- `en_proceso` → `resuelto`: Manual (asesor finaliza)
+- `resuelto` → `cerrado`: Auto después de 7 días o manual por cliente
+
+**Registro de auditoría:**
+Cada cambio de estado crea entrada en `seguimientos_reclamo`:
+```sql
+INSERT INTO seguimientos_reclamo (
+    reclamo_id,
+    user_id,
+    tipo_seguimiento,
+    descripcion,
+    estado_anterior,
+    estado_nuevo,
+    created_at
+)
+```
+
+---
+
+## 4. Workflows N8N (13 Workflows Principales)
+
+### 4.1. Orquestación
+
+#### **complaint-orchestrator.json**
+**Función:** Punto de entrada para todos los reclamos
+
+**Nodos:**
+1. **Webhook Trigger** - Recibe POST requests
+2. **Validate Input** - Valida formato JSON
+3. **Extract Tenant** - Obtiene concesionario_id
+4. **Trigger RAG Processor** - Dispara procesamiento (async)
+5. **Success Response** - HTTP 200 con confirmación
+
+**Webhook URL:**
+```
+POST https://n8n-url/webhook/complaint/orchestrator
+
+Body:
+{
+  "concesionario_id": "uuid",
+  "canal_origen": "contact_center",
+  "cliente": {...},
+  "descripcion": "...",
+  "vehiculo": {...}
+}
+```
+
+---
+
+### 4.2. Procesamiento RAG
+
+#### **procesador-rag-reclamos.json**
+**Función:** Pipeline completo de RAG (Retrieval Augmented Generation)
+
+**Nodos principales:**
+1. **Webhook Input** - Recibe del orchestrator
+2. **Load Tenant Config** - Carga configuración del concesionario
+3. **Generate Embedding** - Llama Gemini Embedding 001
+4. **Vector Search** - Query a Supabase pgvector
+5. **Cohere Rerank** - Re-clasifica resultados
+6. **Build Enhanced Prompt** - Construye prompt con contexto
+7. **Gemini Analysis** - Llama Gemini 2.5 Pro
+8. **Parse JSON Response** - Extrae clasificación
+9. **Save to Supabase** - INSERT en tabla reclamos
+10. **Trigger Notifications** - Dispara workflow de notificaciones
+
+**Ejemplo de prompt enriquecido:**
+```
+SISTEMA: Eres un especialista en atención al cliente del concesionario [NOMBRE].
+
+CONTEXTO RECUPERADO:
+[DOCUMENTO 1] Manual de Garantías 2024 - Sección 3.2
+"Los vehículos nuevos tienen garantía de motor por 3 años o 100,000 km..."
+
+[DOCUMENTO 2] Procedimiento de Reclamos
+"Para fallas de motor, seguir el siguiente protocolo..."
+
+RECLAMO DEL CLIENTE:
+Cliente: Juan Pérez
+Vehículo: Toyota Corolla - AB1234
+Descripción: "El motor hace un ruido extraño al encender en las mañanas. Compré el auto hace 4 meses y esto no debería pasar."
+
+INSTRUCCIONES:
+1. Clasifica el reclamo según las políticas del concesionario
+2. Extrae datos estructurados
+3. Determina urgencia
+4. Sugiere pasos de resolución basados en el contexto
+5. Identifica si es Black Alert (falla <6 meses)
+
+FORMATO DE RESPUESTA (JSON):
+{
+  "tipo_reclamo": "garantia|servicio|financiero|atencion",
+  "categoria": "motor|frenos|...",
+  "urgencia": "baja|media|alta",
+  "es_black_alert": true|false,
+  "datos_extraidos": {...},
+  "sugerencias_resolucion": [...],
+  "referencias_politicas": [...],
+  "analisis_sentimiento": {...}
+}
+```
+
+---
+
+#### **generador-embeddings.json**
+**Función:** Genera embeddings para búsqueda vectorial
+
+**Flujo:**
+1. Recibe texto a vectorizar
+2. Valida longitud (max 8192 tokens)
+3. Llama API Gemini Embedding 001
+4. Valida dimensiones (768)
+5. Cache en Redis (TTL: 24h)
+6. Retorna vector
+
+**Configuración Gemini:**
+```javascript
+{
+  "model": "models/embedding-001",
+  "content": {
+    "parts": [{
+      "text": "{{$json.text}}"
+    }]
+  }
+}
+```
+
+---
+
+#### **rerank-cohere-documentos.json**
+**Función:** Re-clasifica documentos para mayor precisión
+
+**Entrada:**
+- Query original
+- Array de documentos (TOP 20-50)
+
+**Proceso:**
+1. Envía a Cohere Rerank API
+2. Obtiene relevance_score para cada doc
+3. Ordena por score descendente
+4. Retorna TOP 3-5
+
+**API Call:**
+```javascript
+{
+  "model": "rerank-english-v2.0",
+  "query": "{{$json.query}}",
+  "documents": "{{$json.documents}}",
+  "top_n": 5
+}
+```
+
+---
+
+### 4.3. Gestión de Conocimiento
+
+#### **ingesta-conocimiento.json**
+**Función:** Valida e ingesta documentos nuevos
+
+**Pasos:**
+1. Validar formato (PDF, DOCX, TXT, MD)
+2. Validar tamaño (max 10MB)
+3. Escaneo de malware
+4. Extraer texto
+5. Disparar fragmentación
+
+#### **fragmentacion-conocimiento.json**
+**Función:** Divide documentos en chunks
+
+**Estrategia:**
+- Chunk size: 512 tokens
+- Overlap: 50 tokens
+- Preserva estructura (párrafos, secciones)
+- Genera metadata por fragmento
+
+#### **almacenamiento-conocimiento.json**
+**Función:** Persiste fragmentos en BD
+
+**Operaciones:**
+1. Genera embedding por fragmento
+2. INSERT en knowledge_base
+3. INSERT en knowledge_fragments
+4. Actualiza índices vectoriales
+5. Marca como activo
+
+---
+
+### 4.4. Asignación y Notificaciones
+
+#### **asignacion-automatica-reclamos.json**
+**Función:** Asigna reclamos a asesores disponibles
+
+**Algoritmo de scoring:**
+```javascript
+function calculateScore(asesor, reclamo) {
+  let score = 0;
+
+  // Sucursal coincidente
+  if (asesor.sucursal_id === reclamo.sucursal_id) {
+    score += 50;
+  }
+
+  // Especialización
+  if (asesor.especializacion.includes(reclamo.tipo)) {
+    score += 30;
+  }
+
+  // Carga de trabajo (menos es mejor)
+  const cargaActual = asesor.reclamos_activos || 0;
+  score += Math.max(0, 20 - cargaActual);
+
+  // Disponibilidad horaria
+  if (asesor.disponible && isWithinBusinessHours()) {
+    score += 10;
+  }
+
+  return score;
+}
+```
+
+#### **notificaciones-reclamos.json**
+**Función:** Envía emails personalizados por rol
+
+**Templates:**
+- `asesor-asignacion.html`
+- `jefe-supervision.html`
+- `encargado-calidad.html`
+- `cliente-confirmacion.html`
+
+**SMTP Configuration:**
+```javascript
+{
+  "host": "smtp.gmail.com",
+  "port": 587,
+  "secure": false,
+  "auth": {
+    "user": "{{$env.SMTP_USER}}",
+    "pass": "{{$env.SMTP_PASSWORD}}"
+  }
+}
+```
+
+---
+
+### 4.5. Black Alerts y Auditoría
+
+#### **alerta-black-alert.json**
+**Función:** Notificación masiva para casos críticos
+
+**Trigger:** `es_black_alert = true`
+
+**Acciones:**
+1. Obtener lista de destinatarios críticos
+2. Preparar email con máxima urgencia
+3. Enviar en paralelo a múltiples roles
+4. Registrar en audit log
+5. Actualizar dashboards
+
+#### **auditor-modificaciones.json**
+**Función:** Registra todas las modificaciones
+
+**Datos capturados:**
+- Usuario que hizo el cambio
+- Timestamp
+- Estado anterior y nuevo
+- Campos modificados
+- Valores antes/después
+- Identificador de sesión
+
+---
+
+### 4.6. Métricas y Optimización
+
+#### **agregador-metricas-reclamos.json**
+**Función:** Compila métricas diarias/semanales
+
+**KPIs generados:**
+- Total reclamos por estado
+- Promedio de resolución (horas)
+- Distribución por urgencia
+- Black Alerts detectados
+- Satisfacción promedio
+- Performance por asesor
+- Documentos RAG más usados
+
+#### **escaner-malware-documentos.json**
+**Función:** Análisis de seguridad de documentos
+
+**Proceso:**
+1. Intercepta documento antes de procesar
+2. Valida firma de archivo
+3. Escaneo con servicio anti-malware
+4. Verifica tamaño y tipo
+5. Rechaza si hay amenaza
+6. Registra intento sospechoso
+
+---
+
+## 5. Base de Datos - Esquema Completo
+
+### 5.1. Tablas Principales
+
+#### **categorias_reclamo**
+```sql
+CREATE TABLE public.categorias_reclamo (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    concesionario_id UUID NOT NULL REFERENCES concesionarios(id),
+
+    -- Información básica
+    nombre VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    color VARCHAR(7) DEFAULT '#6B7280',
+    icono VARCHAR(50),
+
+    -- Configuración
+    es_activa BOOLEAN DEFAULT true,
+    orden INTEGER DEFAULT 1,
+    tiempo_resolucion_estimado INTEGER, -- horas
+    requiere_escalamiento BOOLEAN DEFAULT false,
+    nivel_prioridad VARCHAR(10) DEFAULT 'media',
+
+    -- Automatización
+    departamento_responsable VARCHAR(100),
+    flujo_resolucion JSONB DEFAULT '{}',
+    plantilla_respuesta TEXT,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+    UNIQUE(concesionario_id, nombre)
+);
+```
+
+#### **reclamos**
+(Ver sección 3.3 para definición completa)
+
+#### **seguimientos_reclamo**
+```sql
+CREATE TABLE public.seguimientos_reclamo (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reclamo_id UUID NOT NULL REFERENCES reclamos(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES usuarios(id),
+
+    -- Tipo
+    tipo_seguimiento VARCHAR(30) NOT NULL CHECK (tipo_seguimiento IN (
+        'comentario', 'cambio_estado', 'asignacion', 'resolucion',
+        'comunicacion_cliente', 'escalamiento', 'documentacion'
+    )),
+
+    -- Contenido
+    titulo VARCHAR(255),
+    descripcion TEXT NOT NULL,
+
+    -- Visibilidad
+    es_publico BOOLEAN DEFAULT false,
+    es_respuesta_automatica BOOLEAN DEFAULT false,
+
+    -- Tracking de cambios
+    estado_anterior VARCHAR(20),
+    estado_nuevo VARCHAR(20),
+    asignado_anterior VARCHAR(255),
+    asignado_nuevo VARCHAR(255),
+
+    -- Comunicación
+    canal_comunicacion VARCHAR(30),
+    tiempo_dedicado_minutos INTEGER DEFAULT 0,
+
+    -- Adjuntos
+    attachments TEXT[] DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
+
+    -- Notificaciones
+    notificado_cliente BOOLEAN DEFAULT false,
+    fecha_notificacion TIMESTAMP WITH TIME ZONE,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+---
+
+### 5.2. Sistema RAG
+
+#### **knowledge_base**
+```sql
+CREATE TABLE public.knowledge_base (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    concesionario_id UUID NOT NULL REFERENCES concesionarios(id),
+
+    -- Contenido
+    titulo VARCHAR(500) NOT NULL,
+    contenido TEXT NOT NULL,
+    resumen TEXT,
+
+    -- Categorización
+    categoria VARCHAR(100),
+    subcategoria VARCHAR(100),
+    tags TEXT[] DEFAULT '{}',
+
+    -- Vectorización
+    embedding VECTOR(768), -- Gemini Embedding 001
+    embedding_model VARCHAR(50) DEFAULT 'gemini-embedding-001',
+    embedding_generated_at TIMESTAMP WITH TIME ZONE,
+
+    -- Metadatos
+    fuente_original VARCHAR(500),
+    tipo_documento VARCHAR(50),
+    version VARCHAR(20) DEFAULT '1.0',
+    idioma VARCHAR(5) DEFAULT 'es',
+
+    -- Configuración
+    activo BOOLEAN DEFAULT true,
+    publico BOOLEAN DEFAULT false,
+    prioridad INTEGER DEFAULT 5,
+    nivel_acceso VARCHAR(20) DEFAULT 'general',
+
+    -- Métricas
+    veces_usado INTEGER DEFAULT 0,
+    ultima_utilizacion TIMESTAMP WITH TIME ZONE,
+    efectividad_promedio DECIMAL(3,2),
+
+    -- Auditoría
+    created_by UUID REFERENCES usuarios(id),
+    approved_by UUID REFERENCES usuarios(id),
+    fecha_aprobacion TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Índice vectorial IVFFlat
+CREATE INDEX idx_knowledge_base_embedding
+ON knowledge_base
+USING ivfflat (embedding vector_cosine_ops)
+WITH (lists = 100);
+```
+
+#### **knowledge_fragments**
+```sql
+CREATE TABLE public.knowledge_fragments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    knowledge_base_id UUID NOT NULL REFERENCES knowledge_base(id) ON DELETE CASCADE,
+    concesionario_id UUID NOT NULL REFERENCES concesionarios(id),
+
+    -- Contenido del fragmento
+    fragmento TEXT NOT NULL,
+    orden_fragmento INTEGER NOT NULL,
+
+    -- Vectorización
+    embedding VECTOR(768),
+
+    -- Contexto
+    palabras_clave TEXT[] DEFAULT '{}',
+    contexto_previo TEXT,
+    contexto_posterior TEXT,
+
+    -- Control
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Índice vectorial
+CREATE INDEX idx_knowledge_fragments_embedding
+ON knowledge_fragments
+USING ivfflat (embedding vector_cosine_ops)
+WITH (lists = 100);
+```
+
+#### **rag_interactions**
+```sql
+CREATE TABLE public.rag_interactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    -- Consulta
+    query_original TEXT NOT NULL,
+    query_embedding VECTOR(768),
+
+    -- Contexto
+    contexto_tipo VARCHAR(50), -- 'reclamo', 'consulta', etc.
+    contexto_id UUID,
+    canal_origen VARCHAR(30),
+    concesionario_id UUID NOT NULL REFERENCES concesionarios(id),
+
+    -- Resultados
+    knowledge_docs_found JSONB DEFAULT '[]',
+    knowledge_fragments_used JSONB DEFAULT '[]',
+    respuesta_generada TEXT,
+    prompt_utilizado TEXT,
+    modelo_ia_usado VARCHAR(50),
+
+    -- Métricas
+    relevancia_score DECIMAL(3,2),
+    tiempo_procesamiento_ms INTEGER,
+    resolvio_consulta BOOLEAN,
+
+    -- Feedback
+    feedback_positivo BOOLEAN,
+    comentario_feedback TEXT,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+---
+
+### 5.3. Configuración Multitenant
+
+#### **tenant_configurations**
+```sql
+CREATE TABLE public.tenant_configurations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    concesionario_id UUID NOT NULL UNIQUE REFERENCES concesionarios(id),
+
+    -- Email/SMTP
+    email_config JSONB DEFAULT '{
+        "smtp_host": "",
+        "smtp_port": 587,
+        "smtp_user": "",
+        "smtp_password": "",
+        "from_email": "",
+        "from_name": ""
+    }',
+
+    -- IA/Gemini
+    ai_config JSONB DEFAULT '{
+        "provider": "google",
+        "api_key": "",
+        "model": "gemini-2.5-pro",
+        "embedding_model": "gemini-embedding-001",
+        "temperature": 0.7,
+        "max_tokens": 2048
+    }',
+
+    -- RAG
+    rag_config JSONB DEFAULT '{
+        "search_k": 20,
+        "similarity_threshold": 0.7,
+        "rerank_top_n": 5,
+        "use_cohere": true
+    }',
+
+    -- Workflows N8N
+    workflow_variables JSONB DEFAULT '{
+        "brand_colors": {
+            "primary": "#3B82F6",
+            "secondary": "#10B981"
+        },
+        "business_hours": {
+            "start": "09:00",
+            "end": "18:00",
+            "timezone": "America/Santiago"
+        },
+        "sla_hours": {
+            "normal": 48,
+            "urgent": 24,
+            "black_alert": 4
+        }
+    }',
+
+    -- URLs
+    n8n_webhook_base_url VARCHAR(500),
+    frontend_base_url VARCHAR(500),
+
+    -- Estado
+    activo BOOLEAN DEFAULT true,
+    configuracion_completa BOOLEAN DEFAULT false,
+
+    -- Auditoría
+    created_by UUID REFERENCES usuarios(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+```
+
+---
+
+### 5.4. Row Level Security (RLS)
+
+**Políticas de aislamiento multitenant:**
+
+```sql
+-- Habilitar RLS en todas las tablas
+ALTER TABLE public.reclamos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.seguimientos_reclamo ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.categorias_reclamo ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.knowledge_base ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.knowledge_fragments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_interactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tenant_configurations ENABLE ROW LEVEL SECURITY;
+
+-- Policy para reclamos
+CREATE POLICY "Reclamos are tenant isolated"
+ON public.reclamos
+FOR ALL
+USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
+
+-- Policy para seguimientos
+CREATE POLICY "Seguimientos are tenant isolated"
+ON public.seguimientos_reclamo
+FOR ALL
+USING (
+    EXISTS (
+        SELECT 1 FROM public.reclamos
+        WHERE id = seguimientos_reclamo.reclamo_id
+        AND concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID
+    )
+);
+
+-- Policy para knowledge base
+CREATE POLICY "Knowledge base is tenant isolated"
+ON public.knowledge_base
+FOR ALL
+USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
+
+-- Policy para RAG interactions
+CREATE POLICY "RAG interactions are tenant isolated"
+ON public.rag_interactions
+FOR ALL
+USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
+```
+
+---
+
+## 6. Frontend - Estructura de Componentes
+
+### 6.1. Páginas Principales
+
+```
+frontend/src/app/
+├── (auth)/
+│   ├── login/
+│   │   └── page.tsx              # Login con Supabase Auth
+│   └── register/
+│       └── page.tsx              # Registro de usuarios
+├── dashboard/
+│   ├── page.tsx                  # Dashboard principal
+│   ├── reclamos/
+│   │   ├── page.tsx              # Lista de reclamos
+│   │   ├── [id]/
+│   │   │   └── page.tsx          # Detalle de reclamo
+│   │   └── nuevo/
+│   │       └── page.tsx          # Formulario nuevo reclamo
+│   ├── conocimiento/
+│   │   ├── page.tsx              # Gestión de base de conocimiento
+│   │   └── nuevo/
+│   │       └── page.tsx          # Upload de documentos
+│   ├── metricas/
+│   │   └── page.tsx              # Dashboard de métricas
+│   └── configuracion/
+│       └── page.tsx              # Configuración del concesionario
+└── seguimiento/
+    └── [token]/
+        └── page.tsx              # Portal público de seguimiento
+```
+
+### 6.2. Componentes Reutilizables
+
+```
+frontend/src/components/
+├── reclamos/
+│   ├── ComplaintsTable.tsx       # Tabla de reclamos con filtros
+│   ├── ComplaintDetail.tsx       # Vista detallada
+│   ├── ComplaintForm.tsx         # Formulario de creación
+│   ├── ComplaintStatusBadge.tsx  # Badge de estado
+│   ├── BlackAlertIndicator.tsx   # Indicador de Black Alert
+│   └── AuditTimeline.tsx         # Timeline de auditoría
+├── knowledge/
+│   ├── DocumentUploader.tsx      # Upload con drag & drop
+│   ├── DocumentList.tsx          # Lista de documentos
+│   └── FragmentViewer.tsx        # Visualización de chunks
+├── dashboard/
+│   ├── StatsCards.tsx            # Cards de métricas
+│   ├── RecentComplaints.tsx      # Reclamos recientes
+│   ├── AlertsPanel.tsx           # Panel de alertas
+│   └── PerformanceChart.tsx      # Gráficos de performance
+└── ui/
+    ├── Button.tsx                # Radix UI Button
+    ├── Input.tsx                 # Input con validación
+    ├── Select.tsx                # Select con search
+    ├── Table.tsx                 # TanStack Table wrapper
+    ├── Dialog.tsx                # Modal dialogs
+    └── Toast.tsx                 # Notificaciones toast
+```
+
+### 6.3. Formulario de Nuevo Reclamo
+
+**Componente:** `ComplaintForm.tsx`
+
+**Campos:**
+```typescript
+interface ComplaintFormData {
+  // Cliente
+  cliente_nombre: string;          // required
+  cliente_rut: string;             // optional
+  cliente_telefono: string;        // required, formato: +56912345678
+  cliente_email: string;           // optional, formato email
+
+  // Vehículo
+  vehiculo_patente: string;        // required, formato: AB1234
+  vehiculo_vin?: string;           // optional
+  vehiculo_marca?: string;         // optional
+  vehiculo_modelo?: string;        // optional
+
+  // Reclamo
+  sucursal_id: string;             // required, select
+  categoria_id?: string;           // optional, select
+  titulo: string;                  // auto-generated or manual
+  descripcion: string;             // required, min 20 chars
+  es_black_alert: boolean;         // checkbox
+
+  // Adjuntos
+  attachments: File[];             // optional, max 5 files, 10MB total
+}
+```
+
+**Validación con Zod:**
+```typescript
+import { z } from 'zod';
+
+const complaintSchema = z.object({
+  cliente_nombre: z.string().min(3, 'Mínimo 3 caracteres'),
+  cliente_telefono: z.string().regex(/^\+56\d{9}$/, 'Formato: +56912345678'),
+  cliente_email: z.string().email().optional().or(z.literal('')),
+  vehiculo_patente: z.string().regex(/^[A-Z]{2,4}\d{2,4}$/, 'Formato: AB1234'),
+  descripcion: z.string().min(20, 'Mínimo 20 caracteres'),
+  sucursal_id: z.string().uuid('Seleccione una sucursal'),
+  es_black_alert: z.boolean(),
+});
+```
+
+**Flujo de submit:**
+```typescript
+async function handleSubmit(data: ComplaintFormData) {
+  try {
+    // 1. Validar formulario
+    complaintSchema.parse(data);
+
+    // 2. Upload adjuntos a Supabase Storage
+    const attachmentUrls = await uploadAttachments(data.attachments);
+
+    // 3. Llamar a API
+    const response = await fetch('/api/reclamos/crear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...data,
+        attachments: attachmentUrls,
+        canal_origen: 'contact_center',
+      }),
+    });
+
+    // 4. Mostrar confirmación
+    const reclamo = await response.json();
+    toast.success(`Reclamo ${reclamo.numero_reclamo} creado exitosamente`);
+
+    // 5. Redirigir a detalle
+    router.push(`/dashboard/reclamos/${reclamo.id}`);
+  } catch (error) {
+    toast.error('Error al crear reclamo');
+  }
+}
+```
+
+---
+
+### 6.4. Tabla de Reclamos
+
+**Componente:** `ComplaintsTable.tsx`
+
+**Columnas:**
+- Número de reclamo (REC-2025-001)
+- Cliente
+- Vehículo (patente)
+- Estado (badge con color)
+- Urgencia (badge)
+- Black Alert ( indicador)
+- Asignado a
+- Fecha de creación
+- Acciones (ver, editar)
+
+**Filtros:**
+- Estado (multiselect)
+- Urgencia (multiselect)
+- Black Alert (checkbox)
+- Sucursal (select)
+- Rango de fechas (date picker)
+- Búsqueda (número, cliente, patente)
+
+**Sorting:**
+- Por cualquier columna
+- Ascendente/descendente
+- Multi-column sort
+
+**Paginación:**
+- Rows per page: 10, 25, 50, 100
+- Navegación: primera, anterior, siguiente, última
+- Total de registros
+
+---
+
+## 7. Despliegue e Infraestructura
+
+### 7.1. Arquitectura de Despliegue
+
+```
+┌─────────────────────────────────────────────────┐
+│              INTERNET                           │
+└────────────┬────────────────────────────────────┘
+             │
+      ┌──────┴──────┐
+      │             │
+      ↓             ↓
+┌──────────┐  ┌──────────┐
+│ Frontend │  │   N8N    │
+│  Vercel  │  │ Railway  │
+│ Next.js  │  │ Workflows│
+└────┬─────┘  └────┬─────┘
+     │             │
+     └──────┬──────┘
+            ↓
+    ┌───────────────┐
+    │   Supabase    │
+    │  PostgreSQL   │
+    │  + pgvector   │
+    │  + Auth       │
+    │  + Realtime   │
+    │  + Storage    │
+    └───────────────┘
+            │
+    ┌───────┴────────┐
+    │                │
+    ↓                ↓
+┌─────────┐    ┌─────────┐
+│ Gemini  │    │ Cohere  │
+│  2.5    │    │ Rerank  │
+└─────────┘    └─────────┘
+```
+
+### 7.2. Costos Mensuales Estimados
+
+```
+Supabase Pro:        $25/mes
+Railway (N8N):       $20/mes
+Vercel Hobby:        $0/mes (o Pro $20/mes)
+Gemini API:          ~$50/mes (según uso)
+Cohere Rerank:       ~$20/mes (según uso)
+────────────────────────────────
+Total:              $115-135/mes
+```
+
+**Uso estimado de Gemini:**
+- 1000 reclamos/mes
+- Promedio 500 tokens por reclamo
+- Embeddings + Análisis = ~$40-50/mes
+
+### 7.3. Variables de Entorno
+
+**Frontend (.env.local):**
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+
+# N8N
+NEXT_PUBLIC_N8N_WEBHOOK_URL=https://n8n.railway.app
+
+# App
+NEXT_PUBLIC_APP_URL=https://complaints.concesionario.com
+```
+
+**N8N:**
+```env
+# Supabase
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_KEY=eyJ...
+
+# Gemini
+GEMINI_API_KEY=AIzaSy...
+
+# Cohere
+COHERE_API_KEY=3a...
+
+# SMTP (Gmail)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=noreply@concesionario.com
+SMTP_PASSWORD=app_password
+
+# Redis (opcional, para cache)
+REDIS_URL=redis://...
+```
+
+---
+
+## 8. Métricas y KPIs
+
+### 8.1. Dashboard Principal
+
+**KPIs principales:**
+- Total de reclamos (período)
+- Reclamos nuevos (últimas 24h)
+- Reclamos en proceso
+- Reclamos resueltos
+- Black Alerts activos
+- Tiempo promedio de resolución
+- Satisfacción promedio (1-10)
+- Tasa de resolución en SLA
+
+**Gráficos:**
+- Evolución de reclamos (línea temporal)
+- Distribución por estado (pie chart)
+- Distribución por urgencia (bar chart)
+- Reclamos por sucursal (bar chart)
+- Performance por asesor (table)
+- Análisis de sentimiento (gauge)
+
+### 8.2. Métricas RAG
+
+**Efectividad del sistema:**
+- Documentos recuperados por consulta (promedio)
+- Relevancia promedio (similarity score)
+- Documentos más utilizados (ranking)
+- Tasa de éxito de clasificación IA
+- Tiempo de procesamiento RAG (ms)
+- Cache hit rate
+
+---
+
+## 9. Testing y Calidad
+
+### 9.1. Testing del Frontend
+
+```bash
+# Unit tests (Jest + React Testing Library)
+npm test
+
+# E2E tests (Playwright)
+npm run test:e2e
+
+# Coverage
+npm run test:coverage
+```
+
+### 9.2. Testing de Workflows N8N
+
+**Test workflow:** `test-conectividad-supabase.json`
+- Valida conexión a Supabase
+- Valida permisos RLS
+- Valida credenciales
+
+**Test de integración:**
+- Crear reclamo de prueba
+- Validar procesamiento RAG
+- Validar asignación automática
+- Validar envío de emails
+
+---
+
+## 10. Roadmap Futuro
+
+### Fase 1 (Q1 2025) - Completado 
+- [x] Sistema de reclamos básico
+- [x] Ingreso manual por Contact Center
+- [x] Clasificación con IA
+- [x] Asignación automática
+- [x] Notificaciones por email
+
+### Fase 2 (Q2 2025) - En Desarrollo
+- [ ] Formulario web público
+- [ ] Ingreso por email automático
+- [ ] Portal de seguimiento público
+- [ ] Dashboard de métricas avanzado
+- [ ] Sistema RAG optimizado
+
+### Fase 3 (Q3 2025) - Planeado
+- [ ] API REST pública
+- [ ] Mobile app (iOS + Android)
+- [ ] Integración con CRM externos
+- [ ] Predicción de churn con ML
+- [ ] Chatbot conversacional
+
+### Fase 4 (Q4 2025) - Futuro
+- [ ] Multi-idioma (inglés, portugués)
+- [ ] Integración con Zendesk/Salesforce
+- [ ] Dashboard analítico con BI
+- [ ] Automatización avanzada con n8n
+
+---
+
+## 11. Convenciones de Código
+
+### 11.1. TypeScript
+
+```typescript
+//  Usar interfaces para objetos
+interface Reclamo {
+  id: string;
+  numero_reclamo: string;
+  estado: ReclamoEstado;
+}
+
+//  Usar types para unions y primitivos
+type ReclamoEstado = 'nuevo' | 'asignado' | 'en_proceso' | 'resuelto' | 'cerrado';
+
+//  Funciones con tipo de retorno explícito
+async function crearReclamo(data: ComplaintFormData): Promise<Reclamo> {
+  // ...
+}
+```
+
+### 11.2. Naming Conventions
+
+```typescript
+// Componentes: PascalCase
+export function ComplaintForm() {}
+
+// Funciones: camelCase
+function handleSubmit() {}
+
+// Constantes: UPPER_SNAKE_CASE
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+
+// Archivos: kebab-case
+// complaint-form.tsx
+// use-complaints.ts
+```
+
+### 11.3. Estructura de Archivos
+
+```
+Máximo 150 líneas por archivo
+Máximo 30 líneas por función
+Una responsabilidad por componente
+Extraer lógica compleja a custom hooks
+Separar tipos en archivos .types.ts
+```
+
+---
+
+## 12. Comandos Útiles
+
+### 12.1. Desarrollo
+
+```bash
+# Instalar dependencias
+npm install
+
+# Dev mode
+npm run dev
+
+# Build
+npm run build
+
+# Lint
+npm run lint
+
+# Format
+npm run format
+```
+
+### 12.2. Base de Datos
+
+```bash
+# Aplicar migraciones
+npx supabase db push
+
+# Reset BD (cuidado!)
+npx supabase db reset
+
+# Generar tipos TypeScript
+npx supabase gen types typescript --local > types/supabase.ts
+```
+
+### 12.3. N8N
+
+```bash
+# Exportar workflow
+n8n export:workflow --id=123 --output=workflow.json
+
+# Importar workflow
+n8n import:workflow --input=workflow.json
+
+# Ejecutar workflow
+n8n execute --id=123
+```
+
+---
+
+## 13. Soporte y Documentación
+
+**Contacto:** bastian.berrios@ejemplo.com
+
+**Documentación adicional:**
+- `/docs/deployment/` - Guías de despliegue
+- `/docs/api/` - API reference
+- `README.md` - Quick start guide
+
+**Issues y bugs:** https://github.com/BastianBerriosalarcon/optima-complaints/issues
+
+---
+
+*Última actualización: 27 de Octubre 2025*
+*Versión: 2.0.0 - Optima-Complaints (sin WhatsApp/Chatwoot)*

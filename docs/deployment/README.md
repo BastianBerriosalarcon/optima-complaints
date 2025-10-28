@@ -1,220 +1,104 @@
-# OptimaCx GCP - n8n Cloud Run Deployment
+# Optima-Complaints - Arquitectura y Despliegue
 
-Sistema de automatización para el proyecto OptimaCx desplegado en Google Cloud Run.
+Este documento describe la arquitectura y el despliegue del proyecto Optima-Complaints, una plataforma SaaS para la gestión inteligente de reclamos en el sector automotriz.
 
-## 🚀 Estado del Proyecto
+## Estado del Proyecto
 
-**✅ ACTIVO y FUNCIONANDO**
-- **n8n URL:** https://n8n-optima-cx-e6nurdtj6a-tl.a.run.app
-- **Base de Datos:** n8n-optima-cx-postgres (Cloud SQL)
-- **Región:** southamerica-west1
-- **Último Deploy:** 2025-07-04T20:41:11.403042Z
+**ACTIVO y EN DESARROLLO**
+- **Frontend URL:** Desplegado en Vercel/Cloudflare Pages (según configuración).
+- **N8N URL:** Desplegado en Railway/GCP (según configuración).
+- **Base de Datos:** Supabase Cloud.
 
-## 📋 Descripción del Proyecto
+## Descripción del Proyecto
 
-OptimaCx es una plataforma multitenant de experiencia al cliente para el sector automotriz que utiliza n8n como motor de automatización para:
+Optima-Complaints es una plataforma multitenant que utiliza N8N como motor de automatización para la **Gestión de Reclamos con IA**, incluyendo:
 
-- ✅ **Sistema de Encuestas Multi-canal:** QR, WhatsApp, Contact Center
-- ✅ **Gestión de Reclamos con IA:** Procesamiento automatizado con RAG
-- ✅ **Multitenant:** Aislamiento completo por concesionario
-- ✅ **Automatización Inteligente:** Workflows personalizados
+- Procesamiento automatizado con RAG (Retrieval Augmented Generation).
+- Aislamiento completo por concesionario (multitenant).
+- Workflows de notificación y asignación inteligentes.
 
-## 🏗️ Arquitectura Actual
+## Arquitectura Actual
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Google Cloud Platform                    │
-├─────────────────────────────────────────────────────────────────┤
-│  Cloud Run: n8n-optima-cx                                      │
-│  ├── n8n Workflows                                             │
-│  ├── Custom Nodes (RAG System)                                 │
-│  ├── OptimaCx Integrations                                     │
-│  └── Multi-tenant Configuration                                │
-├─────────────────────────────────────────────────────────────────┤
-│  Cloud SQL: n8n-optima-cx-postgres                             │
-│  ├── PostgreSQL 15                                             │
-│  ├── pgvector Extension                                        │
-│  ├── n8n Workflows Data                                        │
-│  └── OptimaCx Multi-tenant Data                                │
-├─────────────────────────────────────────────────────────────────┤
-│  AI/ML Services                                                │
-│  ├── Gemini 2.5 Pro (LLM)                                     │
-│  ├── Text-Embedding-004 (Embeddings)                          │
-│  └── Vertex AI Vector Search                                   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## 📁 Estructura del Proyecto
+La plataforma se compone de tres servicios principales que operan de forma desacoplada:
 
 ```
-n8n-cloudrun-deployment/
-├── custom-nodes/                    # Nodos personalizados n8n
-│   └── rag-system/                 # Sistema RAG OptimaCx
-│       └── credentials/            # Credenciales n8n
-├── docker/                         # Configuración Docker
-├── src/                           # Código fuente
-│   ├── config/                    # Configuraciones
-│   └── monitoring/                # Monitoreo y métricas
-├── terraform/                     # Infraestructura como código
-│   └── terraform.tfstate.backup   # Backup del estado
-├── tests/                         # Pruebas
-├── migration-backup/              # Logs de migración
-│   └── migration.log             # Log de migración ActivePieces → n8n
-└── README.md                      # Este archivo
+┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+│     Frontend     │      │   Automatización │      │      Backend     │
+│ (Next.js/Vercel) ├──────►│   (N8N/Railway)  ├──────►│(Supabase/PostgreSQL)│
+└──────────────────┘      └──────────────────┘      └──────────────────┘
+         ▲                       │                       ▲
+         │                       ▼                       │
+         └──────────────┬────────────────────────┘
+                        │
+               ┌────────────────┐
+               │ Servicios de IA  │
+               │ (Gemini / Cohere)│
+               └────────────────┘
 ```
 
-## 🔄 Flujo de Encuestas OptimaCx
+## Estructura del Proyecto (Monorepo)
 
-### Canal 1: QR Code (Inmediato)
-1. Cliente escanea QR único por concesionario
-2. Respuesta instantánea con 4 preguntas + datos cliente
-3. Registro automático en BD
-4. Si nota 1-8: Email automático a jefatura
+```
+Optima-Complaints/
+├── applications/       # Workflows y nodos de N8N
+├── database/           # Migraciones y schema de Supabase
+├── frontend/           # Aplicación Next.js
+├── shared/             # Código compartido (tipos, etc.)
+├── scripts/            # Scripts de utilidad y despliegue
+└── docs/               # Documentación del proyecto
+```
 
-### Canal 2: WhatsApp (Automatizado)
-1. Carga masiva de clientes (día siguiente)
-2. Filtrado automático (excluye QR respondidos)
-3. Envío vía WhatsApp Business API
-4. Período de espera: 6 horas
+## Sistema RAG para Reclamos
 
-### Canal 3: Contact Center (Manual)
-1. Asignación automática de pendientes
-2. Distribución equitativa entre agentes
-3. Seguimiento telefónico
-4. Registro manual en sistema
-
-## 🤖 Sistema RAG para Reclamos
+El núcleo de la inteligencia de la plataforma reside en su sistema RAG para procesar y entender los reclamos en el contexto de cada concesionario.
 
 ### Componentes Técnicos
-- **Embeddings:** Gemini text-embedding-004
-- **Vector DB:** Vertex AI Vector Search + pgvector
-- **LLM:** Gemini 2.5 Pro
-- **Procesamiento:** n8n workflows
+- **Embeddings:** Gemini (text-embedding-004 o similar).
+- **Vector DB:** Supabase con la extensión `pgvector`.
+- **LLM:** Gemini 2.5 Pro para análisis y clasificación.
+- **Procesamiento:** Orquestado a través de workflows en N8N.
 
 ### Flujo RAG
 ```
-Reclamo → Embedding → Vector Search → Contexto → Gemini → Respuesta Estructurada
+Reclamo Recibido → Generación de Embedding → Búsqueda Vectorial (en BD del tenant) → Re-ranking con Cohere → Construcción de Contexto → Análisis con Gemini → Respuesta Estructurada
 ```
 
-## 🔧 Configuración Actual
+## Configuración y Variables de Entorno
 
-### Variables de Ambiente (Configuradas en Cloud Run)
-```bash
+Cada servicio (`frontend`, `n8n`) tiene su propio archivo de variables de entorno (`.env.local` o similar) donde se configuran las credenciales y URLs necesarias.
+
+### Frontend (`frontend/.env.local`)
+```env
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<supabase_anon_key>
+
+# URL de la App
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+### N8N (Variables de entorno en Railway/GCP)
+```env
 # Base de datos
 DATABASE_URL=postgresql://...
-DB_POSTGRESDB_HOST=172.21.0.3
-DB_POSTGRESDB_PORT=5432
 
-# n8n Configuration
-N8N_EDITOR_BASE_URL=https://n8n-optima-cx-e6nurdtj6a-tl.a.run.app
-N8N_WEBHOOK_URL=https://n8n-optima-cx-e6nurdtj6a-tl.a.run.app
+# Conexión a Supabase
+SUPABASE_URL=https://<project>.supabase.co
+SUPABASE_SERVICE_KEY=<supabase_service_key>
 
-# Google Cloud
-GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
-GCP_PROJECT_ID=optima-cx-467616
-
-# AI/ML
-GEMINI_API_KEY=***
-VERTEX_AI_PROJECT=optima-cx-467616
+# APIs de IA
+GEMINI_API_KEY=<your_gemini_api_key>
+COHERE_API_KEY=<your_cohere_api_key>
 ```
 
-## 🚀 Comandos Útiles
+## Despliegue
 
-### Verificar Estado
-```bash
-# Cloud Run status
-gcloud run services list --region=southamerica-west1
+- **Frontend**: Se despliega automáticamente en Vercel o Cloudflare Pages al hacer push a la rama principal.
+- **N8N**: Se gestiona a través de Railway o se despliega como un contenedor en Google Cloud Run.
+- **Base de Datos**: Alojada y gestionada en la nube de Supabase. Las migraciones se aplican con el CLI de Supabase.
 
-# Database status
-gcloud sql instances list
+## Seguridad
 
-# Logs
-gcloud run services logs read n8n-optima-cx --region=southamerica-west1
-```
-
-### Deployment
-```bash
-# Deploy nueva versión
-gcloud run deploy n8n-optima-cx \
-  --source . \
-  --region=southamerica-west1 \
-  --allow-unauthenticated
-```
-
-## 🔐 Seguridad
-
-### Multitenant
-- ✅ Filtros por `tenant_id` en todas las consultas
-- ✅ Credenciales encriptadas por concesionario
-- ✅ Workflows completamente aislados
-- ✅ Base de conocimiento segregada
-
-### Backup
-- ✅ Backups automáticos Cloud SQL
-- ✅ Terraform state backup
-- ✅ Migration logs preservados
-
-## 📊 Monitoreo
-
-### Métricas Disponibles
-- Response time por tenant
-- Success rate workflows
-- Database performance
-- API usage por concesionario
-
-### Alertas Configuradas
-- Workflow failures > 5%
-- Database connection issues
-- API rate limits
-
-## 🛠️ Desarrollo Local
-
-### Requisitos
-- Docker
-- Google Cloud SDK
-- Node.js >= 18
-
-### Setup
-```bash
-# Clonar repositorio
-git clone https://github.com/BastianBerriosalarcon/optimacx-GCP.git
-cd optimacx-GCP
-
-# Configurar variables
-cp .env.example .env
-
-# Ejecutar localmente
-docker-compose up -d
-```
-
-## 📝 Changelog
-
-### v1.0.0 (2025-07-04)
-- ✅ Implementación inicial OptimaCx
-- ✅ Migración desde ActivePieces a n8n
-- ✅ Sistema RAG con Gemini + pgvector
-- ✅ Deployment Cloud Run exitoso
-- ✅ Configuración multitenant
-
-### v1.1.0 (2025-07-08)
-- ✅ Repositorio GitHub configurado
-- ✅ Documentación completa
-- ✅ Backup y versionado implementado
-
-## 👥 Contacto
-
-- **Desarrollador:** Bastian Berrios
-- **Email:** bastianberriosalarcon@gmail.com
-- **GitHub:** @BastianBerriosalarcon
-
----
-
-## 🎯 Estado Actual: PRODUCCIÓN ACTIVA
-
-**El sistema está funcionando correctamente en Google Cloud Run**
-- n8n: ✅ Activo
-- PostgreSQL: ✅ Activo  
-- RAG System: ✅ Configurado
-- Multitenant: ✅ Funcionando
-
-**Última verificación:** 2025-07-08 18:04 UTC
+- **Multitenant**: Aislamiento de datos garantizado por políticas de Row Level Security (RLS) en Supabase, usando el `concesionario_id` del JWT del usuario.
+- **Credenciales**: Todas las claves y secretos se gestionan a través de los servicios de entorno de cada plataforma (Vercel, Railway, Supabase) y no se almacenan en el código.
+- **Backup**: Supabase gestiona los backups automáticos de la base de datos.
