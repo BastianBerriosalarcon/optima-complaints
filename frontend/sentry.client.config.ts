@@ -22,10 +22,10 @@ Sentry.init({
     
     // Filtrar errores conocidos
     if (event.exception) {
-      const error = hint.originalException
+      const error = hint.originalException as Error | undefined
       if (error && error.message) {
         // Filtrar errores de red temporales
-        if (error.message.includes('NetworkError') || 
+        if (error.message.includes('NetworkError') ||
             error.message.includes('fetch')) {
           return null
         }

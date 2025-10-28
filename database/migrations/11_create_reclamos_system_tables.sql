@@ -60,7 +60,58 @@ CREATE TABLE IF NOT EXISTS public.reclamos (
     urgencia VARCHAR(10) DEFAULT 'normal' CHECK (urgencia IN ('baja', 'normal', 'alta')),
     
     -- Canal de ingreso y contexto
-    canal_ingreso VARCHAR(30) NOT NULL CHECK (canal_ingreso IN ('whatsapp', 'email', 'web', 'presencial', 'telefono')),
+canal_ingreso VARCHAR(30) NOT NULL CHECK (canal_ingreso IN ('email', 'web', 'presencial', 'telefono')),
+    estado VARCHAR(50) NOT NULL DEFAULT 'pendiente',
+    prioridad VARCHAR(30) DEFAULT 'media',
+    fecha_actualizacion TIMESTAMP WITH TIME ZONE,
+    fecha_cierre TIMESTAMP WITH TIME ZONE,
+    
+    -- Foreign Keys
+    concesionario_id UUID NOT NULL REFERENCES public.concesionarios(id) ON DELETE CASCADE,
+    sucursal_id UUID REFERENCES public.sucursales(id) ON DELETE SET NULL,
+    cliente_id UUID REFERENCES public.clientes(id) ON DELETE SET NULL,
+    vehiculo_id UUID REFERENCES public.vehiculos(id) ON DELETE SET NULL,
+    asesor_asignado_id UUID REFERENCES public.usuarios(id) ON DELETE SET NULL,
+    creado_por UUID REFERENCES public.usuarios(id) ON DELETE SET NULL,
+    
+    -- Auditoría
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Historial de cambios en reclamos
+CREATE TABLE IF NOT EXISTS public.historial_reclamos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reclamo_id UUID NOT NULL REFERENCES public.reclamos(id) ON DELETE CASCADE,
+    usuario_id UUID REFERENCES public.usuarios(id) ON DELETE SET NULL,
+    campo_modificado VARCHAR(100) NOT NULL,
+    valor_anterior TEXT,
+    valor_nuevo TEXT,
+    fecha_modificacion TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    comentario TEXT
+);
+
+-- Comentarios y notas internas sobre un reclamo
+CREATE TABLE IF NOT EXISTS public.comentarios_reclamo (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reclamo_id UUID NOT NULL REFERENCES public.reclamos(id) ON DELETE CASCADE,
+    usuario_id UUID NOT NULL REFERENCES public.usuarios(id) ON DELETE CASCADE,
+    comentario TEXT NOT NULL,
+    es_privado BOOLEAN DEFAULT true, -- Si es visible para el cliente o solo interno
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Comunicaciones con el cliente
+CREATE TABLE IF NOT EXISTS public.comunicaciones_cliente (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reclamo_id UUID NOT NULL REFERENCES public.reclamos(id) ON DELETE CASCADE,
+    usuario_id UUID REFERENCES public.usuarios(id), -- El usuario que se comunicó
+    tipo_comunicacion VARCHAR(50) NOT NULL, -- Ej: 'Llamada saliente', 'Email enviado'
+    canal_comunicacion VARCHAR(30), -- 'email', 'llamada', 'presencial'
+    fecha_comunicacion TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    resumen TEXT NOT NULL,
+    adjuntos TEXT[] -- URLs a archivos adjuntos
+);
     
     -- Asignación responsable
     asignado_a_user_id UUID REFERENCES public.usuarios(id),

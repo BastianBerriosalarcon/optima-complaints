@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS public.knowledge_base (
     prioridad INTEGER DEFAULT 1, -- Para ordenar resultados de búsqueda
     
     -- Contexto de aplicación
-    aplicable_a_canales TEXT[] DEFAULT '{"whatsapp", "email", "web"}', -- Canales donde aplica
+    aplicable_a_canales TEXT[] DEFAULT '{"email", "web"}', -- Canales donde aplica
     nivel_acceso VARCHAR(20) DEFAULT 'general' CHECK (nivel_acceso IN ('publico', 'general', 'interno', 'confidencial')),
     
     -- Métricas de uso

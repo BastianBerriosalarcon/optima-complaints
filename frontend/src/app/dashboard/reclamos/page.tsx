@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
 import ComplaintsTable from "@/components/complaints/ComplaintsTable";
+import NewComplaintModal from "@/components/complaints/NewComplaintModal";
 import FilterBar from "@/components/shared/FilterBar";
 import { mockComplaints } from "@/lib/mockData";
 import { ComplaintStatus, ComplaintUrgency } from "@/lib/enums";
@@ -18,10 +19,11 @@ import { ComplaintStatus, ComplaintUrgency } from "@/lib/enums";
 export default function ReclamosPage() {
   const { user } = useAuth();
   const { hasPermission } = useRole();
-  
+
   const [complaints, setComplaints] = useState(mockComplaints);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isNewComplaintModalOpen, setIsNewComplaintModalOpen] = useState(false);
   
   // Filter states
   const [searchValue, setSearchValue] = useState("");
@@ -106,6 +108,13 @@ export default function ReclamosPage() {
     console.log("Exporting complaints data...");
   };
 
+  const handleComplaintCreated = () => {
+    // En producción, esto haría un refetch de la API
+    // Por ahora solo mostramos un mensaje
+    console.log("Reclamo creado, actualizando lista...");
+    // Podrías agregar el nuevo reclamo al estado local aquí
+  };
+
   // Filter complaints based on search and filters
   const filteredComplaints = complaints.filter(complaint => {
     const matchesSearch = !searchValue || 
@@ -151,13 +160,23 @@ export default function ReclamosPage() {
         
         <div className="flex gap-2">
           {canCreateComplaints && (
-            <Button className="flex items-center gap-2">
+            <Button
+              className="flex items-center gap-2"
+              onClick={() => setIsNewComplaintModalOpen(true)}
+            >
               <Plus className="h-4 w-4" />
               Nuevo Reclamo
             </Button>
           )}
         </div>
       </div>
+
+      {/* Modal de Nuevo Reclamo */}
+      <NewComplaintModal
+        open={isNewComplaintModalOpen}
+        onOpenChange={setIsNewComplaintModalOpen}
+        onComplaintCreated={handleComplaintCreated}
+      />
 
       {/* Alert for Black Alerts */}
       {blackAlertCount > 0 && (

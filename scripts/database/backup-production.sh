@@ -48,7 +48,7 @@ backup_supabase() {
     # Realizar backup con pg_dump
     if pg_dump "$SUPABASE_DB_URL" \
         --schema=n8n_prod \
-        --schema=chatwoot \
+
         --schema=rag_system \
         --data-only \
         --inserts \

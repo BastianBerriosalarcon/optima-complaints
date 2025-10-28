@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,12 +53,14 @@ interface ComplaintsTableProps {
   canAssignComplaints?: boolean;
 }
 
-export default function ComplaintsTable({ 
-  complaints, 
-  onUpdateStatus, 
+export default function ComplaintsTable({
+  complaints,
+  onUpdateStatus,
   onAssignComplaint,
-  canAssignComplaints = false 
+  canAssignComplaints = false
 }: ComplaintsTableProps) {
+  const router = useRouter();
+
   const getStatusBadge = (status: string) => {
     const variants = {
       [ComplaintStatus.PENDIENTE]: "status-pendiente",
@@ -219,7 +222,7 @@ export default function ComplaintsTable({
                         Reasignar Asesor
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/reclamos/${complaint.id}`)}>
                       Ver Detalles
                     </DropdownMenuItem>
                   </DropdownMenuContent>

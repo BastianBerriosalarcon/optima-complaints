@@ -1,59 +1,43 @@
 # Scripts - Optima-Complaints
 
-Documentación de scripts organizados por categoría.
+Este directorio contiene scripts de utilidad para despliegue, mantenimiento y testing del proyecto.
 
-## Estructura
+## Estructura de Directorios
 
 ```
 scripts/
-├── deployment/         # Scripts de despliegue
-│   └── n8n/           # Despliegue N8N workflows
-├── testing/           # Scripts de testing y monitoreo
-├── database/          # Scripts de base de datos
-└── deprecated/        # Scripts obsoletos (histórico)
+├── deployment/         # Scripts relacionados con el despliegue de aplicaciones
+│   └── n8n/            # Scripts específicos para workflows de N8N
+├── database/           # Scripts para la gestión de la base de datos
+└── testing/            # Scripts para ejecutar pruebas y verificaciones
 ```
 
-**Última limpieza:** 28 de Octubre 2025 - Eliminación de módulos contaminados
+## Scripts Disponibles
 
-## Deployment - Scripts ACTIVOS
+### Deployment (`deployment/`)
 
-### N8N Workflows
-- `import-n8n-workflows-direct.sh` - Importar workflows de reclamos
-- Despliegue de workflows RAG
-- Configuración de workflows de notificaciones
+- **`import-n8n-workflows-direct.sh`**: Importa o actualiza todos los workflows de N8N desde el repositorio local a una instancia de N8N en ejecución mediante la API.
 
-### General
-- `update-services.sh` - Actualización de servicios
+### Database (`database/`)
 
-## Testing - Scripts ACTIVOS
+- **`backup-production.sh`**: Realiza un backup completo de la base de datos de producción.
+- **`execute_migration.js`**: Script para ejecutar nuevas migraciones de base de datos de forma controlada.
 
-- `n8n-health-check.sh` - Verificación de salud N8N
-- `monitor-services.sh` - Monitoreo de servicios
+### Testing (`testing/`)
 
-## Database - Scripts ACTIVOS
+- **`n8n-health-check.sh`**: Verifica que la instancia de N8N esté activa y responda correctamente.
+- **`monitor-services.sh`**: Script de monitoreo básico para los servicios principales de la aplicación.
 
-- `execute_migration.js` - Ejecutor de migraciones
-- `init-db.sql` - Inicialización de base de datos
-- `backup-production.sh` - Backup de producción
+## Uso General
 
-## Deprecated - Scripts OBSOLETOS
-
-Ver `deprecated/README.md` para detalles de scripts movidos por ser obsoletos.
-
-## Uso
+La mayoría de los scripts son ejecutables y pueden ser invocados directamente desde la terminal.
 
 ```bash
-# Deployment
-./scripts/deployment/update-services.sh
-
-# Testing
-./scripts/testing/monitor-services.sh
-
-# Database
+# Ejemplo: Ejecutar un backup de la base de datos
 ./scripts/database/backup-production.sh
+
+# Ejemplo: Importar workflows a N8N
+./scripts/deployment/n8n/import-n8n-workflows-direct.sh
 ```
 
-## Estadísticas
-
-- **Scripts Activos**: 6 scripts enfocados en reclamos
-- **Última Actualización**: 28 de Octubre 2025
+**Nota**: Asegúrate de que los scripts tengan permisos de ejecución (`chmod +x <script_name>`).

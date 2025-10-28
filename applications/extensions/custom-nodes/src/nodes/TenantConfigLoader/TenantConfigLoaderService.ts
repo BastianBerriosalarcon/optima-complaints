@@ -90,12 +90,6 @@ export class TenantConfigLoaderService implements IOptimaCxNodeService {
             sabado: { inicio: '09:00', fin: '14:00' },
             domingo: 'cerrado'
           },
-          whatsapp: {
-            numero_principal: '+56912345678',
-            respuesta_automatica: true,
-            mensaje_bienvenida: '¡Hola! Gracias por contactar AutoVentas Premium. ¿En qué podemos ayudarte?',
-            tiempo_respuesta_maximo: 15
-          },
           ai_config: {
             modelo: 'gpt-4',
             temperatura: 0.7,
@@ -155,7 +149,6 @@ export class TenantConfigLoaderService implements IOptimaCxNodeService {
         es_valido: this.isValidChileanPhone(phoneNumber),
         tipo: this.getPhoneType(phoneNumber),
         region: 'CL',
-        formato_whatsapp: this.formatForWhatsApp(phoneNumber),
         validado_en: new Date().toISOString()
       };
 
@@ -256,28 +249,14 @@ export class TenantConfigLoaderService implements IOptimaCxNodeService {
         tenant_id: tenantId,
         workflows_activos: [
           {
-            id: 'whatsapp_lead_processing',
-            nombre: 'Procesamiento de Leads WhatsApp',
+            id: 'complaint_processing',
+            nombre: 'Procesamiento de Reclamos',
             estado: 'activo',
-            version: '2.0.0',
-            modulos: ['validation', 'tenant_lookup', 'ai_analysis', 'lead_management']
-          },
-          {
-            id: 'appointment_scheduling',
-            nombre: 'Agendamiento de Citas',
-            estado: 'activo',
-            version: '1.5.0',
-            modulos: ['calendar_integration', 'advisor_assignment']
-          },
-          {
-            id: 'follow_up_automation',
-            nombre: 'Seguimiento Automático',
-            estado: 'activo',
-            version: '1.2.0',
-            modulos: ['scheduling', 'message_templates']
+            version: '1.0.0',
+            modulos: ['validation', 'rag_analysis', 'assignment', 'notification']
           }
         ],
-        total_workflows: 3,
+        total_workflows: 1,
         ultima_actualizacion: new Date().toISOString()
       };
 
@@ -322,17 +301,6 @@ export class TenantConfigLoaderService implements IOptimaCxNodeService {
       return 'mobile';
     }
     return 'unknown';
-  }
-
-  private formatForWhatsApp(phone: string): string {
-    const normalized = this.normalizePhoneNumber(phone);
-    if (normalized.startsWith('56')) {
-      return `+${normalized}`;
-    }
-    if (normalized.startsWith('9')) {
-      return `+56${normalized}`;
-    }
-    return `+56${normalized}`;
   }
 
   private getDayName(dayOfWeek: number): string {

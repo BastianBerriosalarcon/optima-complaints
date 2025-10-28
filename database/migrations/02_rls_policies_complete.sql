@@ -140,279 +140,51 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- HABILITAR RLS EN TODAS LAS TABLAS
 -- =====================================================
 
+-- Habilitar RLS en todas las tablas relevantes
 ALTER TABLE public.concesionarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sucursales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.usuarios ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.leads ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.productos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.cotizaciones ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.ventas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.encuestas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.vehiculos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.servicios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reclamos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.documentos_conocimiento ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.documento_chunks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tenant_config ENABLE ROW LEVEL SECURITY;
 
--- =====================================================
--- POLÍTICAS PARA CONCESIONARIOS
--- =====================================================
-
--- Drop existing policies if they exist
-DROP POLICY IF EXISTS "Super admin can view all concesionarios" ON public.concesionarios;
-DROP POLICY IF EXISTS "Users can view own concesionario" ON public.concesionarios;
-DROP POLICY IF EXISTS "Super admin can manage concesionarios" ON public.concesionarios;
-
-CREATE POLICY "Super admin can view all concesionarios" ON public.concesionarios
-    FOR SELECT USING (auth.is_super_admin());
-
+-- Políticas para Concesionarios
 CREATE POLICY "Users can view own concesionario" ON public.concesionarios
-    FOR SELECT USING (id = auth.get_user_concesionario_id());
+    FOR SELECT USING (id = (auth.jwt() ->> 'concesionario_id')::UUID);
 
-CREATE POLICY "Super admin can manage concesionarios" ON public.concesionarios
-    FOR ALL USING (auth.is_super_admin());
+-- Políticas para Sucursales
+CREATE POLICY "Users can view own concesionario sucursales" ON public.sucursales
+    FOR SELECT USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
 
--- =====================================================
--- POLÍTICAS PARA USUARIOS
--- =====================================================
-
-DROP POLICY IF EXISTS "Users can view own concesionario users" ON public.usuarios;
-DROP POLICY IF EXISTS "Concesionario admin can manage users" ON public.usuarios;
-
+-- Políticas para Usuarios
 CREATE POLICY "Users can view own concesionario users" ON public.usuarios
-    FOR SELECT USING (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-    );
+    FOR SELECT USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
 
-CREATE POLICY "Concesionario admin can manage users" ON public.usuarios
-    FOR ALL USING (
-        (concesionario_id = auth.get_user_concesionario_id() 
-         AND auth.get_user_role() IN ('admin_concesionario', 'gerente_ventas'))
-        OR auth.is_super_admin()
-    );
+CREATE POLICY "Users can manage own user" ON public.usuarios
+    FOR ALL USING (id = auth.uid());
 
--- =====================================================
--- POLÍTICAS PARA LEADS (CRÍTICAS)
--- =====================================================
+-- Políticas para Clientes
+CREATE POLICY "Users can view own concesionario clientes" ON public.clientes
+    FOR SELECT USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
 
-DROP POLICY IF EXISTS "Users can view own concesionario leads" ON public.leads;
-DROP POLICY IF EXISTS "Users can create leads in own concesionario" ON public.leads;
-DROP POLICY IF EXISTS "Sales team can update leads" ON public.leads;
-DROP POLICY IF EXISTS "Service role can access all leads" ON public.leads;
+-- Políticas para Vehículos
+CREATE POLICY "Users can view own concesionario vehiculos" ON public.vehiculos
+    FOR SELECT USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
 
--- Ver leads del concesionario
-CREATE POLICY "Users can view own concesionario leads" ON public.leads
-    FOR SELECT USING (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
+-- Políticas para Servicios
+CREATE POLICY "Users can view own concesionario servicios" ON public.servicios
+    FOR SELECT USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
 
--- Crear leads en su concesionario
-CREATE POLICY "Users can create leads in own concesionario" ON public.leads
-    FOR INSERT WITH CHECK (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
--- Actualizar leads (asesores solo los suyos)
-CREATE POLICY "Sales team can update leads" ON public.leads
-    FOR UPDATE USING (
-        (concesionario_id = auth.get_user_concesionario_id() 
-         AND (
-             auth.get_user_role() IN ('admin_concesionario', 'gerente_ventas') OR
-             asesor_asignado_id = auth.get_current_user_id()
-         ))
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
--- Service role (N8N) puede acceder a todo
-CREATE POLICY "Service role can access all leads" ON public.leads
-    FOR ALL USING (auth.is_system_user());
-
--- =====================================================
--- POLÍTICAS PARA ENCUESTAS
--- =====================================================
-
-DROP POLICY IF EXISTS "Users can view own concesionario encuestas" ON public.encuestas;
-DROP POLICY IF EXISTS "Users can create encuestas in own concesionario" ON public.encuestas;
-DROP POLICY IF EXISTS "Service team can update encuestas" ON public.encuestas;
-DROP POLICY IF EXISTS "Service role can access all encuestas" ON public.encuestas;
-
-CREATE POLICY "Users can view own concesionario encuestas" ON public.encuestas
-    FOR SELECT USING (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Users can create encuestas in own concesionario" ON public.encuestas
-    FOR INSERT WITH CHECK (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Service team can update encuestas" ON public.encuestas
-    FOR UPDATE USING (
-        (concesionario_id = auth.get_user_concesionario_id() 
-         AND auth.get_user_role() IN ('admin_concesionario', 'jefe_servicio', 'asesor_servicio', 'contact_center', 'encargado_calidad'))
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Service role can access all encuestas" ON public.encuestas
-    FOR ALL USING (auth.is_system_user());
-
--- =====================================================
--- POLÍTICAS PARA RECLAMOS
--- =====================================================
-
-DROP POLICY IF EXISTS "Users can view own concesionario reclamos" ON public.reclamos;
-DROP POLICY IF EXISTS "Users can create reclamos in own concesionario" ON public.reclamos;
-DROP POLICY IF EXISTS "Service team can update reclamos" ON public.reclamos;
-DROP POLICY IF EXISTS "Service role can access all reclamos" ON public.reclamos;
-
+-- Políticas para Reclamos
 CREATE POLICY "Users can view own concesionario reclamos" ON public.reclamos
-    FOR SELECT USING (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
+    FOR SELECT USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
 
-CREATE POLICY "Users can create reclamos in own concesionario" ON public.reclamos
-    FOR INSERT WITH CHECK (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Service team can update reclamos" ON public.reclamos
-    FOR UPDATE USING (
-        (concesionario_id = auth.get_user_concesionario_id() 
-         AND auth.get_user_role() IN ('admin_concesionario', 'jefe_servicio', 'asesor_servicio', 'encargado_calidad'))
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Service role can access all reclamos" ON public.reclamos
-    FOR ALL USING (auth.is_system_user());
-
--- =====================================================
--- POLÍTICAS PARA PRODUCTOS
--- =====================================================
-
-DROP POLICY IF EXISTS "Users can view own concesionario productos" ON public.productos;
-DROP POLICY IF EXISTS "Admin and gerente can manage productos" ON public.productos;
-
-CREATE POLICY "Users can view own concesionario productos" ON public.productos
-    FOR SELECT USING (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Admin and gerente can manage productos" ON public.productos
-    FOR ALL USING (
-        (concesionario_id = auth.get_user_concesionario_id() 
-         AND auth.get_user_role() IN ('admin_concesionario', 'gerente_ventas'))
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
--- =====================================================
--- POLÍTICAS PARA CONFIGURACIÓN
--- =====================================================
-
-DROP POLICY IF EXISTS "Users can view own concesionario config" ON public.tenant_config;
-DROP POLICY IF EXISTS "Concesionario admin can manage config" ON public.tenant_config;
-DROP POLICY IF EXISTS "Service role can access all config" ON public.tenant_config;
-
-CREATE POLICY "Users can view own concesionario config" ON public.tenant_config
-    FOR SELECT USING (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Concesionario admin can manage config" ON public.tenant_config
-    FOR ALL USING (
-        (concesionario_id = auth.get_user_concesionario_id() 
-         AND auth.get_user_role() = 'admin_concesionario')
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Service role can access all config" ON public.tenant_config
-    FOR ALL USING (auth.is_system_user());
-
--- =====================================================
--- APLICAR POLÍTICAS A TABLAS RESTANTES
--- =====================================================
-
--- Cotizaciones
-DROP POLICY IF EXISTS "Users can view own concesionario cotizaciones" ON public.cotizaciones;
-DROP POLICY IF EXISTS "Sales team can create cotizaciones" ON public.cotizaciones;
-DROP POLICY IF EXISTS "Sales team can update own cotizaciones" ON public.cotizaciones;
-
-CREATE POLICY "Users can view own concesionario cotizaciones" ON public.cotizaciones
-    FOR SELECT USING (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Sales team can create cotizaciones" ON public.cotizaciones
-    FOR INSERT WITH CHECK (
-        concesionario_id = auth.get_user_concesionario_id() 
-        AND auth.get_user_role() IN ('admin_concesionario', 'gerente_ventas', 'asesor_ventas')
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Sales team can update own cotizaciones" ON public.cotizaciones
-    FOR UPDATE USING (
-        (concesionario_id = auth.get_user_concesionario_id() 
-         AND (
-             auth.get_user_role() IN ('admin_concesionario', 'gerente_ventas') OR
-             asesor_id = auth.get_current_user_id()
-         ))
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
--- Ventas
-DROP POLICY IF EXISTS "Users can view own concesionario ventas" ON public.ventas;
-DROP POLICY IF EXISTS "Sales team can create ventas" ON public.ventas;
-DROP POLICY IF EXISTS "Sales team can update own ventas" ON public.ventas;
-
-CREATE POLICY "Users can view own concesionario ventas" ON public.ventas
-    FOR SELECT USING (
-        concesionario_id = auth.get_user_concesionario_id() 
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Sales team can create ventas" ON public.ventas
-    FOR INSERT WITH CHECK (
-        concesionario_id = auth.get_user_concesionario_id() 
-        AND auth.get_user_role() IN ('admin_concesionario', 'gerente_ventas', 'asesor_ventas')
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
-
-CREATE POLICY "Sales team can update own ventas" ON public.ventas
-    FOR UPDATE USING (
-        (concesionario_id = auth.get_user_concesionario_id() 
-         AND (
-             auth.get_user_role() IN ('admin_concesionario', 'gerente_ventas') OR
-             asesor_id = auth.get_current_user_id()
-         ))
-        OR auth.is_super_admin()
-        OR auth.is_system_user()
-    );
+-- Políticas para Tenant Config
+CREATE POLICY "Users can view own tenant_config" ON public.tenant_config
+    FOR SELECT USING (concesionario_id = (auth.jwt() ->> 'concesionario_id')::UUID);
 
 -- =====================================================
 -- VERIFICACIÓN DE APLICACIÓN

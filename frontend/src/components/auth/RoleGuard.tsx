@@ -16,7 +16,7 @@ interface RoleGuardProps {
   requireAllPermissions?: boolean; // true = requiere TODOS los permisos, false = requiere AL MENOS UNO
   
   // Control por módulo
-  requiredModule?: 'ventas' | 'post_venta' | 'config' | 'metrics';
+  requiredModule?: 'ventas' | 'post-venta' | 'admin';
   
   // Componente a mostrar cuando no tiene acceso
   fallback?: ReactNode;
@@ -35,17 +35,21 @@ export function RoleGuard({
   fallback = <div className="text-red-500 p-4">No tienes permisos para ver este contenido</div>,
   hideOnNoAccess = false
 }: RoleGuardProps) {
-  const { 
-    isRole, 
-    hasPermission, 
-    hasAnyPermission, 
-    hasAllPermissions, 
-    canAccessModule 
+  const {
+    role,
+    hasPermission,
+    hasAnyPermission,
+    hasAllPermissions,
+    canAccess: canAccessModule
   } = useRole();
 
   // Verificar acceso por rol
   if (requiredRole) {
-    if (!isRole(requiredRole)) {
+    const hasRole = Array.isArray(requiredRole)
+      ? requiredRole.includes(role as UserRole)
+      : role === requiredRole;
+
+    if (!hasRole) {
       return hideOnNoAccess ? null : fallback;
     }
   }
@@ -120,18 +124,18 @@ export function SalesOnly({
   );
 }
 
-export function ServiceOnly({ 
-  children, 
+export function ServiceOnly({
+  children,
   fallback,
-  hideOnNoAccess = false 
-}: { 
-  children: ReactNode; 
+  hideOnNoAccess = false
+}: {
+  children: ReactNode;
   fallback?: ReactNode;
   hideOnNoAccess?: boolean;
 }) {
   return (
-    <RoleGuard 
-      requiredModule="post_venta"
+    <RoleGuard
+      requiredModule="post-venta"
       fallback={fallback}
       hideOnNoAccess={hideOnNoAccess}
     >
@@ -140,18 +144,18 @@ export function ServiceOnly({
   );
 }
 
-export function ConfigOnly({ 
-  children, 
+export function ConfigOnly({
+  children,
   fallback,
-  hideOnNoAccess = false 
-}: { 
-  children: ReactNode; 
+  hideOnNoAccess = false
+}: {
+  children: ReactNode;
   fallback?: ReactNode;
   hideOnNoAccess?: boolean;
 }) {
   return (
-    <RoleGuard 
-      requiredModule="config"
+    <RoleGuard
+      requiredModule="admin"
       fallback={fallback}
       hideOnNoAccess={hideOnNoAccess}
     >

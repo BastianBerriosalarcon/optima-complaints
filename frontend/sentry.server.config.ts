@@ -18,7 +18,7 @@ Sentry.init({
     
     // Filtrar errores de Supabase conocidos
     if (event.exception) {
-      const error = hint.originalException
+      const error = hint.originalException as Error | undefined
       if (error && error.message && error.message.includes('JWT')) {
         return null
       }

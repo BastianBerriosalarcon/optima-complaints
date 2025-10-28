@@ -9,13 +9,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { 
   LayoutGrid, 
-  Target, 
-  ClipboardCheck, 
   CircleAlert, 
   Bell,
   Settings,
-  BarChart3,
-  FileText
+  BarChart3
 } from "lucide-react";
 
 const navigation = [
@@ -24,24 +21,6 @@ const navigation = [
     href: "/dashboard",
     icon: LayoutGrid,
     permissions: ["metrics:view"]
-  },
-  {
-    name: "Gestión de Leads",
-    href: "/dashboard/leads",
-    icon: Target,
-    permissions: ["leads:view"]
-  },
-  {
-    name: "Encuestas de Ventas",
-    href: "/dashboard/encuestas-ventas",
-    icon: ClipboardCheck,
-    permissions: ["encuestas:view"]
-  },
-  {
-    name: "Encuestas Post-Venta",
-    href: "/dashboard/encuestas-post-venta",
-    icon: ClipboardCheck,
-    permissions: ["encuestas:view"]
   },
   {
     name: "Gestión de Reclamos",

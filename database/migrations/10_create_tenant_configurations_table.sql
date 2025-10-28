@@ -8,19 +8,6 @@ CREATE TABLE IF NOT EXISTS public.tenant_configurations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     concesionario_id UUID NOT NULL REFERENCES public.concesionarios(id) ON DELETE CASCADE,
     
-    -- Configuración Chatwoot (para identificación de tenant en webhooks)
-    chatwoot_account_id INTEGER UNIQUE NOT NULL,
-    chatwoot_webhook_token TEXT NOT NULL,
-    chatwoot_api_access_token TEXT,
-    
-    -- Configuración WhatsApp Business API
-    whatsapp_config JSONB NOT NULL DEFAULT '{
-        "business_token": "",
-        "phone_number_id": "",
-        "verify_token": "",
-        "webhook_verify_token": ""
-    }',
-    
     -- Configuración Email/SMTP para notificaciones
     email_config JSONB NOT NULL DEFAULT '{
         "smtp_host": "",
@@ -80,13 +67,11 @@ CREATE TABLE IF NOT EXISTS public.tenant_configurations (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     
     -- Constraints
-    UNIQUE(concesionario_id),
-    UNIQUE(chatwoot_account_id)
+    UNIQUE(concesionario_id)
 );
 
 -- Índices para performance
 CREATE INDEX idx_tenant_configurations_concesionario ON public.tenant_configurations(concesionario_id);
-CREATE INDEX idx_tenant_configurations_chatwoot ON public.tenant_configurations(chatwoot_account_id);
 
 -- RLS Policy para tenant isolation
 ALTER TABLE public.tenant_configurations ENABLE ROW LEVEL SECURITY;
@@ -110,19 +95,6 @@ CREATE TRIGGER set_tenant_configurations_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION trigger_set_timestamp();
 
--- Función helper para obtener configuración por chatwoot_account_id
-CREATE OR REPLACE FUNCTION get_tenant_by_chatwoot_account(p_account_id INTEGER)
-RETURNS SETOF public.tenant_configurations AS $$
-BEGIN
-    RETURN QUERY
-    SELECT * FROM public.tenant_configurations 
-    WHERE chatwoot_account_id = p_account_id 
-    AND activo = true;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
 -- Comentarios para documentación
 COMMENT ON TABLE public.tenant_configurations IS 'Configuración específica por concesionario para workflows de N8N y integraciones';
-COMMENT ON COLUMN public.tenant_configurations.chatwoot_account_id IS 'ID numérico de la cuenta en Chatwoot para identificar tenant en webhooks';
-COMMENT ON COLUMN public.tenant_configurations.whatsapp_config IS 'Configuración específica de WhatsApp Business API del concesionario';
 COMMENT ON COLUMN public.tenant_configurations.workflow_variables IS 'Variables personalizadas para workflows de N8N';

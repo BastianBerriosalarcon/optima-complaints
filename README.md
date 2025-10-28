@@ -107,26 +107,11 @@ Cliente → Formulario Web/Email → N8N → Gemini + RAG → Clasificación
 
 ```
 Optima-Complaints/
-├── applications/
-│   └── workflows/
-│       └── business/
-│           ├── reclamos/          # 13 workflows N8N
-│           └── administracion/    # Utils y config
-├── database/
-│   ├── migrations/                # 14 migraciones SQL
-│   ├── schemas/                   # Definiciones de BD
-│   ├── policies/                  # RLS policies
-│   └── functions/                 # Funciones SQL
-├── frontend/
-│   └── src/
-│       ├── app/
-│       │   ├── dashboard/
-│       │   │   └── reclamos/     # UI principal
-│       │   └── api/              # API routes
-│       ├── components/           # Componentes React
-│       └── lib/                  # Utilidades
-├── docs/                          # Documentación
-└── scripts/                       # Scripts de deploy
+├── applications/         # Workflows y extensiones de N8N
+├── database/             # Migraciones, esquemas y políticas de BD
+├── frontend/             # Aplicación Next.js para el dashboard
+├── docs/                 # Documentación del proyecto
+└── scripts/              # Scripts de despliegue y mantenimiento
 ```
 
 ## Instalación

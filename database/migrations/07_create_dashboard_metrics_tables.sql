@@ -1,35 +1,7 @@
 -- Migración para crear tablas de métricas agregadas para dashboards.
 -- Estas tablas serán pobladas periódicamente por workflows de n8n.
 
--- Tabla para métricas de encuestas (post-venta y ventas)
-CREATE TABLE IF NOT EXISTS metricas_dashboard_encuestas (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  concesionario_id UUID NOT NULL REFERENCES concesionarios(id) ON DELETE CASCADE,
-  periodo VARCHAR(50) NOT NULL, -- ej: 'ultimas_24_horas', 'ultimos_7_dias'
-  fecha_calculo DATE NOT NULL,
 
-  -- Métricas por Origen
-  total_qr BIGINT DEFAULT 0,
-  total_whatsapp BIGINT DEFAULT 0,
-  total_llamada BIGINT DEFAULT 0,
-  total_general BIGINT DEFAULT 0,
-
-  -- Métricas por Ejecutivo de Contact Center (para encuestas por llamada)
-  rendimiento_ejecutivos JSONB DEFAULT '[]'::jsonb, -- [{ "ejecutivo_id": "...", "nombre": "...", "total_encuestas": 123 }]
-
-  -- Métricas de NPS y Satisfacción
-  nps_general NUMERIC(5, 2) DEFAULT 0,
-  satisfaccion_promedio NUMERIC(5, 2) DEFAULT 0,
-
-  -- Timestamps
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-
-  -- Constraint para evitar duplicados por día y período
-  UNIQUE(concesionario_id, periodo, fecha_calculo)
-);
-
-COMMENT ON TABLE metricas_dashboard_encuestas IS 'Almacena datos agregados sobre encuestas para optimizar la carga de dashboards.';
 
 -- Tabla para métricas de reclamos
 CREATE TABLE IF NOT EXISTS metricas_dashboard_reclamos (
