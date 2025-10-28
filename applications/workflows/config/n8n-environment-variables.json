@@ -28,19 +28,6 @@
       "type": "string",
       "required": true
     },
-    "WHATSAPP_TOKEN": {
-      "value": "your-whatsapp-token",
-      "description": "Token de autenticación de WhatsApp Business API",
-      "type": "string",
-      "required": true,
-      "secret": true
-    },
-    "WHATSAPP_PHONE_ID": {
-      "value": "your-phone-number-id",
-      "description": "ID del número de teléfono de WhatsApp Business",
-      "type": "string",
-      "required": true
-    },
     "OPENAI_API_KEY": {
       "value": "your-openai-key",
       "description": "Clave API de OpenAI para análisis de IA",

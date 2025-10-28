@@ -25,7 +25,7 @@
     },
     "category": {
       "type": "string",
-      "enum": ["administracion", "campañas", "encuestas", "leads", "reclamos", "template"],
+      "enum": ["administracion", "reclamos", "template"],
       "description": "Categoría del workflow"
     },
     "tags": {
@@ -34,11 +34,9 @@
         "type": "string",
         "enum": [
           "admin", "super-admin", "tenant", "management",
-          "campaign", "email", "whatsapp", "marketing", "automation",
-          "survey", "ventas", "postventa", "webhook", "srp", "nps",
-          "lead", "prospecting", "scoring", "assignment", "ai", 
-          "complaint", "rag", "knowledge", "embedding", "orchestrator",
-          "template", "base", "reusable"
+          "complaint", "reclamos", "notification", "email",
+          "rag", "knowledge", "embedding", "orchestrator", "ai",
+          "analytics", "template", "base", "reusable"
         ]
       },
       "minItems": 2,

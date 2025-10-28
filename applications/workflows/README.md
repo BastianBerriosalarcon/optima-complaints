@@ -1,243 +1,283 @@
-# 🚀 Óptima-CX N8N Workflows
+# N8N Workflows - Optima-Complaints
 
-## 📁 Arquitectura Modular por Módulos de Negocio
+Sistema de workflows para gestión inteligente de reclamos con IA y RAG.
+
+## Arquitectura Modular
 
 ```
-applications/n8n-workflows/
-├── 📋 README.md
+applications/workflows/
+├── administracion/
+│   └── portal-super-admin.json                   # Portal Super-Admin para gestión de tenants
 │
-├── 🏢 administracion/
-│   └── portal-super-admin.json                 # ✅ Portal Super-Admin para gestión de tenants
+├── reclamos/
+│   ├── complaint-orchestrator.json               # Orquestador principal de reclamos
+│   ├── procesador-rag-reclamos.json              # Pipeline RAG + IA (Gemini)
+│   ├── asignacion-automatica-reclamos.json       # Asignación automática a asesores
+│   ├── notificaciones-reclamos.json              # Notificaciones por email
+│   ├── alerta-black-alert.json                   # Alertas críticas Black Alert
+│   ├── auditor-modificaciones.json               # Auditoría de cambios
+│   │
+│   └── conocimiento/
+│       ├── ingesta-conocimiento.json             # Ingesta de documentos
+│       ├── fragmentacion-conocimiento.json       # Chunking de documentos
+│       ├── almacenamiento-conocimiento.json      # Almacenamiento en BD vectorial
+│       ├── generador-embeddings.json             # Generación embeddings (Gemini)
+│       └── rerank-cohere-documentos.json         # Refinamiento con Cohere Rerank
 │
-├── 🎯 leads/
-│   ├── actualizador-estados-leads.json         # ✅ Actualizador automático de estados
-│   ├── analisis-ia-leads.json                    # ✅ Análisis IA con Gemini
-│   ├── asignacion-asesores.json                  # ✅ Asignación inteligente de asesores
-│   ├── calculador-metricas-conversion.json     # ✅ Calculador de métricas de conversión
-│   ├── notificaciones-leads.json                 # ✅ Notificaciones de leads
-│   ├── procesador-whatsapp-leads.json            # ✅ Procesador principal WhatsApp
-│   ├── puntuacion-ia-leads.json                  # ✅ Scoring automático de calidad
-│   ├── recordatorios-leads.json                # ✅ Recordatorios automáticos de seguimiento
-│   └── seguimiento-cotizaciones.json           # ✅ Seguimiento automático de cotizaciones
+├── utils/
+│   ├── cargador-config-tenant.json               # Cargador de configuración multitenant
+│   ├── manejador-errores.json                    # Manejador centralizado de errores
+│   ├── monitor-telemetria-avanzada.json          # Monitoreo y telemetría
+│   ├── notificador-escalacion.json               # Notificaciones de escalamiento
+│   └── optimizador-base-datos.json               # Optimización de consultas BD
 │
-├── 📊 encuestas/
-│   ├── calculador-nps.json                     # ✅ Calculador automático de NPS
-│   ├── postventa/
-│   │   ├── ... (10 workflows modulares)
-│   └── ventas/ 
-│       ├── ... (11 workflows modulares)
-│
-├── 🎫 reclamos/
-│   ├── alerta-black-alert.json                   # ✅ Alertas Black Alert
-│   ├── almacenamiento-conocimiento.json          # ✅ Almacenamiento RAG
-│   ├── asignacion-automatica-reclamos.json       # ✅ Asignación automática
-│   ├── auditor-modificaciones.json             # ✅ Auditor de modificaciones de reclamos
-│   ├── fragmentacion-conocimiento.json           # ✅ Chunking de documentos
-│   ├── generador-embeddings.json                 # ✅ Generador de embeddings
-│   ├── ingesta-conocimiento.json                 # ✅ Ingesta de conocimiento
-│   ├── notificaciones-reclamos.json              # ✅ Notificaciones de reclamos
-│   ├── procesador-rag-reclamos.json              # ✅ Procesador RAG + IA
-│   └── rerank-cohere-documentos.json           # ✅ Refinamiento de documentos RAG con Cohere
-│
-├── 🚀 campañas/
-│   ├── analiticas-campañas.json                  # ✅ Analíticas de campañas
-│   ├── automatizacion-email.json                 # ✅ Automatización de email
-│   ├── envio-masivo-whatsapp.json                # ✅ Envío masivo WhatsApp
-│   └── secuencias-seguimiento.json               # ✅ Secuencias de seguimiento
-│
-├── 🔧 utils/
-│   ├── cargador-config-tenant.json               # ✅ Cargador configuración tenant
-│   ├── manejador-errores.json                    # ✅ Manejador de errores
-│   ├── monitor-telemetria-avanzada.json        # ✅ Monitor de telemetría avanzada
-│   ├── notificador-escalacion.json             # ✅ Notificador de escalaciones automáticas
-│   ├── optimizador-base-datos.json               # ✅ Optimizador de BD
-│   ├── sincronizador-chatwoot.json             # ✅ Sincronizador bidireccional con Chatwoot
-│   ├── utilidad-validacion.json                  # ✅ Utilidades de validación
-│   └── validador-mensajes-whatsapp.json          # ✅ Validador mensajes WhatsApp
-│
-└── 📋 templates/
-    ├── plantilla-incorporacion-concesionario.json # ✅ Plantilla de onboarding de tenants
-    ├── provision-workflows-automatica.json     # ✅ Provisión automática de workflows
-    └── ... (otros templates base)
+└── templates/
+    ├── plantilla-incorporacion-concesionario.json # Onboarding de nuevos tenants
+    └── provision-workflows-automatica.json        # Provisión automática de workflows
 ```
 
-## 🏗️ Principios de Arquitectura Implementados
+## Módulos Principales
 
-### **🎯 Módulos de Negocio Segregados**
-- 🏢 **Administración**: Portal de Super-Admin para gestión de tenants.
-- ✅ **Leads**: Gestión completa del ciclo de vida de leads, desde la captura hasta la conversión.
-- 📊 **Encuestas**: Flujos completos para encuestas de Post-Venta y Ventas.
-- 🎫 **Reclamos**: Pipeline RAG + IA para clasificación, gestión y respuesta automática.
-- 🚀 **Campañas**: Automatización de marketing, email y seguimiento.
+### Administración
+Portal de gestión para Super-Admin que permite:
+- Crear y configurar nuevos concesionarios (tenants)
+- Gestionar usuarios y permisos
+- Monitorear métricas globales
+- Configurar integraciones
 
-### **🔧 Componentes Utilitarios Reutilizables**
-- ✅ **Utils**: Funciones críticas de soporte como manejo de errores, telemetría, optimización de BD y sincronización con servicios externos.
-- 📋 **Templates**: Plantillas base para la provisión y onboarding automático de nuevos tenants.
+### Reclamos (Módulo Core)
+Sistema completo de gestión de reclamos con IA:
 
+**Workflow Principal:**
+- `complaint-orchestrator.json` - Punto de entrada para todos los canales (Contact Center, Email, Web, API)
 
-## ⭐ Modularización Completa de Encuestas de Ventas
+**Pipeline de Procesamiento:**
+1. `procesador-rag-reclamos.json` - Análisis con RAG y Gemini 2.5 Pro
+   - Genera embedding del reclamo
+   - Busca en base de conocimiento
+   - Rerank con Cohere
+   - Análisis contextualizado con IA
+   - Extracción de datos estructurados
+   - Clasificación automática
+   - Análisis de sentimiento
+   - Detección de Black Alert
 
-### **Arquitectura Modular Implementada**
-Se completó la modularización de encuestas de ventas siguiendo el mismo patrón de post-venta, con **6 workflows especializados** que implementan el principio **Single Responsibility Principle (SRP)**:
+2. `asignacion-automatica-reclamos.json` - Asignación inteligente
+   - Scoring de asesores disponibles
+   - Criterios: sucursal, especialización, carga de trabajo
+   - Asignación automática al mejor asesor
 
-### **🔄 Flujo Modular de Encuestas de Ventas**
-```mermaid
-graph TD
-    A[Excel Upload] --> B[procesador-excel-ventas.json]
-    B --> C[filtro-duplicados-ventas.json]
-    C --> D[enviador-whatsapp-ventas.json]
-    D --> E[monitor-respuestas-ventas.json]
-    E --> F[asignacion-contact-center-ventas.json]
-    F --> G[webhook-envio-encuestas-ventas.json]
+3. `notificaciones-reclamos.json` - Notificaciones multi-rol
+   - Email al asesor asignado
+   - Email al jefe de servicio
+   - Email al encargado de calidad
+   - Email de confirmación al cliente
+
+4. `alerta-black-alert.json` - Alertas críticas
+   - Detección de casos Black Alert (ley del consumidor)
+   - Notificación masiva a equipo completo
+   - Reducción de SLA a 24 horas
+   - Registro en auditoría
+
+5. `auditor-modificaciones.json` - Trazabilidad
+   - Registro de todos los cambios
+   - Historial de estados
+   - Tracking de asignaciones
+
+### Gestión de Conocimiento (RAG)
+
+**Pipeline de Ingesta:**
+```
+Documento --> ingesta-conocimiento.json
+            --> fragmentacion-conocimiento.json (chunking)
+            --> generador-embeddings.json (Gemini Embedding 001)
+            --> almacenamiento-conocimiento.json (pgvector)
 ```
 
-### **📋 Workflows de Ventas Modulares**
-
-| Workflow | Responsabilidad | Input | Output |
-|----------|----------------|-------|--------|
-| **procesador-excel-ventas.json** | Procesar datos Excel de clientes | Excel con datos de ventas | Clientes validados |
-| **filtro-duplicados-ventas.json** | Eliminar duplicados | Lista de clientes | Clientes únicos |  
-| **enviador-whatsapp-ventas.json** | Envío individual WhatsApp | Cliente individual | Mensaje enviado |
-| **monitor-respuestas-ventas.json** | Monitorear respuestas (6h) | Campaña enviada | Clientes sin respuesta |
-| **asignacion-contact-center-ventas.json** | Asignar a agentes | Clientes sin respuesta | Asignaciones equitativas |
-| **webhook-envio-encuestas-ventas.json** | Recibir encuestas completadas | Encuesta completada | Registro procesado |
-
-### **🎯 Diferencias Clave: Ventas vs Post-venta**
-
-| Aspecto | Post-venta | Ventas |
-|---------|------------|--------|
-| **Tabla BD** | `encuestas` | `encuestas_ventas` |
-| **Campos específicos** | `tipo_servicio`, `asesor_servicio` | `vehiculo_modelo`, `asesor_ventas_id` |
-| **Puntuaciones** | `recomendacion`, `satisfaccion`, `lavado`, `asesor` | `recomendacion`, `atencion_asesor`, `proceso_entrega`, `satisfaccion_general` |
-| **Roles responsables** | `jefe_servicio`, `asesor_servicio` | `jefe_ventas`, `asesor_ventas` |
-| **Orígenes** | `QR`, `WhatsApp`, `Llamada` | `QR_VENTAS`, `WhatsApp_VENTAS`, `Llamada_VENTAS` |
-
-### **✅ Beneficios de la Modularización**
-- **Mantenibilidad**: Cada workflow tiene una responsabilidad específica
-- **Escalabilidad**: Fácil agregar nuevos pasos al flujo
-- **Robustez**: Fallos aislados no afectan todo el proceso
-- **Testabilidad**: Testing independiente de cada módulo
-- **Reutilización**: Workflows pueden ser reutilizados en otros contextos
-
-## Principios SOLID Aplicados
-
-### **S - Single Responsibility Principle**
-- ✅ Cada workflow tiene una responsabilidad específica
-- ✅ Funciones JavaScript enfocadas en una tarea
-- ✅ Separación clara entre validación, análisis y persistencia
-
-### **O - Open/Closed Principle**
-- ✅ Workflows extensibles sin modificar código existente
-- ✅ Configuración externalizada para diferentes tenants
-- ✅ Templates de IA intercambiables
-
-### **L - Liskov Substitution Principle**
-- ✅ Workflows pueden ser intercambiados sin afectar el flujo
-- ✅ Interfaces consistentes entre workflows
-
-### **I - Interface Segregation Principle**
-- ✅ Cada workflow recibe solo los datos que necesita
-- ✅ Salidas especializadas por funcionalidad
-
-### **D - Dependency Inversion Principle**
-- ✅ Workflows dependen de abstracciones (servicios)
-- ✅ Configuración inyectada, no hardcodeada
-
-## Flujo de Ejecución
-
-```mermaid
-graph TD
-    A[WhatsApp Webhook] --> B[Message Validation]
-    B --> C[Tenant Lookup]
-    C --> D[Lead Analysis]
-    D --> E[Lead Management]
-    E --> F{¿Requiere Asesor?}
-    F -->|Sí| G[Advisor Assignment]
-    F -->|No| H[Automated Response]
+**Pipeline de Búsqueda:**
+```
+Query --> Embedding --> Búsqueda Vectorial (TOP 20)
+      --> Cohere Rerank (TOP 5)
+      --> Contexto Enriquecido para Gemini
 ```
 
-## Beneficios de la Modularización
+## Principios de Arquitectura
 
-### **🔧 Mantenibilidad**
-- Cambios aislados por funcionalidad
-- Testing independiente de cada módulo
-- Debugging más simple y enfocado
+### Single Responsibility Principle
+- Cada workflow tiene una responsabilidad específica
+- Funciones JavaScript enfocadas en una sola tarea
+- Separación clara entre validación, procesamiento y persistencia
 
-### **🚀 Escalabilidad**
-- Workflows pueden ejecutarse en paralelo
-- Fácil adición de nuevos pasos
-- Reutilización de componentes
+### Configuración Multitenant
+- Configuración externalizada por concesionario
+- Carga dinámica desde `tenant_configurations`
+- Aislamiento total mediante Row Level Security (RLS)
 
-### **🔒 Robustez**
-- Fallos aislados no afectan todo el flujo
-- Recuperación granular de errores
-- Logging específico por responsabilidad
+### Manejo de Errores
+- Captura centralizada de errores
+- Logging estructurado
+- Reintentos automáticos con backoff
+- Notificaciones de fallos críticos
 
-### **🧪 Testabilidad**
-- Unit testing de cada workflow
-- Mocking de dependencias específicas
-- Validación de inputs/outputs por módulo
+### Telemetría y Monitoreo
+- Métricas de ejecución en tiempo real
+- Tracking de performance
+- Alertas automáticas de degradación
+- Dashboard de salud de workflows
 
-## Configuración y Despliegue
+## Flujo Completo de Reclamo
 
-### **Variables de Entorno Requeridas**
-```env
-# Base de datos
-DB_HOST=your-postgres-host
-DB_NAME=optimacx_db
-DB_USER=n8n_user
-
-# APIs externas  
-OPENAI_API_KEY=your-openai-key
-WHATSAPP_TOKEN=your-whatsapp-token
-
-# N8N
-N8N_ENCRYPTION_KEY=your-32-char-key
+```
+┌─────────────────────────────────────────────────────────┐
+│  INGRESO DE RECLAMO                                     │
+│  (Contact Center | Web | Email | API)                   │
+└────────────────────┬────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────┐
+│  complaint-orchestrator.json                            │
+│  - Validación básica                                    │
+│  - Extracción de concesionario_id                       │
+│  - Disparo de pipeline RAG (async)                      │
+└────────────────────┬────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────┐
+│  procesador-rag-reclamos.json                           │
+│  - Generación de embedding (Gemini)                     │
+│  - Búsqueda vectorial en knowledge base                 │
+│  - Rerank con Cohere (TOP 5 docs)                       │
+│  - Análisis con Gemini 2.5 Pro + contexto RAG          │
+│  - Extracción de datos estructurados                    │
+│  - Clasificación y priorización                         │
+│  - Detección de Black Alert                             │
+└────────────────────┬────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────┐
+│  asignacion-automatica-reclamos.json                    │
+│  - Buscar asesores disponibles                          │
+│  - Calcular score por criterios                         │
+│  - Asignar a mejor asesor                               │
+│  - Actualizar estado a 'asignado'                       │
+└────────────────────┬────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────┐
+│  notificaciones-reclamos.json                           │
+│  - Email al asesor asignado                             │
+│  - Email al jefe de servicio                            │
+│  - Email al encargado de calidad                        │
+│  - Email de confirmación al cliente                     │
+└────────────────────┬────────────────────────────────────┘
+                     ↓
+         ┌───────────┴───────────┐
+         ↓                       ↓
+┌──────────────────┐   ┌──────────────────┐
+│  Black Alert?    │   │  Dashboard       │
+│  SI: Alerta      │   │  Update          │
+│  NO: Flujo normal│   │  Realtime        │
+└──────────────────┘   └──────────────────┘
 ```
 
-### **Orden de Despliegue**
-1. Importar workflows en orden numérico
-2. Configurar webhooks de WhatsApp
-3. Validar conectividad con base de datos
-4. Probar flujo completo con mensaje de prueba
+## Integraciones
 
-## Monitoreo y Observabilidad
+### Supabase
+- PostgreSQL con pgvector para búsqueda semántica
+- Row Level Security (RLS) para aislamiento multitenant
+- Realtime para actualizaciones en tiempo real
+- Storage para adjuntos
 
-### **Métricas por Workflow**
-- **Validation**: Tasa de mensajes válidos/inválidos
-- **Tenant Lookup**: Tiempo de respuesta de configuración
-- **Analysis**: Precisión y confianza de IA
-- **Management**: Latencia de operaciones BD
+### Gemini AI
+- Gemini 2.5 Pro: Análisis y clasificación de reclamos
+- Gemini Embedding 001: Generación de embeddings (768 dims)
+- Análisis de sentimiento
+- Extracción de entidades
 
-### **Logging Estructurado**
-Cada workflow incluye logging consistente:
-```javascript
-console.log('Workflow completed:', {
-  workflowName: 'message-validation',
-  tenantId: context.tenant_id,
-  messageId: message.id,
-  processingTime: Date.now() - startTime,
-  success: true
-});
+### Cohere
+- Cohere Rerank: Re-clasificación de documentos recuperados
+- Mejora la precisión del RAG
+
+### Email (SMTP)
+- Gmail / SendGrid / SMTP personalizado
+- Templates personalizables por tenant
+- Tracking de envíos
+
+## Configuración
+
+### Variables de Entorno Requeridas
+
+```json
+{
+  "SUPABASE_URL": "https://your-project.supabase.co",
+  "SUPABASE_SERVICE_KEY": "your-service-key",
+  "N8N_WEBHOOK_BASE_URL": "https://your-n8n-instance.com",
+  "GEMINI_API_KEY": "your-gemini-key",
+  "COHERE_API_KEY": "your-cohere-key",
+  "SMTP_HOST": "smtp.gmail.com",
+  "SMTP_PORT": "587",
+  "SMTP_USER": "your-email@domain.com",
+  "SMTP_PASSWORD": "your-smtp-password"
+}
 ```
 
-## Próximos Pasos
+### Configuración por Tenant
 
-1. **Custom Nodes**: Implementar nodos personalizados reutilizables
-2. **Error Handling**: Mejorar manejo de errores y retry logic
-3. **Performance**: Optimizar queries y cachear configuraciones
-4. **Monitoring**: Implementar alertas y dashboards
-5. **Testing**: Crear suite de tests automatizados
+Cada concesionario puede configurar:
+- Políticas de garantía específicas
+- Tiempos de SLA personalizados
+- Reglas de asignación de asesores
+- Templates de email personalizados
+- Base de conocimiento propia
 
-## Migration Guide
+## Testing
 
-Para migrar del workflow monolítico:
+### Workflows de Test
+- `test-conectividad-supabase.json` - Validar conexión a BD
+- `test-gemini-api.json` - Validar API de Gemini
+- `test-email-smtp.json` - Validar configuración SMTP
 
-1. **Respaldar** workflow existente
-2. **Importar** nuevos workflows modulares
-3. **Actualizar** webhook URL si es necesario
-4. **Validar** funcionamiento con casos de prueba
-5. **Deshabilitar** workflow anterior
-6. **Monitorear** por 24-48 horas
+### Monitoreo
+- Monitor de telemetría avanzada
+- Alertas automáticas de fallos
+- Métricas de performance
+- Dashboard de salud
 
-El diseño modular asegura **backward compatibility** durante la migración.
+## Deployment
+
+### Importación Manual
+```bash
+# Importar workflows vía N8N UI
+1. Acceder a N8N admin panel
+2. Ir a Workflows > Import
+3. Seleccionar archivo JSON
+4. Activar workflow
+```
+
+### Importación Automática
+```bash
+# Script de deployment
+./scripts/deployment/import-n8n-workflows-direct.sh
+```
+
+## Mantenimiento
+
+### Actualización de Workflows
+1. Modificar workflow en N8N UI
+2. Exportar workflow actualizado
+3. Actualizar archivo JSON en repositorio
+4. Commit y push a repositorio
+5. Re-importar en otros ambientes
+
+### Versionamiento
+- Usar versión semántica (x.y.z)
+- Documentar cambios en metadata del workflow
+- Mantener historial en git
+
+## Soporte
+
+Para issues o preguntas sobre workflows:
+- Documentación completa: `/docs/workflows/`
+- Issues: GitHub Issues
+- Contacto: bastian.berrios@ejemplo.com
+
+---
+
+**Última actualización:** 28 de Octubre 2025
+**Versión:** 2.1.0 - Módulo único de reclamos
