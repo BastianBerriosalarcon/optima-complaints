@@ -22,12 +22,23 @@
     "type": "git",
     "url": "git+https://github.com/BastianBerriosalarcon/optima-complaints.git"
   },
-  "keywords": ["complaints", "ai", "rag", "gemini", "n8n", "supabase", "customer-service"],
+  "keywords": [
+    "complaints",
+    "ai",
+    "rag",
+    "gemini",
+    "n8n",
+    "supabase",
+    "customer-service"
+  ],
   "author": "Bastian Berrios",
   "license": "Proprietary",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/BastianBerriosalarcon/optima-complaints/issues"
   },
-  "homepage": "https://github.com/BastianBerriosalarcon/optima-complaints#readme"
+  "homepage": "https://github.com/BastianBerriosalarcon/optima-complaints#readme",
+  "devDependencies": {
+    "supabase": "^2.54.11"
+  }
 }

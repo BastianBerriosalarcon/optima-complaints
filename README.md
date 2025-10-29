@@ -162,12 +162,20 @@ SMTP_PASSWORD=tu_password
 
 4. **Ejecutar migraciones**
 ```bash
-# Aplicar en Supabase SQL Editor en orden:
-# - 01_multitenant_base.sql
+# Aplicar en Supabase SQL Editor en el orden numérico de los archivos.
+# La lista ha sido corregida (el script 01 ya no existe):
 # - 02_rls_policies_complete.sql
+# - 02a_rls_functions.sql
+# - 02b_enable_rls.sql
+# - 03_update_embeddings_to_gemini.sql
+# - 07_create_dashboard_metrics_tables.sql
 # - 10_create_tenant_configurations_table.sql
+# - 10b_rls_tablas_criticas.sql
+# - 10c_datos_iniciales_criticos.sql
 # - 11_create_reclamos_system_tables.sql
 # - 12_create_knowledge_base_rag_system.sql
+# - 99_cleanup_remove_old_modules.sql
+# - ejecutar_tabla_1.sql
 ```
 
 5. **Desplegar workflows N8N**
