@@ -13,18 +13,18 @@ import { AlertCircle } from "lucide-react";
 import ComplaintsTable from "@/components/complaints/ComplaintsTable";
 import NewComplaintModal from "@/components/complaints/NewComplaintModal";
 import FilterBar from "@/components/shared/FilterBar";
-import { mockComplaints } from "@/lib/mockData";
+import { obtenerReclamos, type ReclamosFiltros } from "@/services/reclamos.service";
 import { ComplaintStatus, ComplaintUrgency } from "@/lib/enums";
 
 export default function ReclamosPage() {
   const { user } = useAuth();
   const { hasPermission } = useRole();
 
-  const [complaints, setComplaints] = useState(mockComplaints);
-  const [loading, setLoading] = useState(false);
+  const [complaints, setComplaints] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isNewComplaintModalOpen, setIsNewComplaintModalOpen] = useState(false);
-  
+
   // Filter states
   const [searchValue, setSearchValue] = useState("");
   const [filters, setFilters] = useState({
@@ -35,6 +35,47 @@ export default function ReclamosPage() {
     fecha_desde: "",
     fecha_hasta: ""
   });
+
+  // Cargar reclamos al montar y cuando cambien los filtros
+  useEffect(() => {
+    cargarReclamos();
+  }, [filters.estado, filters.urgencia, filters.black_alert, filters.sucursal_id]);
+
+  const cargarReclamos = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Preparar filtros para el servicio
+      const filtrosServicio: ReclamosFiltros = {
+        busqueda: searchValue || undefined,
+      };
+
+      if (filters.estado) {
+        filtrosServicio.estado = [filters.estado];
+      }
+
+      if (filters.urgencia) {
+        filtrosServicio.urgencia = [filters.urgencia];
+      }
+
+      if (filters.black_alert) {
+        filtrosServicio.es_black_alert = filters.black_alert === "true";
+      }
+
+      if (filters.sucursal_id) {
+        filtrosServicio.sucursal_id = filters.sucursal_id;
+      }
+
+      const data = await obtenerReclamos(filtrosServicio);
+      setComplaints(data);
+    } catch (error: any) {
+      console.error('Error al cargar reclamos:', error);
+      setError(error?.message || 'Error al cargar los reclamos');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Permissions
   const canViewComplaints = hasPermission('reclamos:view');
@@ -109,31 +150,26 @@ export default function ReclamosPage() {
   };
 
   const handleComplaintCreated = () => {
-    // En producción, esto haría un refetch de la API
-    // Por ahora solo mostramos un mensaje
-    console.log("Reclamo creado, actualizando lista...");
-    // Podrías agregar el nuevo reclamo al estado local aquí
+    // Recargar la lista de reclamos
+    cargarReclamos();
   };
 
-  // Filter complaints based on search and filters
+  // Filtrado local solo para búsqueda de texto (los otros filtros ya se aplican en el servidor)
   const filteredComplaints = complaints.filter(complaint => {
-    const matchesSearch = !searchValue || 
-      complaint.cliente.nombre.toLowerCase().includes(searchValue.toLowerCase()) ||
-      complaint.cliente.telefono.includes(searchValue) ||
-      complaint.id_externo.toLowerCase().includes(searchValue.toLowerCase()) ||
-      complaint.vehiculo.modelo.toLowerCase().includes(searchValue.toLowerCase()) ||
-      complaint.vehiculo.patente.toLowerCase().includes(searchValue.toLowerCase());
+    if (!searchValue) return true;
 
-    const matchesFilters = 
-      (!filters.estado || complaint.estado === filters.estado) &&
-      (!filters.urgencia || complaint.urgencia === filters.urgencia) &&
-      (!filters.black_alert || complaint.black_alert.toString() === filters.black_alert);
-
-    return matchesSearch && matchesFilters;
+    const searchLower = searchValue.toLowerCase();
+    return (
+      complaint.numero_reclamo?.toLowerCase().includes(searchLower) ||
+      complaint.cliente_nombre?.toLowerCase().includes(searchLower) ||
+      complaint.cliente_telefono?.includes(searchValue) ||
+      complaint.vehiculo_patente?.toLowerCase().includes(searchLower) ||
+      complaint.descripcion?.toLowerCase().includes(searchLower)
+    );
   });
 
-  const blackAlertCount = filteredComplaints.filter(c => c.black_alert).length;
-  const pendingCount = filteredComplaints.filter(c => c.estado === ComplaintStatus.PENDIENTE).length;
+  const blackAlertCount = filteredComplaints.filter(c => c.es_black_alert).length;
+  const pendingCount = filteredComplaints.filter(c => c.estado === 'nuevo' || c.estado === 'asignado').length;
 
   if (!canViewComplaints) {
     return (

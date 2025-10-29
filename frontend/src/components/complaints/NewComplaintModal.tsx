@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { crearReclamo, obtenerSucursales } from "@/services/reclamos.service";
 
 // Validación de RUT chileno
 const validarRUT = (rut: string | undefined) => {
@@ -128,22 +129,23 @@ export default function NewComplaintModal({
     setIsSubmitting(true);
 
     try {
-      // Simular delay de API
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      // Generar número de reclamo (en producción vendría del backend)
-      const numeroReclamo = `REC-2025-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
-
-      console.log("Nuevo reclamo:", {
-        ...data,
-        numero_reclamo: numeroReclamo,
-        canal_origen: "contact_center",
-        fecha_creacion: new Date().toISOString(),
-        estado: "nuevo"
+      // Llamar al servicio real de reclamos
+      const resultado = await crearReclamo({
+        cliente_nombre: data.cliente_nombre,
+        cliente_rut: data.cliente_rut,
+        cliente_telefono: data.cliente_telefono,
+        cliente_email: data.cliente_email,
+        vehiculo_patente: data.vehiculo_patente,
+        vehiculo_marca: data.vehiculo_marca,
+        vehiculo_modelo: data.vehiculo_modelo,
+        sucursal_id: data.sucursal_id,
+        descripcion: data.descripcion,
+        titulo: data.titulo,
+        es_black_alert: data.es_black_alert,
       });
 
       // Mostrar toast de éxito
-      toast.success(`Reclamo ${numeroReclamo} creado exitosamente`, {
+      toast.success(`Reclamo ${resultado.numero_reclamo} creado exitosamente`, {
         description: "El reclamo ha sido registrado y será procesado por IA.",
         duration: 4000,
       });
@@ -154,15 +156,15 @@ export default function NewComplaintModal({
       // Cerrar modal
       onOpenChange(false);
 
-      // Callback opcional
+      // Callback opcional (recargar lista de reclamos)
       if (onComplaintCreated) {
         onComplaintCreated();
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error al crear reclamo:", error);
       toast.error("Error al crear reclamo", {
-        description: "Ocurrió un error al intentar crear el reclamo. Intente nuevamente.",
+        description: error?.message || "Ocurrió un error al intentar crear el reclamo. Intente nuevamente.",
       });
     } finally {
       setIsSubmitting(false);

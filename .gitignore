@@ -56,6 +56,18 @@ pids
 node_modules/
 jspm_packages/
 
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Next.js
+.next/
+out/
+
+# SQL setup files (pueden contener datos sensibles)
+*SETUP*.sql
+
 # Optional npm cache directory
 .npm
 

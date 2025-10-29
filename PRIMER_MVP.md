@@ -345,8 +345,8 @@ export default function ReclamosPage() {
 NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
-# N8N (URL de tu instancia Railway/Cloud Run)
-NEXT_PUBLIC_N8N_WEBHOOK_URL=https://tu-n8n-instance.railway.app
+# N8N (URL de tu instancia de elest.io)
+NEXT_PUBLIC_N8N_WEBHOOK_URL=https://tu-instancia-n8n.elest.io
 
 # Aplicación
 NEXT_PUBLIC_BASE_URL=http://localhost:3000

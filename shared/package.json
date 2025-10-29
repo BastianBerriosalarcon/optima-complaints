@@ -1,12 +1,7 @@
 {
   "name": "@optimacx/shared",
   "version": "1.0.0",
+  "main": "index.js",
   "private": true,
-  "main": "index.ts",
-  "scripts": {
-    "build": "echo 'No build required for TypeScript modules'"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.52.0"
-  }
+  "dependencies": {}
 }
