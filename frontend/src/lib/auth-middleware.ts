@@ -106,11 +106,11 @@ export async function authMiddleware(request: NextRequest) {
   try {
     const { data: userProfile } = await supabase
       .from('usuarios')
-      .select('role, activo')
-      .eq('id', session.user.id)
+      .select('role, is_active')
+      .eq('auth_user_id', session.user.id)
       .single();
 
-    if (!userProfile?.activo) {
+    if (!userProfile?.is_active) {
       const redirectUrl = new URL('/sign-in?error=account_disabled', request.url);
       return NextResponse.redirect(redirectUrl);
     }

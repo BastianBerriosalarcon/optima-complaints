@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { AuthService, User } from "@/services/AuthService";
 
 // Tipos para el sistema de roles
-export type UserRole = 
+export type UserRole =
   | 'super_admin'
-  | 'admin_concesionario' 
+  | 'admin_concesionario'
   | 'gerente_ventas'
   | 'asesor_ventas'
   | 'jefe_servicio'
