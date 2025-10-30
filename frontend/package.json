@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
-    "@optimacx/shared": "*",
     "@radix-ui/react-accordion": "^1.2.3",
     "@radix-ui/react-alert-dialog": "^1.1.6",
     "@radix-ui/react-aspect-ratio": "^1.1.2",
