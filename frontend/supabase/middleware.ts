@@ -1,6 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
+type CookieOptions = {
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+  maxAge?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: "lax" | "strict" | "none";
+  partitioned?: boolean;
+};
+
+type CookieToSet = {
+  name: string;
+  value: string;
+  options: Partial<CookieOptions>;
+};
+
 export const updateSession = async (request: NextRequest) => {
   try {
     // Create an unmodified response
@@ -21,7 +39,7 @@ export const updateSession = async (request: NextRequest) => {
               value,
             }));
           },
-          setAll(cookiesToSet) {
+          setAll(cookiesToSet: CookieToSet[]) {
             cookiesToSet.forEach(({ name, value, options }) => {
               request.cookies.set(name, value);
               response = NextResponse.next({
@@ -40,13 +58,16 @@ export const updateSession = async (request: NextRequest) => {
     // https://supabase.com/docs/guides/auth/server-side/nextjs
     const { data: { user }, error } = await supabase.auth.getUser();
 
-    // protected routes
-    if (request.nextUrl.pathname.startsWith("/dashboard") && error) {
-      return NextResponse.redirect(new URL("/sign-in", request.url));
+    // Redirect authenticated users from root or sign-in to dashboard
+    if (!error && user) {
+      if (request.nextUrl.pathname === "/" || request.nextUrl.pathname.startsWith("/sign-in")) {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
     }
 
-    if (request.nextUrl.pathname === "/" && !error) {
-      return NextResponse.redirect(new URL("/", request.url));
+    // Redirect unauthenticated users from protected routes to sign-in
+    if (request.nextUrl.pathname.startsWith("/dashboard") && (error || !user)) {
+      return NextResponse.redirect(new URL("/sign-in", request.url));
     }
 
     return response;
