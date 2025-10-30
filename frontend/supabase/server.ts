@@ -1,14 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { config } from "@optimacx/shared/config/ConfigService";
 
 export const createClient = async () => {
   const cookieStore = cookies();
-  const dbConfig = config.getDatabaseConfig();
 
   return createServerClient(
-    dbConfig.url,
-    dbConfig.key,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
