@@ -1,6 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { config } from "@optimacx/shared/config/ConfigService";
 
 export const updateSession = async (request: NextRequest) => {
   try {
@@ -11,10 +10,9 @@ export const updateSession = async (request: NextRequest) => {
       },
     });
 
-    const dbConfig = config.getDatabaseConfig();
     const supabase = createServerClient(
-      dbConfig.url,
-      dbConfig.key,
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
           getAll() {
