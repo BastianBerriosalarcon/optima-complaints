@@ -1,16 +1,77 @@
-import { type NextRequest } from "next/server";
-import { updateSession } from "./supabase/middleware";
-import { authMiddleware } from "./src/lib/auth-middleware";
+import { type NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(request: NextRequest) {
-  // Primero actualizar la sesión de Supabase
-  const response = await updateSession(request);
-  
-  // Luego aplicar el middleware de autorización para rutas protegidas
-  if (request.nextUrl.pathname.startsWith('/dashboard')) {
-    return await authMiddleware(request);
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
+          response = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    }
+  );
+
+  // Obtener sesión del usuario
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  const isAuthPage = request.nextUrl.pathname.startsWith("/sign-in") ||
+                     request.nextUrl.pathname.startsWith("/sign-up") ||
+                     request.nextUrl.pathname === "/";
+  const isDashboard = request.nextUrl.pathname.startsWith("/dashboard");
+
+  // Redirigir usuarios autenticados desde páginas de auth al dashboard
+  if (!error && user && isAuthPage) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
-  
+
+  // Proteger rutas del dashboard
+  if (isDashboard) {
+    if (error || !user) {
+      const redirectUrl = new URL("/sign-in", request.url);
+      redirectUrl.searchParams.set("redirect", request.nextUrl.pathname);
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    // Verificar perfil de usuario en la base de datos
+    const { data: userProfile } = await supabase
+      .from("usuarios")
+      .select("role, is_active")
+      .eq("auth_user_id", user.id)
+      .single();
+
+    if (!userProfile?.is_active) {
+      const redirectUrl = new URL("/sign-in", request.url);
+      redirectUrl.searchParams.set("error", "account_disabled");
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    if (!userProfile) {
+      const redirectUrl = new URL("/sign-in", request.url);
+      redirectUrl.searchParams.set("error", "profile_not_found");
+      return NextResponse.redirect(redirectUrl);
+    }
+  }
+
   return response;
 }
 
