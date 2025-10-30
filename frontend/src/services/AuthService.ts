@@ -1,7 +1,12 @@
-// Servicio de autenticación usando las abstracciones
+// Servicio de autenticación simplificado
 import { createClient } from "../../supabase/client";
-import { ServiceFactory } from "@optimacx/shared/services/ServiceFactory";
-import { ServiceResponse, WorkflowContext } from "../../../shared/types/core";
+
+// Tipos locales para el servicio de autenticación
+export interface ServiceResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
 
 export interface User {
   id: string;
